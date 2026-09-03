@@ -555,6 +555,11 @@ export default function DashboardPage() {
                     <span className="text-xs font-black uppercase text-white tracking-wider">
                       {acc.exchange}
                     </span>
+                    {settings?.exchange_account_id === acc.id && (
+                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded font-bold bg-honey-500/10 text-honey-400 border border-honey-500/30">
+                        ⚡ TRADING
+                      </span>
+                    )}
                   </div>
                   <p className="text-lg font-black font-mono text-white mt-1">
                     ${Number(acc.last_balance_usd || 0).toLocaleString('en-US', {

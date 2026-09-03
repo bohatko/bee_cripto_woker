@@ -5,6 +5,7 @@ import Link from 'next/link';
 import {
   History,
   TrendingUp,
+  TrendingDown,
   Filter,
   Sparkles,
   CheckCircle2,
@@ -19,6 +20,7 @@ import {
   Wallet,
   DollarSign,
   Scale,
+  Percent,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 
@@ -27,6 +29,8 @@ export default function HistoryPage() {
   const [selectedPair, setSelectedPair] = useState<string>('ALL');
   const [masterPositions, setMasterPositions] = useState<any[]>([]);
   const [userPositions, setUserPositions] = useState<any[]>([]);
+  const [userExchangeBalance, setUserExchangeBalance] = useState<number>(0);
+  const [userAccountCount, setUserAccountCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
 
   const BOT_STARTING_BALANCE = 50000; // $50,000 starting base capital for Master Strategy
@@ -48,7 +52,7 @@ export default function HistoryPage() {
 
       if (masterData) setMasterPositions(masterData);
 
-      // 2. Fetch User's personal exchange trades
+      // 2. Fetch User's personal exchange trades and exchange balance
       if (user) {
         const { data: userData } = await supabase
           .from('bot_positions')
@@ -58,6 +62,22 @@ export default function HistoryPage() {
           .order('closed_at', { ascending: false });
 
         if (userData) setUserPositions(userData);
+
+        // Fetch user's active exchange accounts for balance display
+        const { data: userAccounts } = await supabase
+          .from('exchange_accounts')
+          .select('last_balance_usd, is_active')
+          .eq('user_id', user.id)
+          .eq('is_active', true);
+
+        if (userAccounts && userAccounts.length > 0) {
+          const totalBal = userAccounts.reduce(
+            (acc, a) => acc + (Number(a.last_balance_usd) || 0),
+            0
+          );
+          setUserExchangeBalance(totalBal);
+          setUserAccountCount(userAccounts.length);
+        }
       }
 
       setLoading(false);
@@ -99,6 +119,43 @@ export default function HistoryPage() {
   const slCount = filteredPositions.filter((p) => p.exit_reason === 'sl').length;
   const flipCount = filteredPositions.filter((p) => p.exit_reason === 'trend_flip').length;
 
+  // Calculate Maximum Drawdown over all time based on active tab view
+  // Sort chronological for drawdown calculation
+  const chronologicalList = [...filteredPositions].sort(
+    (a, b) => new Date(a.closed_at || a.opened_at).getTime() - new Date(b.closed_at || b.opened_at).getTime()
+  );
+
+  const isUserView = activeTab === 'user';
+  const startingCapital = isUserView
+    ? userExchangeBalance > 0
+      ? userExchangeBalance
+      : 0
+    : BOT_STARTING_BALANCE;
+
+  let maxDrawdownPct = 0;
+  let maxDrawdownUsd = 0;
+
+  if (chronologicalList.length > 0) {
+    let runningEq = startingCapital > 0 ? startingCapital : 0;
+    let peakEq = runningEq;
+
+    for (const trade of chronologicalList) {
+      runningEq += Number(trade.realized_pnl_usd) || 0;
+      if (runningEq > peakEq) {
+        peakEq = runningEq;
+      }
+      const ddUsd = peakEq - runningEq;
+      const ddPct = peakEq > 0 ? (ddUsd / peakEq) * 100 : 0;
+
+      if (ddPct > maxDrawdownPct) {
+        maxDrawdownPct = ddPct;
+      }
+      if (ddUsd > maxDrawdownUsd) {
+        maxDrawdownUsd = ddUsd;
+      }
+    }
+  }
+
   return (
     <div className="p-4 sm:p-8 space-y-6">
       {/* Top Header */}
@@ -111,7 +168,9 @@ export default function HistoryPage() {
             </span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            Complete trading log showing exact trade amounts, margin allocation ($50,000 starting base), and executed PnL.
+            {isUserView
+              ? 'Complete execution history for your connected exchange accounts.'
+              : 'Complete trading log showing exact trade amounts, margin allocation ($50,000 starting base), and executed PnL.'}
           </p>
         </div>
 
@@ -250,58 +309,154 @@ export default function HistoryPage() {
         </button>
       </div>
 
-      {/* Performance Summary Cards - Highlighting $50,000 Base & Trade Amounts */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
-          <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
-            <span>Bot Starting Base</span>
-            <Wallet className="w-3.5 h-3.5 text-honey-400" />
+      {/* Performance Summary Cards - Dynamically tailored for Master Bot vs User Account */}
+      {isUserView ? (
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          {/* Card 1: My Connected Exchange Balance */}
+          <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
+            <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
+              <span>My Exchange Balance</span>
+              <Wallet className="w-3.5 h-3.5 text-emerald-400" />
+            </div>
+            <p className="text-xl font-black text-white font-mono mt-1">
+              ${userExchangeBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+            <span className="text-[11px] text-slate-500 font-mono">
+              {userAccountCount > 0 ? `${userAccountCount} active exchange API` : 'No API connected'}
+            </span>
           </div>
-          <p className="text-xl font-black text-white font-mono mt-1">
-            ${BOT_STARTING_BALANCE.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-          </p>
-          <span className="text-[11px] text-slate-500 font-mono">
-            4 slots × $12,500 margin
-          </span>
-        </div>
 
-        <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
-          <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
-            <span>Compounded Equity</span>
-            <Scale className="w-3.5 h-3.5 text-honey-400" />
+          {/* Card 2: My Account Total Realized PnL */}
+          <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
+            <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
+              <span>My Realized Profit</span>
+              <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+            </div>
+            <p
+              className={`text-xl font-black font-mono mt-1 ${
+                totalRealizedPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'
+              }`}
+            >
+              {totalRealizedPnl >= 0
+                ? `+$${totalRealizedPnl.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                : `-$${Math.abs(totalRealizedPnl).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+            </p>
+            <span className="text-[11px] text-slate-500 font-mono">
+              {userPositions.length} closed user trades
+            </span>
           </div>
-          <p className="text-xl font-black text-honey-400 font-mono mt-1">
-            ${(BOT_STARTING_BALANCE + totalRealizedPnl).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </p>
-          <span className="text-[11px] text-slate-500 font-mono">
-            $50k base + 100% reinvestment
-          </span>
-        </div>
 
-        <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
-          <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
-            <span>Total Realized Profit</span>
-            <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+          {/* Card 3: Max Drawdown */}
+          <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
+            <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
+              <span>Max Drawdown (DD)</span>
+              <TrendingDown className="w-3.5 h-3.5 text-amber-400" />
+            </div>
+            <p className="text-xl font-black text-amber-400 font-mono mt-1">
+              {userPositions.length > 0 ? `${maxDrawdownPct.toFixed(2)}%` : '0.00%'}
+            </p>
+            <span className="text-[11px] text-slate-500 font-mono">
+              {userPositions.length > 0 ? `-$${maxDrawdownUsd.toLocaleString('en-US', { minimumFractionDigits: 2 })} peak drop` : 'Zero drawdown recorded'}
+            </span>
           </div>
-          <p className="text-xl font-black text-emerald-400 font-mono mt-1">
-            +${totalRealizedPnl.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-          </p>
-          <span className="text-[11px] text-emerald-400/80 font-mono font-semibold">
-            +{((totalRealizedPnl / BOT_STARTING_BALANCE) * 100).toFixed(1)}% ROI on $50k base
-          </span>
-        </div>
 
-        <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
-          <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
-            <span>Strategy Winrate</span>
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+          {/* Card 4: My Strategy Winrate */}
+          <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
+            <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
+              <span>Account Winrate</span>
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+            </div>
+            <p className="text-xl font-black text-white font-mono mt-1">{winrate}%</p>
+            <span className="text-[11px] text-slate-500 font-mono">
+              {tpCount} TP • {slCount} SL
+            </span>
           </div>
-          <p className="text-xl font-black text-white font-mono mt-1">{winrate}%</p>
-          <span className="text-[11px] text-slate-500 font-mono">
-            {tpCount} TP (+5%) • {slCount} SL (-1.5%)
-          </span>
+
+          {/* Card 5: My Total Volume */}
+          <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl col-span-2 sm:col-span-1">
+            <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
+              <span>Traded Volume</span>
+              <Scale className="w-3.5 h-3.5 text-slate-400" />
+            </div>
+            <p className="text-xl font-black text-white font-mono mt-1">
+              ${totalVolumeTraded.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+            </p>
+            <span className="text-[11px] text-slate-500 font-mono">
+              7x effective leverage
+            </span>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          {/* Card 1: Bot Starting Base */}
+          <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
+            <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
+              <span>Bot Starting Base</span>
+              <Wallet className="w-3.5 h-3.5 text-honey-400" />
+            </div>
+            <p className="text-xl font-black text-white font-mono mt-1">
+              ${BOT_STARTING_BALANCE.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </p>
+            <span className="text-[11px] text-slate-500 font-mono">
+              4 slots × $12,500 margin
+            </span>
+          </div>
+
+          {/* Card 2: Compounded Equity */}
+          <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
+            <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
+              <span>Compounded Equity</span>
+              <Scale className="w-3.5 h-3.5 text-honey-400" />
+            </div>
+            <p className="text-xl font-black text-honey-400 font-mono mt-1">
+              ${(BOT_STARTING_BALANCE + totalRealizedPnl).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+            <span className="text-[11px] text-slate-500 font-mono">
+              $50k base + 100% reinvestment
+            </span>
+          </div>
+
+          {/* Card 3: Max Drawdown over all time */}
+          <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
+            <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
+              <span>Max Drawdown (DD)</span>
+              <TrendingDown className="w-3.5 h-3.5 text-amber-400" />
+            </div>
+            <p className="text-xl font-black text-amber-400 font-mono mt-1">
+              {maxDrawdownPct.toFixed(2)}%
+            </p>
+            <span className="text-[11px] text-slate-500 font-mono">
+              -${maxDrawdownUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} peak drop
+            </span>
+          </div>
+
+          {/* Card 4: Total Realized Profit */}
+          <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
+            <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
+              <span>Total Realized Profit</span>
+              <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+            </div>
+            <p className="text-xl font-black text-emerald-400 font-mono mt-1">
+              +${totalRealizedPnl.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </p>
+            <span className="text-[11px] text-emerald-400/80 font-mono font-semibold">
+              +{((totalRealizedPnl / BOT_STARTING_BALANCE) * 100).toFixed(1)}% ROI on $50k base
+            </span>
+          </div>
+
+          {/* Card 5: Strategy Winrate */}
+          <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl col-span-2 sm:col-span-1">
+            <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
+              <span>Strategy Winrate</span>
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+            </div>
+            <p className="text-xl font-black text-white font-mono mt-1">{winrate}%</p>
+            <span className="text-[11px] text-slate-500 font-mono">
+              {tpCount} TP (+5%) • {slCount} SL (-1.5%)
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Pair Filter Pills */}
       <div className="flex flex-wrap items-center gap-2 pt-1 font-mono text-xs">
