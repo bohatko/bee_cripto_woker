@@ -20,6 +20,7 @@ import {
 import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { toast } from '@/components/ui/sonner';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 interface ExchangeAccountItem {
   id: string;
@@ -41,6 +42,7 @@ interface TradingSettingsItem {
 }
 
 export default function ExchangeSettingsPage() {
+  const { t, dateLocale } = useLanguage();
   const [selectedExchange, setSelectedExchange] = useState<'binance' | 'okx' | 'bybit'>('binance');
   const [apiKey, setApiKey] = useState('');
   const [apiSecret, setApiSecret] = useState('');
@@ -124,7 +126,7 @@ export default function ExchangeSettingsPage() {
   const handleCopyIp = () => {
     navigator.clipboard.writeText(railwayStaticIp);
     setCopied(true);
-    toast.success('Railway static IP copied to clipboard!');
+    toast.success(t('exchange.ipCopied'));
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -159,11 +161,12 @@ export default function ExchangeSettingsPage() {
         throw new Error(resData.error || 'Failed to validate exchange API credentials');
       }
 
-      const successText = `Successfully validated and linked ${selectedExchange.toUpperCase()}! Live futures balance: $${Number(
-        resData.balanceUsd || 0
-      ).toLocaleString('en-US', { minimumFractionDigits: 2 })} USDT`;
-
-      toast.success(successText);
+      toast.success(
+        t('exchange.validatedSuccess', {
+          exchange: selectedExchange.toUpperCase(),
+          balance: Number(resData.balanceUsd || 0).toLocaleString(dateLocale, { minimumFractionDigits: 2 }),
+        })
+      );
 
       setApiKey('');
       setApiSecret('');
@@ -196,10 +199,10 @@ export default function ExchangeSettingsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to sync balances');
 
-      const successText = `Live balances refreshed: Total $${Number(data.totalEquityUsd || 0).toLocaleString(
-        'en-US',
-        { minimumFractionDigits: 2 }
-      )} USDT across ${data.accounts?.length || 0} exchange(s).`;
+      const successText = t('exchange.balancesRefreshed', {
+        total: Number(data.totalEquityUsd || 0).toLocaleString(dateLocale, { minimumFractionDigits: 2 }),
+        count: data.accounts?.length || 0,
+      });
 
       if (!silent) {
         toast.success(successText);
@@ -236,7 +239,7 @@ export default function ExchangeSettingsPage() {
       const resData = await res.json();
       if (!res.ok) throw new Error(resData.error || 'Failed to update trading exchange');
 
-      toast.success(`${targetAccount.exchange.toUpperCase()} is now set as your active trading exchange!`);
+      toast.success(t('exchange.nowPrimary', { exchange: targetAccount.exchange.toUpperCase() }));
       setIsSwitchPrimaryModalOpen(false);
       setTargetPrimaryAccount(null);
       await loadAccountsAndSettings();
@@ -272,15 +275,14 @@ export default function ExchangeSettingsPage() {
             .from('trading_settings')
             .update({ exchange_account_id: nextPrimary.id })
             .eq('user_id', user.id);
-          toast.info(`${nextPrimary.exchange.toUpperCase()} is now automatically set as your primary trading exchange.`);
+          toast.info(t('exchange.autoPrimary', { exchange: nextPrimary.exchange.toUpperCase() }));
         }
       }
     }
 
-    const removedMsg = `${accountToDelete.exchange.toUpperCase()} API keys removed completely from database.`;
     setAccountToDelete(null);
     setIsDeleteModalOpen(false);
-    toast.success(removedMsg);
+    toast.success(t('exchange.removed', { exchange: accountToDelete.exchange.toUpperCase() }));
     await loadAccountsAndSettings();
   };
 
@@ -305,10 +307,10 @@ export default function ExchangeSettingsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            Exchange API Connections
+            {t('exchange.title')}
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            Connect and manage your exchange accounts. Select your primary trading exchange for autonomous strategy execution.
+            {t('exchange.subtitle')}
           </p>
         </div>
 
@@ -319,7 +321,7 @@ export default function ExchangeSettingsPage() {
             className="px-4 py-2.5 rounded-xl text-xs font-bold bg-dark-900 border border-dark-700 hover:border-honey-500 text-slate-200 hover:text-white flex items-center gap-2 transition-all shadow-lg disabled:opacity-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 text-honey-400 ${syncingAll ? 'animate-spin' : ''}`} />
-            {syncingAll ? 'Syncing Balances...' : 'Sync Live Balances'}
+            {syncingAll ? t('exchange.syncing') : t('exchange.syncLive')}
           </button>
         )}
       </div>
@@ -329,7 +331,7 @@ export default function ExchangeSettingsPage() {
         <div className="bg-dark-900 border border-dark-800 p-5 rounded-2xl shadow-xl sm:col-span-2 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-              Primary Trading Exchange
+              {t('exchange.primaryExchange')}
             </span>
             <span
               className={`text-[10px] font-mono px-2 py-0.5 rounded border uppercase ${
@@ -338,7 +340,7 @@ export default function ExchangeSettingsPage() {
                   : 'text-amber-400 bg-amber-500/10 border-amber-500/20'
               }`}
             >
-              {activeTradingAccount ? 'BOT TRADING ACTIVE' : 'NO TRADING EXCHANGE'}
+              {activeTradingAccount ? t('exchange.botTradingActive') : t('exchange.noTradingExchange')}
             </span>
           </div>
 
@@ -348,12 +350,18 @@ export default function ExchangeSettingsPage() {
             </div>
             <div>
               <p className="text-lg font-black text-white uppercase tracking-wide">
-                {activeTradingAccount ? `${activeTradingAccount.exchange} Futures` : 'Not Selected'}
+                {activeTradingAccount
+                  ? t('exchange.futuresLabel', { exchange: activeTradingAccount.exchange })
+                  : t('exchange.notSelected')}
               </p>
               <p className="text-xs text-slate-400">
                 {activeTradingAccount
-                  ? `Strategy signals are executed on this account ($${Number(activeTradingAccount.last_balance_usd || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })} USDT margin)`
-                  : 'Connect an exchange below and enable it for trading to allow bot order execution.'}
+                  ? t('exchange.strategyOnAccount', {
+                      balance: Number(activeTradingAccount.last_balance_usd || 0).toLocaleString(dateLocale, {
+                        minimumFractionDigits: 2,
+                      }),
+                    })
+                  : t('exchange.connectBelow')}
               </p>
             </div>
           </div>
@@ -361,17 +369,18 @@ export default function ExchangeSettingsPage() {
 
         <div className="bg-dark-900 border border-dark-800 p-5 rounded-2xl shadow-xl flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
-            <span className="font-bold uppercase tracking-wider">Total Combined Equity</span>
+            <span className="font-bold uppercase tracking-wider">{t('exchange.totalEquity')}</span>
             <Wallet className="w-4 h-4 text-honey-400" />
           </div>
           <div className="mt-2">
             <p className="text-2xl font-black text-white font-mono">
-              ${totalAggregatedEquity.toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
+              ${totalAggregatedEquity.toLocaleString(dateLocale, { minimumFractionDigits: 2 })}{' '}
               <span className="text-xs text-slate-500 font-normal">USDT</span>
             </p>
             <p className="text-[11px] text-slate-400 font-mono mt-1">
-              Connected:{' '}
-              <span className="text-emerald-400 font-semibold">{accounts.length} of 3</span> exchanges
+              {t('exchange.connectedOf')}{' '}
+              <span className="text-emerald-400 font-semibold">{t('exchange.of3', { count: accounts.length })}</span>{' '}
+              {t('exchange.of3Exchanges')}
             </p>
           </div>
         </div>
@@ -385,9 +394,9 @@ export default function ExchangeSettingsPage() {
               <Server className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white">Railway Static Outbound Egress IP</h3>
+              <h3 className="text-sm font-bold text-white">{t('exchange.railwayIpTitle')}</h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                Add this exact IP to your exchange API Key whitelist for maximum security:
+                {t('exchange.railwayIpDesc')}
               </p>
             </div>
           </div>
@@ -445,16 +454,16 @@ export default function ExchangeSettingsPage() {
                   {acc ? (
                     isPrimary ? (
                       <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-honey-500/10 text-honey-400 border border-honey-500/30 flex items-center gap-1">
-                        <Activity className="w-3 h-3 text-honey-400" /> TRADING
+                        <Activity className="w-3 h-3 text-honey-400" /> {t('exchange.trading')}
                       </span>
                     ) : (
                       <span className="text-[10px] font-mono px-2 py-0.5 rounded font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                        CONNECTED
+                        {t('exchange.connected')}
                       </span>
                     )
                   ) : (
                     <span className="text-[10px] font-mono px-2 py-0.5 rounded text-slate-500 bg-dark-900 border border-dark-800">
-                      + CONNECT
+                      {t('exchange.connect')}
                     </span>
                   )}
                 </div>
@@ -481,14 +490,14 @@ export default function ExchangeSettingsPage() {
                     <div className="flex items-center gap-2">
                       <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
                       <h2 className="text-xl font-black text-white uppercase tracking-wider">
-                        {currentTabAccount.exchange} Futures
+                        {t('exchange.futuresLabel', { exchange: currentTabAccount.exchange })}
                       </h2>
                       <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                        CONNECTED
+                        {t('exchange.connected')}
                       </span>
                     </div>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      Account ID: <span className="font-mono text-slate-300">{currentTabAccount.id.slice(0, 8)}...</span> • AES-256-GCM Encrypted
+                      {t('exchange.accountId')} <span className="font-mono text-slate-300">{currentTabAccount.id.slice(0, 8)}...</span> • {t('exchange.encrypted')}
                     </p>
                   </div>
                 </div>
@@ -502,7 +511,7 @@ export default function ExchangeSettingsPage() {
                   title="Remove Exchange Keys"
                 >
                   <Trash2 className="w-4 h-4" />
-                  Disconnect Exchange
+                  {t('exchange.disconnect')}
                 </button>
               </div>
 
@@ -510,7 +519,7 @@ export default function ExchangeSettingsPage() {
               <div className="bg-dark-950 border border-dark-800 rounded-xl p-3.5 flex items-center gap-3">
                 <ShieldCheck className="w-4 h-4 text-honey-400 shrink-0" />
                 <p className="text-xs text-slate-400">
-                  <strong className="text-slate-200">Single Account Limit:</strong> Only 1 API account per exchange is supported. Your {currentTabAccount.exchange.toUpperCase()} credentials are active. To use a different API key, disconnect this account first.
+                  {t('exchange.singleLimit', { exchange: currentTabAccount.exchange.toUpperCase() })}
                 </p>
               </div>
 
@@ -536,22 +545,26 @@ export default function ExchangeSettingsPage() {
                     <div>
                       <div className="flex items-center gap-2">
                         <h3 className="text-sm font-bold text-white">
-                          Bot Trading Permission
+                          {t('exchange.botPermission')}
                         </h3>
                         {isCurrentTabPrimary ? (
                           <span className="text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-honey-500 text-dark-950 shadow-sm">
-                            ACTIVE TRADING EXCHANGE
+                            {t('exchange.activeTrading')}
                           </span>
                         ) : (
                           <span className="text-[10px] font-mono px-2 py-0.5 rounded text-slate-400 bg-dark-900 border border-dark-800">
-                            STANDBY
+                            {t('exchange.standby')}
                           </span>
                         )}
                       </div>
                       <p className="text-xs text-slate-400 mt-1 max-w-xl">
                         {isCurrentTabPrimary
-                          ? `The autonomous bot opens all market-neutral strategy pairs on this ${currentTabAccount.exchange.toUpperCase()} futures account.`
-                          : `Trading is currently routed to ${activeTradingAccount ? activeTradingAccount.exchange.toUpperCase() : 'another account'}. Enable trading here to switch bot execution to this exchange.`}
+                          ? t('exchange.botOnThis', { exchange: currentTabAccount.exchange.toUpperCase() })
+                          : t('exchange.routedTo', {
+                              exchange: activeTradingAccount
+                                ? activeTradingAccount.exchange.toUpperCase()
+                                : t('exchange.anotherAccount'),
+                            })}
                       </p>
                     </div>
                   </div>
@@ -560,7 +573,7 @@ export default function ExchangeSettingsPage() {
                     {isCurrentTabPrimary ? (
                       <div className="flex items-center gap-2 text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3.5 py-2 rounded-xl">
                         <CheckCircle2 className="w-4 h-4" />
-                        Trading Allowed
+                        {t('exchange.tradingAllowed')}
                       </div>
                     ) : (
                       <button
@@ -572,7 +585,7 @@ export default function ExchangeSettingsPage() {
                         className="px-4 py-2 rounded-xl text-xs font-bold bg-honey-500 hover:bg-honey-400 text-dark-950 transition-all shadow-md shadow-honey-500/20 flex items-center gap-2 disabled:opacity-50"
                       >
                         <Activity className="w-3.5 h-3.5 text-dark-950" />
-                        Set as Active for Trading
+                        {t('exchange.setActive')}
                       </button>
                     )}
                   </div>
@@ -583,35 +596,35 @@ export default function ExchangeSettingsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="bg-dark-950 p-4 rounded-xl border border-dark-800">
                   <span className="text-[10px] text-slate-400 uppercase font-medium tracking-wider">
-                    Futures Margin Balance
+                    {t('exchange.futuresBalance')}
                   </span>
                   <p className="text-2xl font-black text-white font-mono mt-1">
-                    ${Number(currentTabAccount.last_balance_usd || 0).toLocaleString('en-US', {
+                    ${Number(currentTabAccount.last_balance_usd || 0).toLocaleString(dateLocale, {
                       minimumFractionDigits: 2,
                     })}{' '}
                     <span className="text-xs text-slate-500 font-normal">USDT</span>
                   </p>
                   <p className="text-[10px] text-slate-500 font-mono mt-1.5">
-                    Last synced:{' '}
+                    {t('exchange.lastSynced')}{' '}
                     {currentTabAccount.last_sync_at
-                      ? new Date(currentTabAccount.last_sync_at).toLocaleTimeString()
-                      : 'Never'}
+                      ? new Date(currentTabAccount.last_sync_at).toLocaleTimeString(dateLocale)
+                      : t('common.never')}
                   </p>
                 </div>
 
                 <div className="bg-dark-950 p-4 rounded-xl border border-dark-800 flex flex-col justify-between">
                   <div>
                     <span className="text-[10px] text-slate-400 uppercase font-medium tracking-wider">
-                      Security & Permissions
+                      {t('exchange.securityPerms')}
                     </span>
                     <div className="mt-2 space-y-1.5">
                       <div className="flex items-center gap-2 text-xs text-emerald-400 font-mono">
                         <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Withdrawals disabled (Safe)</span>
+                        <span>{t('exchange.withdrawalsDisabled')}</span>
                       </div>
                       <div className="flex items-center gap-2 text-xs text-slate-400 font-mono">
                         <Lock className="w-3.5 h-3.5 text-honey-400" />
-                        <span>AES-256-GCM Encrypted Storage</span>
+                        <span>{t('exchange.aesStorage')}</span>
                       </div>
                     </div>
                   </div>
@@ -633,10 +646,10 @@ export default function ExchangeSettingsPage() {
               <div className="mb-6">
                 <h2 className="text-lg font-bold text-white flex items-center gap-2">
                   <KeyRound className="w-5 h-5 text-honey-400" />
-                  Link {selectedExchange.toUpperCase()} API Keys
+                  {t('exchange.linkKeys', { exchange: selectedExchange.toUpperCase() })}
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  Connect your {selectedExchange.toUpperCase()} Futures account. Your credentials will be verified via CCXT to ensure withdrawals are strictly disabled.
+                  {t('exchange.linkDesc', { exchange: selectedExchange.toUpperCase() })}
                 </p>
               </div>
 
@@ -644,21 +657,21 @@ export default function ExchangeSettingsPage() {
               <div className="space-y-4 max-w-xl">
                 <div>
                   <label className="block text-xs font-medium text-slate-300 uppercase mb-1.5">
-                    {selectedExchange.toUpperCase()} API Key
+                    {t('exchange.apiKey', { exchange: selectedExchange.toUpperCase() })}
                   </label>
                   <input
                     type="text"
                     required
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
-                    placeholder={`Enter your ${selectedExchange} API key`}
+                    placeholder={t('exchange.apiKeyPlaceholder', { exchange: selectedExchange })}
                     className="w-full px-4 py-2.5 bg-dark-950 border border-dark-700 rounded-xl text-white text-sm outline-none focus:border-honey-500 font-mono transition-colors"
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs font-medium text-slate-300 uppercase mb-1.5">
-                    {selectedExchange.toUpperCase()} API Secret
+                    {t('exchange.apiSecret', { exchange: selectedExchange.toUpperCase() })}
                   </label>
                   <input
                     type="password"
@@ -673,14 +686,14 @@ export default function ExchangeSettingsPage() {
                 {selectedExchange === 'okx' && (
                   <div>
                     <label className="block text-xs font-medium text-slate-300 uppercase mb-1.5">
-                      OKX API Passphrase
+                      {t('exchange.okxPassphrase')}
                     </label>
                     <input
                       type="password"
                       required
                       value={passphrase}
                       onChange={(e) => setPassphrase(e.target.value)}
-                      placeholder="Enter OKX passphrase"
+                      placeholder={t('exchange.okxPassphrasePlaceholder')}
                       className="w-full px-4 py-2.5 bg-dark-950 border border-dark-700 rounded-xl text-white text-sm outline-none focus:border-honey-500 font-mono transition-colors"
                     />
                   </div>
@@ -698,20 +711,25 @@ export default function ExchangeSettingsPage() {
                     <div>
                       <span className="text-xs font-bold text-white flex items-center gap-1.5">
                         <Activity className="w-3.5 h-3.5 text-honey-400" />
-                        Allow automated bot trading on this account (Primary Exchange)
+                        {t('exchange.allowTrading')}
                       </span>
                       <p className="text-[11px] text-slate-400 mt-1">
                         {accounts.length === 0 || !activeTradingAccount ? (
                           <span className="text-honey-400 font-medium">
-                            ✓ Automatically enabled because this is your first exchange account.
+                            {t('exchange.firstAccount')}
                           </span>
                         ) : isPrimaryForTrading ? (
                           <span className="text-amber-400">
-                            ⚠️ Note: This will set {selectedExchange.toUpperCase()} as your active trading exchange, replacing {activeTradingAccount?.exchange.toUpperCase()}.
+                            {t('exchange.willReplace', {
+                              exchange: selectedExchange.toUpperCase(),
+                              current: activeTradingAccount?.exchange.toUpperCase(),
+                            })}
                           </span>
                         ) : (
                           <span>
-                            Leave unchecked to connect this account in standby mode without changing your current active trading exchange ({activeTradingAccount?.exchange.toUpperCase()}).
+                            {t('exchange.leaveUnchecked', {
+                              current: activeTradingAccount?.exchange.toUpperCase(),
+                            })}
                           </span>
                         )}
                       </p>
@@ -723,15 +741,12 @@ export default function ExchangeSettingsPage() {
                 <div className="p-4 bg-dark-950 border border-dark-800 rounded-xl space-y-2 text-xs text-slate-400">
                   <div className="flex items-center gap-2 text-honey-400 font-semibold uppercase text-[11px]">
                     <Lock className="w-3.5 h-3.5" />
-                    Permission Requirements:
+                    {t('exchange.permRequirements')}
                   </div>
                   <ul className="list-disc list-inside space-y-1 font-mono text-[11px]">
-                    <li>Enable: &ldquo;Futures Trading&rdquo; / &ldquo;Derivatives&rdquo;</li>
-                    <li>
-                      <strong className="text-rose-400">DO NOT</strong> enable:
-                      &ldquo;Withdrawals&rdquo; (Keys with withdrawal permissions are strictly rejected)
-                    </li>
-                    <li>Add Railway Static IP to Whitelist: <span className="text-honey-400 font-bold">{railwayStaticIp}</span></li>
+                    <li>{t('exchange.enableFutures')}</li>
+                    <li>{t('exchange.doNotWithdraw')}</li>
+                    <li>{t('exchange.addIp')} <span className="text-honey-400 font-bold">{railwayStaticIp}</span></li>
                   </ul>
                 </div>
 
@@ -744,12 +759,12 @@ export default function ExchangeSettingsPage() {
                   {loading ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
-                      Validating with CCXT...
+                      {t('exchange.validating')}
                     </>
                   ) : (
                     <>
                       <KeyRound className="w-4 h-4" />
-                      Validate & Link {selectedExchange.toUpperCase()} Keys
+                      {t('exchange.validateLink', { exchange: selectedExchange.toUpperCase() })}
                     </>
                   )}
                 </button>
@@ -762,13 +777,13 @@ export default function ExchangeSettingsPage() {
       {/* Save / Link Confirmation Modal */}
       <ConfirmModal
         isOpen={isSaveModalOpen}
-        title={`Connect ${selectedExchange.toUpperCase()} Keys`}
-        description={`Are you sure you want to connect ${selectedExchange.toUpperCase()}? Your keys will be verified with CCXT and stored encrypted using AES-256-GCM. ${
+        title={t('exchange.connectTitle', { exchange: selectedExchange.toUpperCase() })}
+        description={
           isPrimaryForTrading
-            ? `This exchange will be set as your ACTIVE TRADING ACCOUNT for automated strategy orders.`
-            : `This exchange will be added in standby mode without changing your active trading exchange.`
-        }`}
-        confirmText={loading ? 'Validating...' : 'Validate & Connect'}
+            ? t('exchange.connectDescActive', { exchange: selectedExchange.toUpperCase() })
+            : t('exchange.connectDescStandby', { exchange: selectedExchange.toUpperCase() })
+        }
+        confirmText={loading ? t('exchange.validating') : t('exchange.validateConnect')}
         onConfirm={handleSaveKeys}
         onCancel={() => setIsSaveModalOpen(false)}
       />
@@ -777,11 +792,18 @@ export default function ExchangeSettingsPage() {
       {targetPrimaryAccount && (
         <ConfirmModal
           isOpen={isSwitchPrimaryModalOpen}
-          title={`Switch Primary Trading Exchange to ${targetPrimaryAccount.exchange.toUpperCase()}?`}
-          description={`All future market-neutral strategy orders will be executed on your ${targetPrimaryAccount.exchange.toUpperCase()} account (Balance: $${Number(
-            targetPrimaryAccount.last_balance_usd || 0
-          ).toLocaleString('en-US', { minimumFractionDigits: 2 })} USDT). Any currently open positions on other exchanges will continue to be safely managed until exit.`}
-          confirmText={settingPrimary ? 'Switching...' : `Set ${targetPrimaryAccount.exchange.toUpperCase()} Active`}
+          title={t('exchange.switchTitle', { exchange: targetPrimaryAccount.exchange.toUpperCase() })}
+          description={t('exchange.switchDesc', {
+            exchange: targetPrimaryAccount.exchange.toUpperCase(),
+            balance: Number(targetPrimaryAccount.last_balance_usd || 0).toLocaleString(dateLocale, {
+              minimumFractionDigits: 2,
+            }),
+          })}
+          confirmText={
+            settingPrimary
+              ? t('exchange.switching')
+              : t('exchange.setActiveBtn', { exchange: targetPrimaryAccount.exchange.toUpperCase() })
+          }
           onConfirm={() => handleSwitchPrimary(targetPrimaryAccount)}
           onCancel={() => {
             setIsSwitchPrimaryModalOpen(false);
@@ -794,13 +816,13 @@ export default function ExchangeSettingsPage() {
       {accountToDelete && (
         <ConfirmModal
           isOpen={isDeleteModalOpen}
-          title={`Disconnect ${accountToDelete.exchange.toUpperCase()}?`}
-          description={`Are you sure you want to remove your ${accountToDelete.exchange.toUpperCase()} API credentials? The encrypted keys will be permanently deleted. ${
+          title={t('exchange.disconnectTitle', { exchange: accountToDelete.exchange.toUpperCase() })}
+          description={`${t('exchange.disconnectDesc', { exchange: accountToDelete.exchange.toUpperCase() })}${
             tradingSettings?.exchange_account_id === accountToDelete.id
-              ? `Note: This is currently your active trading account. If removed, the bot will pause or switch to a remaining exchange.`
+              ? t('exchange.disconnectPrimaryNote')
               : ''
           }`}
-          confirmText="Yes, Disconnect"
+          confirmText={t('exchange.yesDisconnect')}
           isDestructive={true}
           variant="danger"
           onConfirm={handleDeleteAccount}

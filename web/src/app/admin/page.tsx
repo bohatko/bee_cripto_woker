@@ -23,9 +23,12 @@ import {
 import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { toast } from '@/components/ui/sonner';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { LanguageSwitcher } from '@/lib/i18n/LanguageSwitcher';
 
 export default function AdminDashboardPage() {
   const router = useRouter();
+  const { t, dateLocale } = useLanguage();
   const [activeTab, setActiveTab] = useState<'users' | 'invoices' | 'positions' | 'health'>('users');
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -163,7 +166,7 @@ export default function AdminDashboardPage() {
           })
           .eq('id', selectedInvoice.user_id);
 
-        const successText = `Invoice ${selectedInvoice.invoice_number} successfully approved! User subscription extended by 7 days.`;
+        const successText = t('admin.approvedToast', { number: selectedInvoice.invoice_number });
         toast.success(successText);
       } else if (actionType === 'reject') {
         await supabase
@@ -174,7 +177,7 @@ export default function AdminDashboardPage() {
           })
           .eq('id', selectedInvoice.id);
 
-        const errorText = `Invoice ${selectedInvoice.invoice_number} rejected. Returned to 'issued' status.`;
+        const errorText = t('admin.rejectedToast', { number: selectedInvoice.invoice_number });
         toast.error(errorText);
       }
 
@@ -204,7 +207,7 @@ export default function AdminDashboardPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-dark-950 flex items-center justify-center text-slate-400 font-mono text-sm">
-        Loading admin panel...
+        {t('admin.loading')}
       </div>
     );
   }
@@ -224,26 +227,29 @@ export default function AdminDashboardPage() {
               className="p-2 rounded-xl bg-dark-800 hover:bg-dark-700 text-slate-300 hover:text-white transition-colors flex items-center gap-1.5 text-xs font-semibold"
             >
               <ArrowLeft className="w-4 h-4" />
-              User Dashboard
+              {t('admin.userDashboard')}
             </Link>
 
             <div className="h-5 w-px bg-dark-800" />
 
             <div className="flex items-center gap-2">
-              <span className="text-lg font-extrabold text-white tracking-tight">ADMIN CONTROL</span>
+              <span className="text-lg font-extrabold text-white tracking-tight">{t('admin.adminControl')}</span>
               <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-honey-500/15 text-honey-400 border border-honey-500/30">
-                MASTER
+                {t('admin.master')}
               </span>
             </div>
           </div>
 
-          <button
-            onClick={checkAdminAndLoadData}
-            className="p-2 bg-dark-800 hover:bg-dark-700 rounded-xl text-slate-400 hover:text-white transition-colors"
-            title="Refresh Data"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            <LanguageSwitcher variant="compact" />
+            <button
+              onClick={checkAdminAndLoadData}
+              className="p-2 bg-dark-800 hover:bg-dark-700 rounded-xl text-slate-400 hover:text-white transition-colors"
+              title="Refresh Data"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </header>
 
@@ -253,48 +259,50 @@ export default function AdminDashboardPage() {
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
           <div className="bg-dark-900 border border-dark-800 p-5 rounded-2xl shadow-xl">
             <div className="flex justify-between items-center text-xs text-slate-400 font-medium">
-              <span>Total Users</span>
+              <span>{t('admin.totalUsers')}</span>
               <Users className="w-4 h-4 text-honey-400" />
             </div>
             <p className="text-2xl font-black text-white font-mono mt-2">{users.length}</p>
             <span className="text-[11px] text-slate-500 font-mono">
-              {users.filter((u) => u.subscription_status === 'trial').length} on Trial •{' '}
-              {users.filter((u) => u.subscription_status === 'active').length} Active
+              {t('admin.onTrial', {
+                trial: users.filter((u) => u.subscription_status === 'trial').length,
+                active: users.filter((u) => u.subscription_status === 'active').length,
+              })}
             </span>
           </div>
 
           <div className="bg-dark-900 border border-dark-800 p-5 rounded-2xl shadow-xl">
             <div className="flex justify-between items-center text-xs text-slate-400 font-medium">
-              <span>Pending Invoices</span>
+              <span>{t('admin.pendingInvoices')}</span>
               <CreditCard className="w-4 h-4 text-amber-400" />
             </div>
             <p className="text-2xl font-black text-amber-400 font-mono mt-2">
               {pendingReviewInvoices.length}
             </p>
-            <span className="text-[11px] text-slate-500 font-mono">Require admin verification</span>
+            <span className="text-[11px] text-slate-500 font-mono">{t('admin.requireVerification')}</span>
           </div>
 
           <div className="bg-dark-900 border border-dark-800 p-5 rounded-2xl shadow-xl">
             <div className="flex justify-between items-center text-xs text-slate-400 font-medium">
-              <span>Total Revenue Settled</span>
+              <span>{t('admin.totalRevenue')}</span>
               <Wallet className="w-4 h-4 text-emerald-400" />
             </div>
             <p className="text-2xl font-black text-emerald-400 font-mono mt-2">
               ${totalCollectedProfit.toFixed(2)}
             </p>
-            <span className="text-[11px] text-slate-500 font-mono">From subscription + profit share</span>
+            <span className="text-[11px] text-slate-500 font-mono">{t('admin.fromSubs')}</span>
           </div>
 
           <div className="bg-dark-900 border border-dark-800 p-5 rounded-2xl shadow-xl">
             <div className="flex justify-between items-center text-xs text-slate-400 font-medium">
-              <span>Trading Daemon State</span>
+              <span>{t('admin.daemonState')}</span>
               <Activity className="w-4 h-4 text-honey-400" />
             </div>
             <div className="flex items-center gap-2 mt-2">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="font-mono font-bold text-white text-base">ONLINE</span>
+              <span className="font-mono font-bold text-white text-base">{t('admin.online')}</span>
             </div>
-            <span className="text-[11px] text-slate-500 font-mono">Railway Static Egress IP active</span>
+            <span className="text-[11px] text-slate-500 font-mono">{t('admin.railwayActive')}</span>
           </div>
         </div>
 
@@ -308,7 +316,7 @@ export default function AdminDashboardPage() {
                 : 'border-transparent text-slate-400 hover:text-white'
             }`}
           >
-            Users Directory ({users.length})
+            {t('admin.usersDir', { count: users.length })}
           </button>
           <button
             onClick={() => setActiveTab('invoices')}
@@ -318,7 +326,7 @@ export default function AdminDashboardPage() {
                 : 'border-transparent text-slate-400 hover:text-white'
             }`}
           >
-            <span>Invoices & Payments</span>
+            <span>{t('admin.invoicesPayments')}</span>
             {pendingReviewInvoices.length > 0 && (
               <span className="w-5 h-5 rounded-full bg-amber-500 text-dark-950 font-black text-[10px] flex items-center justify-center">
                 {pendingReviewInvoices.length}
@@ -333,7 +341,7 @@ export default function AdminDashboardPage() {
                 : 'border-transparent text-slate-400 hover:text-white'
             }`}
           >
-            Live Global Positions
+            {t('admin.livePositions')}
           </button>
           <button
             onClick={() => setActiveTab('health')}
@@ -343,7 +351,7 @@ export default function AdminDashboardPage() {
                 : 'border-transparent text-slate-400 hover:text-white'
             }`}
           >
-            Exchange Health Pings
+            {t('admin.healthPings')}
           </button>
         </div>
 
@@ -355,14 +363,14 @@ export default function AdminDashboardPage() {
                 <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="Search user email, name, role..."
+                  placeholder={t('admin.searchPlaceholder')}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 bg-dark-950 border border-dark-700 rounded-xl text-xs text-white outline-none focus:border-honey-500 font-mono"
                 />
               </div>
               <span className="text-xs text-slate-400 font-mono">
-                Showing {filteredUsers.length} of {users.length} registered accounts
+                {t('admin.showing', { filtered: filteredUsers.length, total: users.length })}
               </span>
             </div>
 
@@ -370,13 +378,13 @@ export default function AdminDashboardPage() {
               <table className="w-full text-left text-sm">
                 <thead className="bg-dark-950/60 text-[11px] uppercase tracking-wider text-slate-400 font-mono border-b border-dark-800">
                   <tr>
-                    <th className="px-5 py-3">User & Email</th>
-                    <th className="px-5 py-3">Role</th>
-                    <th className="px-5 py-3">Subscription</th>
-                    <th className="px-5 py-3">Connected Exchange</th>
-                    <th className="px-5 py-3">Bot Status</th>
-                    <th className="px-5 py-3 text-right">High-Water Mark</th>
-                    <th className="px-5 py-3 text-center">User Control</th>
+                    <th className="px-5 py-3">{t('admin.colUser')}</th>
+                    <th className="px-5 py-3">{t('admin.colRole')}</th>
+                    <th className="px-5 py-3">{t('admin.colSub')}</th>
+                    <th className="px-5 py-3">{t('admin.colExchange')}</th>
+                    <th className="px-5 py-3">{t('admin.colBot')}</th>
+                    <th className="px-5 py-3 text-right">{t('admin.colHwm')}</th>
+                    <th className="px-5 py-3 text-center">{t('admin.colControl')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-dark-800 font-mono text-xs">
@@ -386,7 +394,7 @@ export default function AdminDashboardPage() {
                     return (
                       <tr key={u.id} className="hover:bg-dark-850/50 transition-colors">
                         <td className="px-5 py-4">
-                          <div className="font-bold text-white">{u.full_name || 'Trader'}</div>
+                          <div className="font-bold text-white">{u.full_name || t('common.trader')}</div>
                           <div className="text-slate-400 text-[11px]">{u.email}</div>
                         </td>
                         <td className="px-5 py-4">
@@ -413,7 +421,7 @@ export default function AdminDashboardPage() {
                             {u.subscription_status}
                           </span>
                           {u.is_frozen && (
-                            <span className="ml-1.5 text-[10px] text-rose-400 font-bold">[FROZEN]</span>
+                            <span className="ml-1.5 text-[10px] text-rose-400 font-bold">{t('admin.frozen')}</span>
                           )}
                         </td>
                         <td className="px-5 py-4">
@@ -426,7 +434,7 @@ export default function AdminDashboardPage() {
                               </span>
                             </div>
                           ) : (
-                            <span className="text-slate-600 font-medium">None linked</span>
+                            <span className="text-slate-600 font-medium">{t('admin.noneLinked')}</span>
                           )}
                         </td>
                         <td className="px-5 py-4">
@@ -437,7 +445,7 @@ export default function AdminDashboardPage() {
                                 : 'bg-dark-800 text-slate-500'
                             }`}
                           >
-                            {tradingSet?.is_bot_active ? 'Active' : 'Off'}
+                            {tradingSet?.is_bot_active ? t('admin.botActive') : t('admin.botOff')}
                           </span>
                         </td>
                         <td className="px-5 py-4 text-right text-slate-200 font-bold">
@@ -460,7 +468,7 @@ export default function AdminDashboardPage() {
                                   : 'bg-rose-500/15 text-rose-400 border border-rose-500/30 hover:bg-rose-500/25'
                               }`}
                             >
-                              {u.is_frozen ? 'Unfreeze' : 'Freeze'}
+                              {u.is_frozen ? t('admin.unfreeze') : t('admin.freeze')}
                             </button>
                           )}
                         </td>
@@ -477,25 +485,25 @@ export default function AdminDashboardPage() {
         {activeTab === 'invoices' && (
           <div className="bg-dark-900 border border-dark-800 rounded-2xl shadow-xl overflow-hidden">
             <div className="p-5 border-b border-dark-800 flex justify-between items-center">
-              <h2 className="text-base font-bold text-white">System Invoices & Submissions</h2>
-              <span className="text-xs font-mono text-slate-400">{invoices.length} Total Invoices</span>
+              <h2 className="text-base font-bold text-white">{t('admin.systemInvoices')}</h2>
+              <span className="text-xs font-mono text-slate-400">{t('admin.totalInvoices', { count: invoices.length })}</span>
             </div>
 
             {invoices.length === 0 ? (
               <div className="p-12 text-center text-slate-500 font-mono text-sm">
-                No invoices generated yet.
+                {t('admin.noInvoices')}
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead className="bg-dark-950/60 text-[11px] uppercase tracking-wider text-slate-400 font-mono border-b border-dark-800">
                     <tr>
-                      <th className="px-5 py-3">Invoice & User</th>
-                      <th className="px-5 py-3">Period</th>
-                      <th className="px-5 py-3">Total Amount</th>
-                      <th className="px-5 py-3">Status</th>
-                      <th className="px-5 py-3">TxID / Network</th>
-                      <th className="px-5 py-3 text-right">Moderation Actions</th>
+                      <th className="px-5 py-3">{t('admin.colInvoice')}</th>
+                      <th className="px-5 py-3">{t('admin.colPeriod')}</th>
+                      <th className="px-5 py-3">{t('admin.colAmount')}</th>
+                      <th className="px-5 py-3">{t('admin.colStatus')}</th>
+                      <th className="px-5 py-3">{t('admin.colTxid')}</th>
+                      <th className="px-5 py-3 text-right">{t('admin.colActions')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-dark-800 font-mono text-xs">
@@ -515,8 +523,8 @@ export default function AdminDashboardPage() {
                             </div>
                           </td>
                           <td className="px-5 py-4 text-slate-400 text-[11px]">
-                            {new Date(inv.period_start).toLocaleDateString('en-US')} –{' '}
-                            {new Date(inv.period_end).toLocaleDateString('en-US')}
+                            {new Date(inv.period_start).toLocaleDateString(dateLocale)} –{' '}
+                            {new Date(inv.period_end).toLocaleDateString(dateLocale)}
                           </td>
                           <td className="px-5 py-4">
                             <div className="font-bold text-honey-400 text-sm">
@@ -559,7 +567,7 @@ export default function AdminDashboardPage() {
                                 </a>
                               </div>
                             ) : (
-                              <span className="text-slate-600 text-[11px]">No hash submitted</span>
+                              <span className="text-slate-600 text-[11px]">{t('admin.noHash')}</span>
                             )}
                           </td>
                           <td className="px-5 py-4 text-right">
@@ -569,18 +577,18 @@ export default function AdminDashboardPage() {
                                   onClick={() => handleApproveInvoice(inv)}
                                   className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition-all"
                                 >
-                                  Approve
+                                  {t('admin.approve')}
                                 </button>
                                 <button
                                   onClick={() => handleRejectInvoice(inv)}
                                   className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-dark-800 hover:bg-rose-600/20 text-rose-400 border border-rose-500/20 transition-all"
                                 >
-                                  Reject
+                                  {t('admin.reject')}
                                 </button>
                               </div>
                             ) : (
                               <span className="text-slate-500 text-[11px]">
-                                {inv.status === 'paid' ? 'Completed' : 'Awaiting payment'}
+                                {inv.status === 'paid' ? t('admin.completed') : t('admin.awaitingPayment')}
                               </span>
                             )}
                           </td>
@@ -598,25 +606,25 @@ export default function AdminDashboardPage() {
         {activeTab === 'positions' && (
           <div className="bg-dark-900 border border-dark-800 rounded-2xl shadow-xl overflow-hidden">
             <div className="p-5 border-b border-dark-800 flex justify-between items-center">
-              <h2 className="text-base font-bold text-white">Global Basket Trades (All Accounts)</h2>
-              <span className="text-xs font-mono text-slate-400">{positions.length} Logged Trades</span>
+              <h2 className="text-base font-bold text-white">{t('admin.globalTrades')}</h2>
+              <span className="text-xs font-mono text-slate-400">{t('admin.loggedTrades', { count: positions.length })}</span>
             </div>
 
             {positions.length === 0 ? (
               <div className="p-12 text-center text-slate-500 font-mono text-sm">
-                No active or recent trades found.
+                {t('admin.noTrades')}
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead className="bg-dark-950/60 text-[11px] uppercase tracking-wider text-slate-400 font-mono border-b border-dark-800">
                     <tr>
-                      <th className="px-5 py-3">Trader</th>
-                      <th className="px-5 py-3">Pair Symbol</th>
-                      <th className="px-5 py-3">Status</th>
-                      <th className="px-5 py-3">Ratio</th>
-                      <th className="px-5 py-3">Margin Allocated</th>
-                      <th className="px-5 py-3 text-right">PnL</th>
+                      <th className="px-5 py-3">{t('admin.colTrader')}</th>
+                      <th className="px-5 py-3">{t('admin.colPair')}</th>
+                      <th className="px-5 py-3">{t('common.status')}</th>
+                      <th className="px-5 py-3">{t('admin.colRatio')}</th>
+                      <th className="px-5 py-3">{t('admin.colMargin')}</th>
+                      <th className="px-5 py-3 text-right">{t('admin.colPnl')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-dark-800 font-mono text-xs">
@@ -668,18 +676,18 @@ export default function AdminDashboardPage() {
         {activeTab === 'health' && (
           <div className="bg-dark-900 border border-dark-800 rounded-2xl shadow-xl overflow-hidden">
             <div className="p-5 border-b border-dark-800 flex justify-between items-center">
-              <h2 className="text-base font-bold text-white">Live Exchange & Daemon Health Logs</h2>
-              <span className="text-xs font-mono text-slate-400">30-second ping cycles</span>
+              <h2 className="text-base font-bold text-white">{t('admin.healthLogs')}</h2>
+              <span className="text-xs font-mono text-slate-400">{t('admin.pingCycles')}</span>
             </div>
 
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="bg-dark-950/60 text-[11px] uppercase tracking-wider text-slate-400 font-mono border-b border-dark-800">
                   <tr>
-                    <th className="px-5 py-3">Component</th>
-                    <th className="px-5 py-3">Health Status</th>
-                    <th className="px-5 py-3">Latency (ms)</th>
-                    <th className="px-5 py-3 text-right">Last Ping Timestamp</th>
+                    <th className="px-5 py-3">{t('admin.colComponent')}</th>
+                    <th className="px-5 py-3">{t('admin.colHealth')}</th>
+                    <th className="px-5 py-3">{t('admin.colLatency')}</th>
+                    <th className="px-5 py-3 text-right">{t('admin.colPing')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-dark-800 font-mono text-xs">
@@ -699,7 +707,7 @@ export default function AdminDashboardPage() {
                       </td>
                       <td className="px-5 py-4 text-honey-400 font-bold">{log.latency_ms} ms</td>
                       <td className="px-5 py-4 text-right text-slate-400 text-[11px]">
-                        {new Date(log.pinged_at).toLocaleTimeString('en-US')}
+                        {new Date(log.pinged_at).toLocaleTimeString(dateLocale)}
                       </td>
                     </tr>
                   ))}
@@ -713,13 +721,16 @@ export default function AdminDashboardPage() {
       {/* Confirmation Modal for Invoices */}
       <ConfirmModal
         isOpen={isConfirmModalOpen}
-        title={actionType === 'approve' ? 'Approve Invoice Payment?' : 'Reject Invoice Payment?'}
+        title={actionType === 'approve' ? t('admin.approveTitle') : t('admin.rejectTitle')}
         description={
           actionType === 'approve'
-            ? `Confirm verification of invoice ${selectedInvoice?.invoice_number} for $${Number(selectedInvoice?.total_amount_usd || 0).toFixed(2)} USDT? This will extend user's subscription by 7 days and lift any freezes.`
-            : `Reject transaction verification for ${selectedInvoice?.invoice_number}? The invoice will be returned to unpaid status.`
+            ? t('admin.approveDesc', {
+                number: selectedInvoice?.invoice_number ?? '',
+                amount: Number(selectedInvoice?.total_amount_usd || 0).toFixed(2),
+              })
+            : t('admin.rejectDesc', { number: selectedInvoice?.invoice_number ?? '' })
         }
-        confirmText={actionType === 'approve' ? 'Approve Payment' : 'Reject Payment'}
+        confirmText={actionType === 'approve' ? t('admin.approvePayment') : t('admin.rejectPayment')}
         isDestructive={actionType === 'reject'}
         onConfirm={confirmInvoiceAction}
         onCancel={() => setIsConfirmModalOpen(false)}

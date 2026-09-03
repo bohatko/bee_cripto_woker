@@ -17,6 +17,7 @@ import {
   Play,
   CheckCircle2,
 } from 'lucide-react';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 export interface MarketDataRecord {
   pair_symbol: string;
@@ -44,8 +45,8 @@ interface PairStrategyMeta {
   pairSymbol: string;
   longCoin: string;
   shortCoin: string;
-  narrative: string;
-  shareOfProfit: string;
+  narrativeKey: 'narrativeZecAvax' | 'narrativeEnaSui' | 'narrativeSolAda' | 'narrativeBnbEth';
+  sharePct: string;
 }
 
 const STRATEGY_META: PairStrategyMeta[] = [
@@ -53,29 +54,29 @@ const STRATEGY_META: PairStrategyMeta[] = [
     pairSymbol: 'ZEC/AVAX',
     longCoin: 'ZEC',
     shortCoin: 'AVAX',
-    narrative: 'Privacy & ETF Speculation vs Stagnant L1',
-    shareOfProfit: '50.0% of Alpha',
+    narrativeKey: 'narrativeZecAvax',
+    sharePct: '50.0',
   },
   {
     pairSymbol: 'ENA/SUI',
     longCoin: 'ENA',
     shortCoin: 'SUI',
-    narrative: 'High USDe Protocol Yield vs VC Monthly Unlocks',
-    shareOfProfit: '31.9% of Alpha',
+    narrativeKey: 'narrativeEnaSui',
+    sharePct: '31.9',
   },
   {
     pairSymbol: 'SOL/ADA',
     longCoin: 'SOL',
     shortCoin: 'ADA',
-    narrative: 'DEX Volume & On-Chain Activity vs Inactive Chain',
-    shareOfProfit: '11.6% of Alpha',
+    narrativeKey: 'narrativeSolAda',
+    sharePct: '11.6',
   },
   {
     pairSymbol: 'BNB/ETH',
     longCoin: 'BNB',
     shortCoin: 'ETH',
-    narrative: 'Binance Launchpool & Burn Utility vs ETH Laggard',
-    shareOfProfit: '6.5% of Alpha',
+    narrativeKey: 'narrativeBnbEth',
+    sharePct: '6.5',
   },
 ];
 
@@ -86,6 +87,7 @@ export function TradeReadinessMonitor({
   hasValidatedAccount,
   onStartBotClick,
 }: TradeReadinessMonitorProps) {
+  const { t } = useLanguage();
   const [showFormulaInfo, setShowFormulaInfo] = useState(false);
   const [timeToNext4h, setTimeToNext4h] = useState<string>('--:--:--');
 
@@ -188,15 +190,15 @@ export function TradeReadinessMonitor({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-base sm:text-lg font-extrabold text-white tracking-tight">
-                  Trade Readiness & Signal Proximity
+                  {t('readiness.title')}
                 </h2>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-honey-500/10 text-honey-400 border border-honey-500/20 font-bold uppercase tracking-wider">
-                  100% Scale
+                  {t('readiness.scale')}
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Real-time multi-pair market radar tracking entry proximity according to the{' '}
-                <span className="text-honey-400 font-mono font-semibold">Ratio &gt; EMA10</span> rule.
+                {t('readiness.subtitle')}{' '}
+                <span className="text-honey-400 font-mono font-semibold">{t('readiness.rule')}</span> {t('readiness.ruleSuffix')}
               </p>
             </div>
           </div>
@@ -209,7 +211,7 @@ export function TradeReadinessMonitor({
             <Zap className={`w-4 h-4 ${readyToEnterPairs.length > 0 ? 'text-emerald-400 animate-pulse' : 'text-honey-400'}`} />
             <div className="text-left font-mono">
               <div className="text-[10px] text-slate-400 uppercase tracking-wider">
-                {readyToEnterPairs.length > 0 ? 'Signal Ready' : 'Closest Setup'}
+                {readyToEnterPairs.length > 0 ? t('readiness.signalReady') : t('readiness.closestSetup')}
               </div>
               <div className="text-xs font-bold text-white flex items-center gap-1.5">
                 {highestReadinessPair ? (
@@ -226,7 +228,7 @@ export function TradeReadinessMonitor({
                     </span>
                   </>
                 ) : (
-                  <span className="text-emerald-400">All 4 Slots Active</span>
+                  <span className="text-emerald-400">{t('readiness.allSlots')}</span>
                 )}
               </div>
             </div>
@@ -237,7 +239,7 @@ export function TradeReadinessMonitor({
             <Clock className="w-4 h-4 text-slate-400" />
             <div className="text-left font-mono">
               <div className="text-[10px] text-slate-400 uppercase tracking-wider">
-                4H Candle Close
+                {t('readiness.candleClose')}
               </div>
               <div className="text-xs font-bold text-slate-200" title="Candle close confirms 4h trend status">
                 {timeToNext4h}
@@ -252,7 +254,7 @@ export function TradeReadinessMonitor({
             title="How is Trade Readiness calculated?"
           >
             <Info className="w-4 h-4" />
-            <span className="hidden sm:inline">Strategy Formula</span>
+            <span className="hidden sm:inline">{t('readiness.strategyFormula')}</span>
             {showFormulaInfo ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           </button>
         </div>
@@ -263,26 +265,20 @@ export function TradeReadinessMonitor({
         <div className="p-4 rounded-xl bg-dark-950/80 border border-honey-500/25 text-xs text-slate-300 space-y-3 animate-in fade-in duration-200">
           <div className="flex items-center gap-2 text-honey-400 font-bold">
             <Sparkles className="w-4 h-4" />
-            <span>How Trade Readiness (0-100%) Works</span>
+            <span>{t('readiness.howWorks')}</span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 font-mono text-[11px]">
             <div className="bg-dark-900/90 p-3 rounded-lg border border-dark-800">
-              <span className="text-honey-400 font-bold">1. Ratio Indicator</span>
-              <p className="text-slate-400 mt-1">
-                Ratio = Price(Long) / Price(Short). Measures synthetic relative strength between the cycle leader and laggard.
-              </p>
+              <span className="text-honey-400 font-bold">{t('readiness.ratioTitle')}</span>
+              <p className="text-slate-400 mt-1">{t('readiness.ratioDesc')}</p>
             </div>
             <div className="bg-dark-900/90 p-3 rounded-lg border border-dark-800">
-              <span className="text-emerald-400 font-bold">2. Entry Condition (100%)</span>
-              <p className="text-slate-400 mt-1">
-                Triggered when Ratio &gt; EMA10 on the 4-hour timeframe. Robot simultaneously opens Long & Short legs with 7x leverage.
-              </p>
+              <span className="text-emerald-400 font-bold">{t('readiness.entryTitle')}</span>
+              <p className="text-slate-400 mt-1">{t('readiness.entryDesc')}</p>
             </div>
             <div className="bg-dark-900/90 p-3 rounded-lg border border-dark-800">
-              <span className="text-amber-400 font-bold">3. Proximity Scaling</span>
-              <p className="text-slate-400 mt-1">
-                When below EMA10, readiness rises as Ratio approaches the EMA10 line (0% at -3.0% pullback, up to 99% right before crossing).
-              </p>
+              <span className="text-amber-400 font-bold">{t('readiness.proximityTitle')}</span>
+              <p className="text-slate-400 mt-1">{t('readiness.proximityDesc')}</p>
             </div>
           </div>
         </div>
@@ -294,8 +290,7 @@ export function TradeReadinessMonitor({
           <div className="flex items-center gap-2.5 text-xs">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
             <span className="text-emerald-300 font-medium">
-              <strong className="text-white font-bold">{readyToEnterPairs.length} pair(s)</strong> have reached{' '}
-              <strong className="text-emerald-400">100% Entry Readiness</strong> (Ratio &gt; EMA10)! Start bot to open market orders.
+              {t('readiness.pairsReady', { count: readyToEnterPairs.length })}
             </span>
           </div>
           {onStartBotClick && (
@@ -304,7 +299,7 @@ export function TradeReadinessMonitor({
               className="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-dark-950 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 shrink-0"
             >
               <Play className="w-3.5 h-3.5 fill-current" />
-              Start Trading Now
+              {t('readiness.startNow')}
             </button>
           )}
         </div>
@@ -327,29 +322,30 @@ export function TradeReadinessMonitor({
           } = pair;
 
           // Color themes based on state
-          let badgeText = `${readinessPct}% READY`;
+          let badgeText = t('readiness.pctReady', { pct: readinessPct });
           let badgeBg = 'bg-honey-500/10 text-honey-400 border-honey-500/25';
           let barBg = 'from-amber-600 via-amber-500 to-yellow-400';
-          let statusText = 'Approaching breakout';
+          let statusText = t('readiness.approaching');
 
           if (isOpen) {
-            badgeText = 'IN POSITION';
+            badgeText = t('readiness.inPosition');
             badgeBg = 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30';
             barBg = 'from-emerald-600 to-teal-400';
-            statusText = 'Active trade running (TP +5% / SL -1.5%)';
+            statusText = t('readiness.activeTrade');
           } else if (readinessPct >= 100 || isInTrend) {
-            badgeText = '100% SIGNAL ACTIVE';
+            badgeText = t('readiness.signalActive');
             badgeBg = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 animate-pulse';
             barBg = 'from-emerald-500 to-green-400';
-            statusText = isBotActive
-              ? 'Ready • Awaiting next execution cycle'
-              : 'Ready • Bot is idle (Start to trade)';
+            statusText = isBotActive ? t('readiness.readyAwaiting') : t('readiness.readyIdle');
           } else if (readinessPct < 80) {
-            badgeText = `${readinessPct}% ACCUMULATING`;
+            badgeText = t('readiness.accumulating', { pct: readinessPct });
             badgeBg = 'bg-dark-800 text-slate-400 border-dark-700';
             barBg = 'from-slate-700 via-slate-600 to-slate-500';
-            statusText = 'Consolidating below EMA10';
+            statusText = t('readiness.consolidating');
           }
+
+          const narrative = t(`readiness.${meta.narrativeKey}`);
+          const shareOfProfit = t('readiness.shareOfAlpha', { pct: meta.sharePct });
 
           const fillWidth = isOpen ? 100 : readinessPct;
 
@@ -373,8 +369,8 @@ export function TradeReadinessMonitor({
                         {meta.pairSymbol}
                       </span>
                     </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5 line-clamp-1" title={meta.narrative}>
-                      {meta.narrative}
+                    <div className="text-[10px] text-slate-400 mt-0.5 line-clamp-1" title={narrative}>
+                      {narrative}
                     </div>
                   </div>
 
@@ -395,7 +391,7 @@ export function TradeReadinessMonitor({
                     SHORT {meta.shortCoin}
                   </span>
                   <span className="text-[10px] font-mono text-slate-500 ml-auto">
-                    {meta.shareOfProfit}
+                    {shareOfProfit}
                   </span>
                 </div>
 
@@ -403,7 +399,7 @@ export function TradeReadinessMonitor({
                 <div className="mt-4 pt-3 border-t border-dark-850">
                   <div className="flex items-baseline justify-between font-mono mb-1.5">
                     <span className="text-xs text-slate-400 font-medium">
-                      {isOpen ? 'Trade Status' : 'Entry Readiness'}
+                      {isOpen ? t('readiness.tradeStatus') : t('readiness.entryReadiness')}
                     </span>
                     <span
                       className={`text-sm font-black ${
@@ -416,7 +412,7 @@ export function TradeReadinessMonitor({
                           : 'text-slate-400'
                       }`}
                     >
-                      {isOpen ? 'IN MARKET' : `${readinessPct}%`}
+                      {isOpen ? t('readiness.inMarket') : `${readinessPct}%`}
                     </span>
                   </div>
 
@@ -441,8 +437,8 @@ export function TradeReadinessMonitor({
                       {isOpen
                         ? `PnL: ${Number(openPos.pnl_pct || 0) >= 0 ? '+' : ''}${Number(openPos.pnl_pct || 0).toFixed(2)}%`
                         : gapPct >= 0
-                        ? `+${gapPct.toFixed(2)}% above EMA`
-                        : `${gapPct.toFixed(2)}% to EMA`}
+                        ? t('readiness.aboveEma', { pct: gapPct.toFixed(2) })
+                        : t('readiness.toEma', { pct: gapPct.toFixed(2) })}
                     </span>
                   </div>
                 </div>
@@ -480,13 +476,13 @@ export function TradeReadinessMonitor({
 
               {/* Card Footer Note */}
               <div className="mt-3 pt-2 text-[10px] font-mono text-slate-400 flex items-center justify-between">
-                <span>Slot: 25% margin (7x)</span>
+                <span>{t('readiness.slot')}</span>
                 {isOpen ? (
-                  <span className="text-emerald-400 font-semibold">Guarded</span>
+                  <span className="text-emerald-400 font-semibold">{t('readiness.guarded')}</span>
                 ) : readinessPct >= 100 ? (
-                  <span className="text-emerald-400 font-semibold">100% Ready</span>
+                  <span className="text-emerald-400 font-semibold">{t('readiness.ready100')}</span>
                 ) : (
-                  <span>Waiting trigger</span>
+                  <span>{t('readiness.waitingTrigger')}</span>
                 )}
               </div>
             </div>

@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { AlertTriangle, X } from 'lucide-react';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -20,18 +21,22 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   isOpen,
   title,
   description,
-  confirmText = 'Confirm',
-  cancelText = 'Cancel',
+  confirmText,
+  cancelText,
   isDestructive = false,
   variant,
   onConfirm,
   onCancel,
   onClose,
 }) => {
+  const { t } = useLanguage();
+
   if (!isOpen) return null;
 
   const handleDismiss = onCancel || onClose || (() => {});
   const isDanger = isDestructive || variant === 'danger';
+  const resolvedConfirm = confirmText ?? t('common.confirm');
+  const resolvedCancel = cancelText ?? t('common.cancel');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
@@ -64,7 +69,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
             onClick={handleDismiss}
             className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white bg-dark-800 hover:bg-dark-700 border border-dark-700 rounded-lg transition-colors"
           >
-            {cancelText}
+            {resolvedCancel}
           </button>
           <button
             onClick={onConfirm}
@@ -74,7 +79,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
                 : 'bg-honey-500 hover:bg-honey-400 text-dark-950 font-semibold shadow-lg shadow-honey-500/20'
             }`}
           >
-            {confirmText}
+            {resolvedConfirm}
           </button>
         </div>
       </div>

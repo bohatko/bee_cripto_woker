@@ -6,9 +6,12 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { ArrowRight, Lock, Mail } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { LanguageSwitcher } from '@/lib/i18n/LanguageSwitcher';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { t } = useLanguage();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -29,13 +32,17 @@ export default function LoginPage() {
       toast.error(error.message);
       setLoading(false);
     } else {
-      toast.success('Signed in successfully!');
+      toast.success(t('auth.signedInSuccess'));
       router.push('/dashboard');
     }
   };
 
   return (
-    <div className="min-h-screen bg-dark-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-dark-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8 relative">
+      <div className="absolute top-4 right-4 sm:top-6 sm:right-6">
+        <LanguageSwitcher variant="compact" />
+      </div>
+
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
         <Link href="/" className="inline-flex items-center gap-2 mb-4">
           <div className="w-10 h-10 rounded-xl bg-honey-500/10 border border-honey-500/30 flex items-center justify-center text-honey-500 font-bold text-2xl">
@@ -43,11 +50,11 @@ export default function LoginPage() {
           </div>
           <span className="font-extrabold text-xl text-white tracking-tight">BEE CRYPTO</span>
         </Link>
-        <h2 className="text-2xl font-bold text-white tracking-tight">Sign in to your account</h2>
+        <h2 className="text-2xl font-bold text-white tracking-tight">{t('auth.signInTitle')}</h2>
         <p className="mt-2 text-sm text-slate-400">
-          Or{' '}
+          {t('auth.orStartTrial')}{' '}
           <Link href="/register" className="font-medium text-honey-400 hover:text-honey-300">
-            start your 7-day free trial
+            {t('auth.startFreeTrial')}
           </Link>
         </p>
       </div>
@@ -63,7 +70,7 @@ export default function LoginPage() {
           <form className="space-y-5" onSubmit={handleLogin}>
             <div>
               <label className="block text-xs font-medium text-slate-300 uppercase mb-1.5">
-                Email Address
+                {t('auth.email')}
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
@@ -82,7 +89,7 @@ export default function LoginPage() {
 
             <div>
               <label className="block text-xs font-medium text-slate-300 uppercase mb-1.5">
-                Password
+                {t('auth.password')}
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
@@ -104,7 +111,7 @@ export default function LoginPage() {
               disabled={loading}
               className="w-full py-3 px-4 rounded-xl font-bold text-sm bg-honey-500 hover:bg-honey-400 text-dark-950 shadow-lg shadow-honey-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
-              {loading ? 'Authenticating...' : 'Sign In'}
+              {loading ? t('auth.authenticating') : t('auth.signIn')}
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>

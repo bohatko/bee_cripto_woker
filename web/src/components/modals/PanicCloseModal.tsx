@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { ShieldAlert, X } from 'lucide-react';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 interface PanicCloseModalProps {
   isOpen: boolean;
@@ -18,6 +19,7 @@ export const PanicCloseModal: React.FC<PanicCloseModalProps> = ({
   onConfirm,
   onCancel,
 }) => {
+  const { t } = useLanguage();
   const [confirmationInput, setConfirmationInput] = useState('');
 
   if (!isOpen) return null;
@@ -40,21 +42,23 @@ export const PanicCloseModal: React.FC<PanicCloseModalProps> = ({
           </div>
           <div>
             <h3 className="text-xl font-bold text-white tracking-tight">
-              EMERGENCY PANIC CLOSE
+              {t('panic.title')}
             </h3>
             <p className="text-xs text-rose-400 uppercase font-semibold">
-              High Priority Liquidation
+              {t('panic.subtitle')}
             </p>
           </div>
         </div>
 
         <div className="bg-dark-850 border border-dark-700/60 rounded-xl p-4 my-4 space-y-2 text-sm">
           <div className="flex justify-between items-center">
-            <span className="text-slate-400">Positions to Liquidate:</span>
-            <span className="font-semibold text-white">{openPositionsCount} Pairs (Long/Short)</span>
+            <span className="text-slate-400">{t('panic.positionsLabel')}</span>
+            <span className="font-semibold text-white">
+              {t('panic.positionsValue', { count: openPositionsCount })}
+            </span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-slate-400">Current Floating PnL:</span>
+            <span className="text-slate-400">{t('panic.pnlLabel')}</span>
             <span
               className={`font-semibold ${
                 unrealizedPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'
@@ -64,13 +68,15 @@ export const PanicCloseModal: React.FC<PanicCloseModalProps> = ({
             </span>
           </div>
           <p className="text-xs text-slate-400 pt-2 border-t border-dark-700">
-            This will immediately transmit Market Sell and Market Buy orders to your exchange, terminating all open basket legs.
+            {t('panic.warning')}
           </p>
         </div>
 
         <div className="space-y-2 mb-6">
           <label className="text-xs font-medium text-slate-300">
-            Type <span className="text-rose-400 font-bold">CLOSE</span> to confirm:
+            {t('panic.typeClose')}{' '}
+            <span className="text-rose-400 font-bold">CLOSE</span>{' '}
+            {t('panic.toConfirm')}
           </label>
           <input
             type="text"
@@ -89,7 +95,7 @@ export const PanicCloseModal: React.FC<PanicCloseModalProps> = ({
             }}
             className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white bg-dark-800 hover:bg-dark-700 rounded-xl transition-colors"
           >
-            Cancel
+            {t('common.cancel')}
           </button>
           <button
             disabled={!isConfirmed}
@@ -103,7 +109,7 @@ export const PanicCloseModal: React.FC<PanicCloseModalProps> = ({
                 : 'bg-dark-800 text-slate-600 border border-dark-700 cursor-not-allowed'
             }`}
           >
-            Liquidate All Positions
+            {t('panic.liquidate')}
           </button>
         </div>
       </div>

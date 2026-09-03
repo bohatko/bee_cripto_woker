@@ -23,8 +23,10 @@ import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { PanicCloseModal } from '@/components/modals/PanicCloseModal';
 import { TradeReadinessMonitor } from '@/components/dashboard/TradeReadinessMonitor';
 import { toast } from '@/components/ui/sonner';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 export default function DashboardPage() {
+  const { t, dateLocale } = useLanguage();
   const [positions, setPositions] = useState<any[]>([]);
   const [settings, setSettings] = useState<any>(null);
   const [accounts, setAccounts] = useState<any[]>([]);
@@ -144,18 +146,18 @@ export default function DashboardPage() {
         );
         if (!silent) {
           if (errorAccounts.length > 0 && errorAccounts[0].last_error_msg) {
-            toast.error(`Exchange API sync error: ${errorAccounts[0].last_error_msg}`);
+            toast.error(t('dashboard.toastSyncError', { msg: errorAccounts[0].last_error_msg }));
           } else {
-            toast.success('Balances updated directly from exchange APIs!');
+            toast.success(t('dashboard.toastBalancesUpdated'));
           }
         }
       } else if (!silent) {
-        toast.error(data?.error || 'Failed to sync balances from exchange APIs');
+        toast.error(data?.error || t('dashboard.toastSyncFailed'));
       }
     } catch (err: any) {
       console.error('Failed to sync live balances:', err);
       if (!silent) {
-        toast.error(err.message || 'Failed to sync live balances');
+        toast.error(err.message || t('dashboard.toastSyncFailed'));
       }
     } finally {
       setSyncing(false);
@@ -240,7 +242,7 @@ export default function DashboardPage() {
     if (!hasValidatedAccount) {
       setIsToggleModalOpen(false);
       setIsMissingExchangeModalOpen(true);
-      toast.error('Connect and validate an exchange API before starting the bot.');
+      toast.error(t('dashboard.toastConnectFirst'));
       return;
     }
 
@@ -258,9 +260,9 @@ export default function DashboardPage() {
       setIsToggleModalOpen(false);
 
       if (nextState) {
-        toast.success('Trading bot started successfully!');
+        toast.success(t('dashboard.toastBotStarted'));
       } else {
-        toast.info('Trading bot paused.');
+        toast.info(t('dashboard.toastBotPaused'));
       }
     } catch (err: any) {
       toast.error(err.message || 'Failed to update trading bot status');
@@ -283,7 +285,7 @@ export default function DashboardPage() {
       if (error) throw error;
 
       setIsPanicModalOpen(false);
-      toast.error('Emergency panic close initiated! Liquidating all open positions immediately.');
+      toast.error(t('dashboard.toastPanic'));
       // Reload positions after signal
       setTimeout(loadDashboardData, 1500);
     } catch (err: any) {
@@ -297,10 +299,10 @@ export default function DashboardPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            Trading Dashboard
+            {t('dashboard.title')}
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
-            Real-time multi-pair market-neutral position monitoring and risk management.
+            {t('dashboard.subtitle')}
           </p>
         </div>
 
@@ -314,7 +316,7 @@ export default function DashboardPage() {
               title="Query exchange APIs for latest wallet balances"
             >
               <RefreshCw className={`w-3.5 h-3.5 text-honey-400 ${syncing ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">{syncing ? 'Syncing...' : 'Sync Balances'}</span>
+              <span className="hidden sm:inline">{syncing ? t('dashboard.syncing') : t('dashboard.syncBalances')}</span>
             </button>
           )}
 
@@ -334,11 +336,11 @@ export default function DashboardPage() {
           >
             {settings?.is_bot_active ? (
               <>
-                <Pause className="w-4 h-4" /> Pause Trading
+                <Pause className="w-4 h-4" /> {t('dashboard.pauseTrading')}
               </>
             ) : (
               <>
-                <Play className="w-4 h-4 fill-current" /> Start Trading
+                <Play className="w-4 h-4 fill-current" /> {t('dashboard.startTrading')}
               </>
             )}
           </button>
@@ -349,7 +351,7 @@ export default function DashboardPage() {
             className="px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider bg-rose-600/15 text-rose-400 border border-rose-600/30 hover:bg-rose-600/25 transition-all flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <AlertOctagon className="w-4 h-4" />
-            Panic Close All
+            {t('dashboard.panicCloseAll')}
           </button>
         </div>
       </div>
@@ -362,9 +364,9 @@ export default function DashboardPage() {
               <KeyRound className="w-5 h-5" />
             </div>
             <div>
-              <h4 className="text-sm font-bold text-white">No Exchange Account Connected</h4>
+              <h4 className="text-sm font-bold text-white">{t('dashboard.noExchangeTitle')}</h4>
               <p className="text-xs text-slate-300 mt-0.5">
-                Trading is blocked until you connect at least one exchange API (Binance, OKX, or Bybit).
+                {t('dashboard.noExchangeDesc')}
               </p>
             </div>
           </div>
@@ -373,7 +375,7 @@ export default function DashboardPage() {
             className="px-4 py-2 rounded-xl text-xs font-bold bg-honey-500 hover:bg-honey-400 text-dark-950 flex items-center justify-center gap-1.5 transition-all shadow-md shadow-honey-500/20 shrink-0"
           >
             <KeyRound className="w-3.5 h-3.5" />
-            Connect API Keys
+            {t('dashboard.connectApiKeys')}
           </Link>
         </div>
       )}
@@ -383,10 +385,10 @@ export default function DashboardPage() {
         <div className="bg-dark-900 border border-dark-800 p-3.5 rounded-xl flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-xs font-medium text-slate-300">Railway Daemon</span>
+            <span className="text-xs font-medium text-slate-300">{t('dashboard.railwayDaemon')}</span>
           </div>
           <span className="text-[11px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-            ONLINE (12ms)
+            {t('dashboard.online')}
           </span>
         </div>
 
@@ -398,7 +400,7 @@ export default function DashboardPage() {
               }`}
             />
             <span className="text-xs font-medium text-slate-300">
-              Exchanges ({accounts.length > 0 ? accounts.map((a) => a.exchange.toUpperCase()).join(', ') : 'NONE'})
+              {t('dashboard.exchanges')} ({accounts.length > 0 ? accounts.map((a) => a.exchange.toUpperCase()).join(', ') : t('dashboard.none')})
             </span>
           </div>
           <span
@@ -408,7 +410,7 @@ export default function DashboardPage() {
                 : 'text-amber-400 bg-amber-500/10 border-amber-500/20'
             }`}
           >
-            {hasValidatedAccount ? `${accounts.length} CONNECTED` : 'WAITING KEYS'}
+            {hasValidatedAccount ? t('dashboard.connected', { count: accounts.length }) : t('dashboard.waitingKeys')}
           </span>
         </div>
 
@@ -419,7 +421,7 @@ export default function DashboardPage() {
                 settings?.is_bot_active ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
               }`}
             />
-            <span className="text-xs font-medium text-slate-300">Bot Strategy State</span>
+            <span className="text-xs font-medium text-slate-300">{t('dashboard.botStrategyState')}</span>
           </div>
           <span
             className={`text-[11px] font-mono px-2 py-0.5 rounded border uppercase ${
@@ -428,7 +430,7 @@ export default function DashboardPage() {
                 : 'text-slate-400 bg-dark-800 border-dark-700'
             }`}
           >
-            {settings?.is_bot_active ? 'ACTIVE (7x)' : 'IDLE'}
+            {settings?.is_bot_active ? t('dashboard.active7x') : t('dashboard.idle')}
           </span>
         </div>
       </div>
@@ -438,7 +440,7 @@ export default function DashboardPage() {
         {/* Total Account Equity Card */}
         <div className="bg-dark-900 border border-dark-800 p-5 rounded-2xl shadow-xl relative">
           <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
-            <span>Total Account Equity</span>
+            <span>{t('dashboard.totalEquity')}</span>
             <div className="flex items-center gap-2">
               {accounts.length > 0 && (
                 <button
@@ -454,23 +456,23 @@ export default function DashboardPage() {
             </div>
           </div>
           <p className="text-2xl font-black text-white font-mono mt-2">
-            ${totalAggregatedEquity.toLocaleString('en-US', {
+            ${totalAggregatedEquity.toLocaleString(dateLocale, {
               minimumFractionDigits: 2,
             })}{' '}
             <span className="text-xs text-slate-500 font-normal">USDT</span>
           </p>
           <div className="mt-2 text-[11px] text-slate-400 font-mono flex items-center justify-between">
             <span>
-              Available Margin:{' '}
+              {t('dashboard.availableMargin')}{' '}
               <span className="text-slate-200 font-semibold">
-                ${totalAvailableMargin.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                ${totalAvailableMargin.toLocaleString(dateLocale, { minimumFractionDigits: 2 })}
               </span>
             </span>
             {accounts.length > 0 ? (
-              <span className="text-[10px] text-emerald-400">{accounts.length} exchange(s)</span>
+              <span className="text-[10px] text-emerald-400">{t('dashboard.exchangesCount', { count: accounts.length })}</span>
             ) : (
               <Link href="/settings/exchange" className="text-[10px] text-honey-400 hover:underline">
-                + Connect
+                {t('dashboard.connect')}
               </Link>
             )}
           </div>
@@ -479,7 +481,7 @@ export default function DashboardPage() {
         {/* Basket Floating PnL Card */}
         <div className="bg-dark-900 border border-dark-800 p-5 rounded-2xl shadow-xl">
           <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
-            <span>Basket Floating PnL</span>
+            <span>{t('dashboard.basketPnl')}</span>
             <TrendingUp className="w-4 h-4 text-emerald-400" />
           </div>
           <p
@@ -493,7 +495,7 @@ export default function DashboardPage() {
             <span className="text-xs text-slate-500 font-normal">USDT</span>
           </p>
           <div className="mt-2 text-[11px] text-slate-400 font-mono">
-            Active Open Legs:{' '}
+            {t('dashboard.activeOpenLegs')}{' '}
             <span className="text-slate-200 font-semibold">{positions.length * 2}</span>
           </div>
         </div>
@@ -501,7 +503,7 @@ export default function DashboardPage() {
         {/* Target Risk Rules */}
         <div className="bg-dark-900 border border-dark-800 p-5 rounded-2xl shadow-xl">
           <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
-            <span>Active Risk Guards</span>
+            <span>{t('dashboard.activeRiskGuards')}</span>
             <ShieldCheck className="w-4 h-4 text-honey-400" />
           </div>
           <div className="mt-3 flex items-center gap-4 font-mono">
@@ -519,7 +521,7 @@ export default function DashboardPage() {
             </div>
           </div>
           <p className="mt-2 text-[11px] text-slate-500 font-mono">
-            Trend-Flip Filter: EMA10 Exit Guard
+            {t('dashboard.trendFlipFilter')}
           </p>
         </div>
       </div>
@@ -531,14 +533,14 @@ export default function DashboardPage() {
             <div className="flex items-center gap-2">
               <Building2 className="w-4 h-4 text-honey-400" />
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                Connected Exchanges Balance Breakdown ({accounts.length})
+                {t('dashboard.balanceBreakdown', { count: accounts.length })}
               </h3>
             </div>
             <Link
               href="/settings/exchange"
               className="text-xs font-mono text-honey-400 hover:text-honey-300 flex items-center gap-1 transition-colors"
             >
-              Manage Exchanges
+              {t('dashboard.manageExchanges')}
               <ExternalLink className="w-3 h-3" />
             </Link>
           </div>
@@ -557,29 +559,29 @@ export default function DashboardPage() {
                     </span>
                     {settings?.exchange_account_id === acc.id && (
                       <span className="text-[9px] font-mono px-1.5 py-0.5 rounded font-bold bg-honey-500/10 text-honey-400 border border-honey-500/30">
-                        ⚡ TRADING
+                        {t('dashboard.trading')}
                       </span>
                     )}
                   </div>
                   <p className="text-lg font-black font-mono text-white mt-1">
-                    ${Number(acc.last_balance_usd || 0).toLocaleString('en-US', {
+                    ${Number(acc.last_balance_usd || 0).toLocaleString(dateLocale, {
                       minimumFractionDigits: 2,
                     })}{' '}
                     <span className="text-[10px] text-slate-500 font-normal">USDT</span>
                   </p>
                   <p className="text-[10px] text-slate-500 font-mono mt-0.5">
-                    Synced:{' '}
-                    {acc.last_sync_at ? new Date(acc.last_sync_at).toLocaleTimeString() : 'Never'}
+                    {t('dashboard.synced')}{' '}
+                    {acc.last_sync_at ? new Date(acc.last_sync_at).toLocaleTimeString(dateLocale) : t('common.never')}
                   </p>
                 </div>
 
                 <div className="text-right flex flex-col items-end">
                   <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                    FUTURES
+                    {t('dashboard.futures')}
                   </span>
                   {acc.last_error_msg && (
                     <span className="text-[9px] text-rose-400 font-mono mt-1" title={acc.last_error_msg}>
-                      ⚠️ Sync issue
+                      {t('dashboard.syncIssue')}
                     </span>
                   )}
                 </div>
@@ -612,32 +614,32 @@ export default function DashboardPage() {
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-base font-bold text-white tracking-tight">
-                  Active Long-Short Basket Pairs
+                  {t('dashboard.activePairs')}
                 </h2>
                 {isShowingMaster && (
                   <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-honey-500/15 text-honey-400 border border-honey-500/30">
-                    MASTER STRATEGY
+                    {t('dashboard.masterStrategy')}
                   </span>
                 )}
               </div>
               {isShowingMaster && (
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  Displaying live signals actively traded by the Master Bot Strategy in real time.
+                  {t('dashboard.masterHint')}
                 </p>
               )}
             </div>
           </div>
           <span className="text-xs font-mono text-slate-400">
-            {positions.length} Positions Open
+            {t('dashboard.positionsOpen', { count: positions.length })}
           </span>
         </div>
 
         {positions.length === 0 ? (
           <div className="p-12 text-center">
             <Layers className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-            <h3 className="text-base font-semibold text-white">No active pairs open</h3>
+            <h3 className="text-base font-semibold text-white">{t('dashboard.noPairsTitle')}</h3>
             <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-              When market scanner detects Ratio &gt; EMA10 and the bot is active, long-short legs will appear here automatically.
+              {t('dashboard.noPairsDesc')}
             </p>
           </div>
         ) : (
@@ -645,12 +647,12 @@ export default function DashboardPage() {
             <table className="w-full text-left text-sm">
               <thead className="bg-dark-950/60 text-[11px] uppercase tracking-wider text-slate-400 font-mono border-b border-dark-800">
                 <tr>
-                  <th className="px-5 py-3">Strategy Pair</th>
-                  <th className="px-5 py-3">Ratio (Entry / Now)</th>
-                  <th className="px-5 py-3">Long Leg</th>
-                  <th className="px-5 py-3">Short Leg</th>
-                  <th className="px-5 py-3">Margin / Vol</th>
-                  <th className="px-5 py-3 text-right">PnL (% / $)</th>
+                  <th className="px-5 py-3">{t('dashboard.colPair')}</th>
+                  <th className="px-5 py-3">{t('dashboard.colRatio')}</th>
+                  <th className="px-5 py-3">{t('dashboard.colLong')}</th>
+                  <th className="px-5 py-3">{t('dashboard.colShort')}</th>
+                  <th className="px-5 py-3">{t('dashboard.colMargin')}</th>
+                  <th className="px-5 py-3 text-right">{t('dashboard.colPnl')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-dark-800 font-mono text-xs">
@@ -664,7 +666,7 @@ export default function DashboardPage() {
                           {p.pair_symbol}
                         </div>
                         <span className="text-[10px] text-emerald-400 font-normal">
-                          Market-Neutral
+                          {t('dashboard.marketNeutral')}
                         </span>
                       </td>
                       <td className="px-5 py-4">
@@ -672,7 +674,7 @@ export default function DashboardPage() {
                           {Number(p.entry_ratio).toFixed(4)}
                         </div>
                         <div className="text-[11px] text-honey-400">
-                          Now: {Number(p.current_ratio || p.entry_ratio).toFixed(4)}
+                          {t('dashboard.now')} {Number(p.current_ratio || p.entry_ratio).toFixed(4)}
                         </div>
                       </td>
                       <td className="px-5 py-4">
@@ -689,10 +691,10 @@ export default function DashboardPage() {
                       </td>
                       <td className="px-5 py-4 text-slate-300">
                         <div className="font-bold text-white">
-                          ${Number(p.total_position_volume_usd || 87500).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          ${Number(p.total_position_volume_usd || 87500).toLocaleString(dateLocale, { minimumFractionDigits: 2 })}
                         </div>
                         <div className="text-[10px] text-slate-400">
-                          Margin: ${Number(p.allocated_margin_usd || 12500).toLocaleString('en-US', { minimumFractionDigits: 2 })} (7.0x)
+                          {t('dashboard.margin')} ${Number(p.allocated_margin_usd || 12500).toLocaleString(dateLocale, { minimumFractionDigits: 2 })} (7.0x)
                         </div>
                       </td>
                       <td className="px-5 py-4 text-right">
@@ -721,13 +723,13 @@ export default function DashboardPage() {
         isOpen={isToggleModalOpen}
         onCancel={() => setIsToggleModalOpen(false)}
         onConfirm={handleToggleBot}
-        title={settings?.is_bot_active ? 'Pause Autonomous Bot' : 'Start Autonomous Bot'}
+        title={settings?.is_bot_active ? t('dashboard.pauseTitle') : t('dashboard.startTitle')}
         description={
           settings?.is_bot_active
-            ? 'Pausing will stop the bot from opening new pairs. Currently open pairs will continue to be monitored by the Risk Guard until TP (+5%) or SL (-1.5%).'
-            : 'Starting the bot activates automated execution across your connected exchanges. Ensure your exchange accounts have sufficient USDT futures margin.'
+            ? t('dashboard.pauseDesc')
+            : t('dashboard.startDesc')
         }
-        confirmText={settings?.is_bot_active ? 'Pause Strategy' : 'Start Strategy'}
+        confirmText={settings?.is_bot_active ? t('dashboard.pauseConfirm') : t('dashboard.startConfirm')}
       />
 
       <PanicCloseModal
@@ -746,9 +748,9 @@ export default function DashboardPage() {
           setIsMissingExchangeModalOpen(false);
           window.location.href = '/settings/exchange';
         }}
-        title="Exchange API Required"
-        description="You cannot start the trading bot without linking at least one validated exchange API (Binance, OKX, or Bybit). Please connect your exchange credentials first."
-        confirmText="Connect Exchange"
+        title={t('dashboard.exchangeRequiredTitle')}
+        description={t('dashboard.exchangeRequiredDesc')}
+        confirmText={t('dashboard.connectExchange')}
       />
     </div>
   );

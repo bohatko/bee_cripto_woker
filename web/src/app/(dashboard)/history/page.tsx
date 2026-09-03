@@ -23,8 +23,10 @@ import {
   Percent,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 export default function HistoryPage() {
+  const { t, dateLocale } = useLanguage();
   const [activeTab, setActiveTab] = useState<'all' | 'user' | 'master'>('all');
   const [selectedPair, setSelectedPair] = useState<string>('ALL');
   const [masterPositions, setMasterPositions] = useState<any[]>([]);
@@ -162,29 +164,27 @@ export default function HistoryPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
-            Trade History
+            {t('history.title')}
             <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-honey-500/15 text-honey-400 border border-honey-500/30">
-              AUDITED LOG
+              {t('history.auditedLog')}
             </span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            {isUserView
-              ? 'Complete execution history for your connected exchange accounts.'
-              : 'Complete trading log showing exact trade amounts, margin allocation ($50,000 starting base), and executed PnL.'}
+            {isUserView ? t('history.subtitleUser') : t('history.subtitleMaster')}
           </p>
         </div>
 
         {/* Global PnL Pill */}
         <div className="bg-dark-900 border border-dark-800 px-4 py-2.5 rounded-xl flex items-center gap-3 shadow-lg shrink-0">
-          <span className="text-xs text-slate-400 font-mono">Realized PnL:</span>
+          <span className="text-xs text-slate-400 font-mono">{t('history.realizedPnl')}</span>
           <span
             className={`font-mono font-black text-base ${
               totalRealizedPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'
             }`}
           >
             {totalRealizedPnl >= 0
-              ? `+$${totalRealizedPnl.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-              : `-$${Math.abs(totalRealizedPnl).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              ? `+$${totalRealizedPnl.toLocaleString(dateLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+              : `-$${Math.abs(totalRealizedPnl).toLocaleString(dateLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           </span>
         </div>
       </div>
@@ -207,13 +207,13 @@ export default function HistoryPage() {
               </div>
               <div>
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  Master Bot Strategy
+                  {t('history.masterBot')}
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-honey-500/20 text-honey-400 font-bold">
-                    COMPOUNDING ($50k BASE)
+                    {t('history.compounding')}
                   </span>
                 </h3>
                 <span className="text-[11px] font-mono text-slate-400">
-                  {masterPositions.length} historical trades • Full 100% reinvestment model
+                  {t('history.masterTrades', { count: masterPositions.length })}
                 </span>
               </div>
             </div>
@@ -222,11 +222,11 @@ export default function HistoryPage() {
                 activeTab === 'master' ? 'bg-honey-500 text-dark-950' : 'text-slate-400 bg-dark-950'
               }`}
             >
-              {activeTab === 'master' ? 'Active View' : 'Select'}
+              {activeTab === 'master' ? t('history.activeView') : t('history.select')}
             </span>
           </div>
           <p className="mt-3 text-xs text-slate-300 leading-relaxed">
-            Autonomous multi-pair market-neutral signals calculated from a $50,000 reference capital with 100% profit compounding after every trade, growing position sizes dynamically up to $1M+ portfolio equity.
+            {t('history.masterDesc')}
           </p>
         </div>
 
@@ -246,13 +246,13 @@ export default function HistoryPage() {
               </div>
               <div>
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  My Exchange Account
+                  {t('history.myAccount')}
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold">
-                    LIVE ACCOUNT
+                    {t('history.liveAccount')}
                   </span>
                 </h3>
                 <span className="text-[11px] font-mono text-slate-400">
-                  {userPositions.length} executed exchange orders
+                  {t('history.userOrders', { count: userPositions.length })}
                 </span>
               </div>
             </div>
@@ -261,11 +261,11 @@ export default function HistoryPage() {
                 activeTab === 'user' ? 'bg-emerald-500 text-dark-950' : 'text-slate-400 bg-dark-950'
               }`}
             >
-              {activeTab === 'user' ? 'Active View' : 'Select'}
+              {activeTab === 'user' ? t('history.activeView') : t('history.select')}
             </span>
           </div>
           <p className="mt-3 text-xs text-slate-300 leading-relaxed">
-            Actual positions executed on your connected exchange account (Binance, OKX, or Bybit) via encrypted API keys. Mirrors master signals sized to your exchange balance.
+            {t('history.userDesc')}
           </p>
         </div>
       </div>
@@ -281,7 +281,7 @@ export default function HistoryPage() {
           }`}
         >
           <Layers className="w-4 h-4" />
-          All Trades Combined ({userPositions.length + masterPositions.length})
+          {t('history.allTrades', { count: userPositions.length + masterPositions.length })}
         </button>
 
         <button
@@ -293,7 +293,7 @@ export default function HistoryPage() {
           }`}
         >
           <Sparkles className="w-4 h-4 text-honey-400" />
-          Master Strategy Benchmark ({masterPositions.length})
+          {t('history.masterBenchmark', { count: masterPositions.length })}
         </button>
 
         <button
@@ -305,7 +305,7 @@ export default function HistoryPage() {
           }`}
         >
           <UserCheck className="w-4 h-4 text-emerald-400" />
-          My Account Trades ({userPositions.length})
+          {t('history.myTrades', { count: userPositions.length })}
         </button>
       </div>
 
@@ -315,21 +315,21 @@ export default function HistoryPage() {
           {/* Card 1: My Connected Exchange Balance */}
           <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
             <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
-              <span>My Exchange Balance</span>
+              <span>{t('history.myBalance')}</span>
               <Wallet className="w-3.5 h-3.5 text-emerald-400" />
             </div>
             <p className="text-xl font-black text-white font-mono mt-1">
-              ${userExchangeBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              ${userExchangeBalance.toLocaleString(dateLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
             <span className="text-[11px] text-slate-500 font-mono">
-              {userAccountCount > 0 ? `${userAccountCount} active exchange API` : 'No API connected'}
+              {userAccountCount > 0 ? t('history.activeApi', { count: userAccountCount }) : t('history.noApi')}
             </span>
           </div>
 
           {/* Card 2: My Account Total Realized PnL */}
           <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
             <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
-              <span>My Realized Profit</span>
+              <span>{t('history.myProfit')}</span>
               <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
             </div>
             <p
@@ -338,32 +338,36 @@ export default function HistoryPage() {
               }`}
             >
               {totalRealizedPnl >= 0
-                ? `+$${totalRealizedPnl.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
-                : `-$${Math.abs(totalRealizedPnl).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+                ? `+$${totalRealizedPnl.toLocaleString(dateLocale, { minimumFractionDigits: 2 })}`
+                : `-$${Math.abs(totalRealizedPnl).toLocaleString(dateLocale, { minimumFractionDigits: 2 })}`}
             </p>
             <span className="text-[11px] text-slate-500 font-mono">
-              {userPositions.length} closed user trades
+              {t('history.closedUserTrades', { count: userPositions.length })}
             </span>
           </div>
 
           {/* Card 3: Max Drawdown */}
           <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
             <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
-              <span>Max Drawdown (DD)</span>
+              <span>{t('history.maxDd')}</span>
               <TrendingDown className="w-3.5 h-3.5 text-amber-400" />
             </div>
             <p className="text-xl font-black text-amber-400 font-mono mt-1">
               {userPositions.length > 0 ? `${maxDrawdownPct.toFixed(2)}%` : '0.00%'}
             </p>
             <span className="text-[11px] text-slate-500 font-mono">
-              {userPositions.length > 0 ? `-$${maxDrawdownUsd.toLocaleString('en-US', { minimumFractionDigits: 2 })} peak drop` : 'Zero drawdown recorded'}
+              {userPositions.length > 0
+                ? t('history.peakDrop', {
+                    amount: maxDrawdownUsd.toLocaleString(dateLocale, { minimumFractionDigits: 2 }),
+                  })
+                : t('history.zeroDd')}
             </span>
           </div>
 
           {/* Card 4: My Strategy Winrate */}
           <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
             <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
-              <span>Account Winrate</span>
+              <span>{t('history.accountWinrate')}</span>
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
             </div>
             <p className="text-xl font-black text-white font-mono mt-1">{winrate}%</p>
@@ -375,14 +379,14 @@ export default function HistoryPage() {
           {/* Card 5: My Total Volume */}
           <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl col-span-2 sm:col-span-1">
             <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
-              <span>Traded Volume</span>
+              <span>{t('history.tradedVolume')}</span>
               <Scale className="w-3.5 h-3.5 text-slate-400" />
             </div>
             <p className="text-xl font-black text-white font-mono mt-1">
-              ${totalVolumeTraded.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              ${totalVolumeTraded.toLocaleString(dateLocale, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
             </p>
             <span className="text-[11px] text-slate-500 font-mono">
-              7x effective leverage
+              {t('history.leverage7x')}
             </span>
           </div>
         </div>
@@ -391,63 +395,65 @@ export default function HistoryPage() {
           {/* Card 1: Bot Starting Base */}
           <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
             <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
-              <span>Bot Starting Base</span>
+              <span>{t('history.botStartingBase')}</span>
               <Wallet className="w-3.5 h-3.5 text-honey-400" />
             </div>
             <p className="text-xl font-black text-white font-mono mt-1">
-              ${BOT_STARTING_BALANCE.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              ${BOT_STARTING_BALANCE.toLocaleString(dateLocale, { minimumFractionDigits: 2 })}
             </p>
             <span className="text-[11px] text-slate-500 font-mono">
-              4 slots × $12,500 margin
+              {t('history.fourSlots')}
             </span>
           </div>
 
           {/* Card 2: Compounded Equity */}
           <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
             <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
-              <span>Compounded Equity</span>
+              <span>{t('history.compoundedEquity')}</span>
               <Scale className="w-3.5 h-3.5 text-honey-400" />
             </div>
             <p className="text-xl font-black text-honey-400 font-mono mt-1">
-              ${(BOT_STARTING_BALANCE + totalRealizedPnl).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              ${(BOT_STARTING_BALANCE + totalRealizedPnl).toLocaleString(dateLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
             <span className="text-[11px] text-slate-500 font-mono">
-              $50k base + 100% reinvestment
+              {t('history.reinvestment')}
             </span>
           </div>
 
           {/* Card 3: Max Drawdown over all time */}
           <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
             <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
-              <span>Max Drawdown (DD)</span>
+              <span>{t('history.maxDd')}</span>
               <TrendingDown className="w-3.5 h-3.5 text-amber-400" />
             </div>
             <p className="text-xl font-black text-amber-400 font-mono mt-1">
               {maxDrawdownPct.toFixed(2)}%
             </p>
             <span className="text-[11px] text-slate-500 font-mono">
-              -${maxDrawdownUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} peak drop
+              {t('history.peakDrop', {
+                amount: maxDrawdownUsd.toLocaleString(dateLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+              })}
             </span>
           </div>
 
           {/* Card 4: Total Realized Profit */}
           <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
             <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
-              <span>Total Realized Profit</span>
+              <span>{t('history.totalProfit')}</span>
               <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
             </div>
             <p className="text-xl font-black text-emerald-400 font-mono mt-1">
-              +${totalRealizedPnl.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              +${totalRealizedPnl.toLocaleString(dateLocale, { minimumFractionDigits: 2 })}
             </p>
             <span className="text-[11px] text-emerald-400/80 font-mono font-semibold">
-              +{((totalRealizedPnl / BOT_STARTING_BALANCE) * 100).toFixed(1)}% ROI on $50k base
+              {t('history.roiOnBase', { pct: ((totalRealizedPnl / BOT_STARTING_BALANCE) * 100).toFixed(1) })}
             </span>
           </div>
 
           {/* Card 5: Strategy Winrate */}
           <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl col-span-2 sm:col-span-1">
             <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
-              <span>Strategy Winrate</span>
+              <span>{t('history.strategyWinrate')}</span>
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
             </div>
             <p className="text-xl font-black text-white font-mono mt-1">{winrate}%</p>
@@ -460,7 +466,7 @@ export default function HistoryPage() {
 
       {/* Pair Filter Pills */}
       <div className="flex flex-wrap items-center gap-2 pt-1 font-mono text-xs">
-        <span className="text-slate-500 text-[11px] uppercase mr-1">Filter Pair:</span>
+        <span className="text-slate-500 text-[11px] uppercase mr-1">{t('history.filterPair')}</span>
         {['ALL', 'ZEC/AVAX', 'ENA/SUI', 'SOL/ADA', 'BNB/ETH'].map((pair) => (
           <button
             key={pair}
@@ -479,7 +485,7 @@ export default function HistoryPage() {
       {/* Trade Log Table */}
       <div className="bg-dark-900 border border-dark-800 rounded-2xl shadow-xl overflow-hidden">
         {loading ? (
-          <div className="p-12 text-center text-slate-500 font-mono text-sm">Loading trade history...</div>
+          <div className="p-12 text-center text-slate-500 font-mono text-sm">{t('history.loading')}</div>
         ) : filteredPositions.length === 0 ? (
           <div className="p-12 text-center max-w-md mx-auto">
             {activeTab === 'user' ? (
@@ -487,9 +493,9 @@ export default function HistoryPage() {
                 <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-3">
                   <KeyRound className="w-6 h-6" />
                 </div>
-                <h3 className="text-base font-bold text-white">No Live Trades on Your Account Yet</h3>
+                <h3 className="text-base font-bold text-white">{t('history.noLiveTitle')}</h3>
                 <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
-                  The bot hasn't executed trades on your exchange account yet. Connect your exchange API keys in Settings and click "Start Trading" to begin mirroring every master strategy signal.
+                  {t('history.noLiveDesc')}
                 </p>
                 <div className="flex items-center justify-center gap-3 mt-5">
                   <Link
@@ -497,21 +503,21 @@ export default function HistoryPage() {
                     className="px-4 py-2 text-xs font-bold rounded-xl bg-honey-500 hover:bg-honey-400 text-dark-950 shadow-md shadow-honey-500/20 transition-all flex items-center gap-1.5"
                   >
                     <KeyRound className="w-3.5 h-3.5" />
-                    Connect Exchange Keys
+                    {t('history.connectKeys')}
                   </Link>
                   <button
                     onClick={() => setActiveTab('master')}
                     className="px-4 py-2 text-xs font-semibold rounded-xl bg-dark-800 hover:bg-dark-700 text-slate-300 hover:text-white transition-colors"
                   >
-                    View Master Benchmark
+                    {t('history.viewMaster')}
                   </button>
                 </div>
               </>
             ) : (
               <>
                 <History className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-                <h3 className="text-base font-semibold text-white">No trades found</h3>
-                <p className="text-xs text-slate-400 mt-1">No closed trades match the selected pair filter.</p>
+                <h3 className="text-base font-semibold text-white">{t('history.noTradesTitle')}</h3>
+                <p className="text-xs text-slate-400 mt-1">{t('history.noTradesDesc')}</p>
               </>
             )}
           </div>
@@ -520,13 +526,13 @@ export default function HistoryPage() {
             <table className="w-full text-left text-sm">
               <thead className="bg-dark-950/90 sticky top-0 z-10 text-[11px] uppercase tracking-wider text-slate-400 font-mono border-b border-dark-800 backdrop-blur-md">
                 <tr>
-                  <th className="px-5 py-3.5">Execution Source</th>
-                  <th className="px-5 py-3.5">Pair Symbol</th>
-                  <th className="px-5 py-3.5">Trade Amount / Volume</th>
-                  <th className="px-5 py-3.5">Exit Reason</th>
-                  <th className="px-5 py-3.5">Entry → Exit Ratio</th>
-                  <th className="px-5 py-3.5">Execution Dates</th>
-                  <th className="px-5 py-3.5 text-right">Realized PnL ($)</th>
+                  <th className="px-5 py-3.5">{t('history.colSource')}</th>
+                  <th className="px-5 py-3.5">{t('history.colPair')}</th>
+                  <th className="px-5 py-3.5">{t('history.colAmount')}</th>
+                  <th className="px-5 py-3.5">{t('history.colExit')}</th>
+                  <th className="px-5 py-3.5">{t('history.colRatio')}</th>
+                  <th className="px-5 py-3.5">{t('history.colDates')}</th>
+                  <th className="px-5 py-3.5 text-right">{t('history.colPnl')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-dark-800 font-mono text-xs">
@@ -557,20 +563,20 @@ export default function HistoryPage() {
                           <div>
                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] uppercase font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
                               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                              My Account ({exchangeName})
+                              {t('history.myAccountBadge', { exchange: exchangeName })}
                             </span>
                             <div className="text-[10px] text-emerald-400/80 mt-1 font-semibold">
-                              Live API Execution
+                              {t('history.liveApi')}
                             </div>
                           </div>
                         ) : (
                           <div>
                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] uppercase font-bold bg-honey-500/15 text-honey-400 border border-honey-500/30">
                               <Sparkles className="w-3.5 h-3.5 text-honey-400" />
-                              Master Strategy
+                              {t('history.masterBadge')}
                             </span>
                             <div className="text-[10px] text-slate-500 mt-1 font-mono">
-                              $50k Base Capital
+                              {t('history.baseCapital')}
                             </div>
                           </div>
                         )}
@@ -587,15 +593,15 @@ export default function HistoryPage() {
                       {/* Column 3: Prominent Trade Amount & Margin */}
                       <td className="px-5 py-4">
                         <div className="font-black text-white text-sm">
-                          ${volumeUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
+                          ${volumeUsd.toLocaleString(dateLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
                           <span className="text-[10px] font-normal text-honey-400">USDT</span>
                         </div>
                         <div className="text-[11px] text-slate-400 font-semibold mt-0.5">
-                          Margin: ${marginUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
+                          {t('dashboard.margin')} ${marginUsd.toLocaleString(dateLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
                           <span className="text-honey-400 font-bold">(7.0x)</span>
                         </div>
                         <div className="text-[10px] text-slate-500 mt-0.5">
-                          L: ${legVolume.toLocaleString('en-US', { maximumFractionDigits: 0 })} | S: ${legVolume.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                          L: ${legVolume.toLocaleString(dateLocale, { maximumFractionDigits: 0 })} | S: ${legVolume.toLocaleString(dateLocale, { maximumFractionDigits: 0 })}
                         </div>
                       </td>
 
@@ -611,10 +617,10 @@ export default function HistoryPage() {
                           }`}
                         >
                           {pos.exit_reason === 'tp'
-                            ? 'Take Profit (+5.0%)'
+                            ? t('history.takeProfit')
                             : pos.exit_reason === 'sl'
-                            ? 'Stop Loss (-1.5%)'
-                            : 'Trend Flip'}
+                            ? t('history.stopLoss')
+                            : t('history.trendFlip')}
                         </span>
                       </td>
 
@@ -634,10 +640,10 @@ export default function HistoryPage() {
 
                       {/* Column 6: Execution Dates */}
                       <td className="px-5 py-4 text-slate-400 text-[11px]">
-                        <div>In: {new Date(pos.opened_at).toLocaleDateString('en-US')}</div>
+                        <div>{t('history.in')} {new Date(pos.opened_at).toLocaleDateString(dateLocale)}</div>
                         {pos.closed_at && (
                           <div className="text-slate-500 text-[10px]">
-                            Out: {new Date(pos.closed_at).toLocaleDateString('en-US')}
+                            {t('history.out')} {new Date(pos.closed_at).toLocaleDateString(dateLocale)}
                           </div>
                         )}
                       </td>
@@ -650,8 +656,8 @@ export default function HistoryPage() {
                           }`}
                         >
                           {pnl >= 0
-                            ? `+$${pnl.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                            : `-$${Math.abs(pnl).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                            ? `+$${pnl.toLocaleString(dateLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                            : `-$${Math.abs(pnl).toLocaleString(dateLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                         </div>
                         <div
                           className={`text-[11px] font-bold ${
