@@ -1,11 +1,26 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { History, TrendingUp, Filter, Sparkles, CheckCircle2, ShieldAlert, Layers } from 'lucide-react';
+import Link from 'next/link';
+import {
+  History,
+  TrendingUp,
+  Filter,
+  Sparkles,
+  CheckCircle2,
+  ShieldAlert,
+  Layers,
+  KeyRound,
+  Play,
+  ArrowRight,
+  UserCheck,
+  Bot,
+  ExternalLink,
+} from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 
 export default function HistoryPage() {
-  const [activeTab, setActiveTab] = useState<'master' | 'user'>('master');
+  const [activeTab, setActiveTab] = useState<'all' | 'user' | 'master'>('all');
   const [selectedPair, setSelectedPair] = useState<string>('ALL');
   const [masterPositions, setMasterPositions] = useState<any[]>([]);
   const [userPositions, setUserPositions] = useState<any[]>([]);
@@ -21,7 +36,7 @@ export default function HistoryPage() {
       // 1. Fetch Master bot positions (6-month backtest + live master trades)
       const { data: masterData } = await supabase
         .from('bot_positions')
-        .select('*')
+        .select('*, exchange_accounts(exchange, account_name)')
         .eq('is_master', true)
         .eq('status', 'closed')
         .order('closed_at', { ascending: false });
@@ -32,7 +47,7 @@ export default function HistoryPage() {
       if (user) {
         const { data: userData } = await supabase
           .from('bot_positions')
-          .select('*')
+          .select('*, exchange_accounts(exchange, account_name)')
           .eq('user_id', user.id)
           .eq('status', 'closed')
           .order('closed_at', { ascending: false });
@@ -45,8 +60,15 @@ export default function HistoryPage() {
     loadHistory();
   }, []);
 
-  const currentList = activeTab === 'master' ? masterPositions : userPositions;
+  // Determine current active list based on tab
+  const currentList =
+    activeTab === 'all'
+      ? [...userPositions, ...masterPositions]
+      : activeTab === 'user'
+      ? userPositions
+      : masterPositions;
 
+  // Filter by pair
   const filteredPositions =
     selectedPair === 'ALL'
       ? currentList
@@ -75,16 +97,16 @@ export default function HistoryPage() {
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
             Trade History
             <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-honey-500/15 text-honey-400 border border-honey-500/30">
-              6-MONTH VERIFIED
+              AUDITED LOG
             </span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            Complete audited log of all autonomous basket cycles and executed exchange orders.
+            Complete track record distinguishing platform Master Strategy signals from trades executed on your personal exchange account.
           </p>
         </div>
 
         {/* Global PnL Pill */}
-        <div className="bg-dark-900 border border-dark-800 px-4 py-2.5 rounded-xl flex items-center gap-3 shadow-lg">
+        <div className="bg-dark-900 border border-dark-800 px-4 py-2.5 rounded-xl flex items-center gap-3 shadow-lg shrink-0">
           <span className="text-xs text-slate-400 font-mono">Realized PnL:</span>
           <span
             className={`font-mono font-black text-base ${
@@ -98,37 +120,130 @@ export default function HistoryPage() {
         </div>
       </div>
 
-      {/* Primary Tabs: Master History vs User Account */}
-      <div className="flex border-b border-dark-800 gap-4 font-mono text-xs font-bold uppercase">
+      {/* Dual Context Explainer Cards: Master Strategy vs My Account */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Card 1: Master Bot Strategy Signals */}
+        <div
+          onClick={() => setActiveTab('master')}
+          className={`cursor-pointer p-4 sm:p-5 rounded-2xl border transition-all ${
+            activeTab === 'master'
+              ? 'bg-honey-500/10 border-honey-500/40 shadow-lg shadow-honey-500/10 ring-1 ring-honey-500/30'
+              : 'bg-dark-900 border-dark-800 hover:border-dark-700'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-honey-500/15 border border-honey-500/30 text-honey-400 flex items-center justify-center font-bold">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  Master Bot Strategy
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-honey-500/20 text-honey-400 font-bold">
+                    BENCHMARK
+                  </span>
+                </h3>
+                <span className="text-[11px] font-mono text-slate-400">
+                  {masterPositions.length} historical & live reference trades
+                </span>
+              </div>
+            </div>
+            <span
+              className={`text-xs font-mono font-bold px-2.5 py-1 rounded-lg ${
+                activeTab === 'master' ? 'bg-honey-500 text-dark-950' : 'text-slate-400 bg-dark-950'
+              }`}
+            >
+              {activeTab === 'master' ? 'Active View' : 'Select'}
+            </span>
+          </div>
+          <p className="mt-3 text-xs text-slate-300 leading-relaxed">
+            Autonomous multi-pair market-neutral signals calculated and monitored 24/7 by the core trading daemon. Demonstrates verified 6-month historical win rate and pure algorithmic performance.
+          </p>
+        </div>
+
+        {/* Card 2: My Personal Exchange Account */}
+        <div
+          onClick={() => setActiveTab('user')}
+          className={`cursor-pointer p-4 sm:p-5 rounded-2xl border transition-all ${
+            activeTab === 'user'
+              ? 'bg-emerald-500/10 border-emerald-500/40 shadow-lg shadow-emerald-500/10 ring-1 ring-emerald-500/30'
+              : 'bg-dark-900 border-dark-800 hover:border-dark-700'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center font-bold">
+                <UserCheck className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  My Exchange Account
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold">
+                    LIVE ACCOUNT
+                  </span>
+                </h3>
+                <span className="text-[11px] font-mono text-slate-400">
+                  {userPositions.length} executed exchange orders
+                </span>
+              </div>
+            </div>
+            <span
+              className={`text-xs font-mono font-bold px-2.5 py-1 rounded-lg ${
+                activeTab === 'user' ? 'bg-emerald-500 text-dark-950' : 'text-slate-400 bg-dark-950'
+              }`}
+            >
+              {activeTab === 'user' ? 'Active View' : 'Select'}
+            </span>
+          </div>
+          <p className="mt-3 text-xs text-slate-300 leading-relaxed">
+            Actual positions executed on your connected exchange account (Binance, OKX, or Bybit) via encrypted API keys. Mirrors master signals directly using your allocated margin and leverage.
+          </p>
+        </div>
+      </div>
+
+      {/* Primary Navigation Tabs */}
+      <div className="flex border-b border-dark-800 gap-3 font-mono text-xs font-bold uppercase overflow-x-auto">
+        <button
+          onClick={() => setActiveTab('all')}
+          className={`pb-3 px-3 border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'all'
+              ? 'border-honey-500 text-honey-400 font-black'
+              : 'border-transparent text-slate-400 hover:text-white'
+          }`}
+        >
+          <Layers className="w-4 h-4" />
+          All Trades Combined ({userPositions.length + masterPositions.length})
+        </button>
+
+        <button
+          onClick={() => setActiveTab('user')}
+          className={`pb-3 px-3 border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'user'
+              ? 'border-emerald-500 text-emerald-400 font-black'
+              : 'border-transparent text-slate-400 hover:text-white'
+          }`}
+        >
+          <UserCheck className="w-4 h-4 text-emerald-400" />
+          My Account Trades ({userPositions.length})
+        </button>
+
         <button
           onClick={() => setActiveTab('master')}
-          className={`pb-3 px-2 border-b-2 transition-all flex items-center gap-2 ${
+          className={`pb-3 px-3 border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
             activeTab === 'master'
               ? 'border-honey-500 text-honey-400 font-black'
               : 'border-transparent text-slate-400 hover:text-white'
           }`}
         >
           <Sparkles className="w-4 h-4 text-honey-400" />
-          Master Bot Strategy ({masterPositions.length} Trades)
-        </button>
-
-        <button
-          onClick={() => setActiveTab('user')}
-          className={`pb-3 px-2 border-b-2 transition-all flex items-center gap-2 ${
-            activeTab === 'user'
-              ? 'border-honey-500 text-honey-400 font-black'
-              : 'border-transparent text-slate-400 hover:text-white'
-          }`}
-        >
-          <History className="w-4 h-4 text-slate-400" />
-          My Exchange Account ({userPositions.length} Trades)
+          Master Strategy Benchmark ({masterPositions.length})
         </button>
       </div>
 
       {/* Performance Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
-          <span className="text-xs text-slate-400 font-mono">Total Trades</span>
+          <span className="text-xs text-slate-400 font-mono">Filtered Trades</span>
           <p className="text-xl font-black text-white font-mono mt-1">{filteredPositions.length}</p>
           <span className="text-[11px] text-slate-500 font-mono">
             {tpCount} TP • {slCount} SL • {flipCount} Flip
@@ -136,21 +251,23 @@ export default function HistoryPage() {
         </div>
 
         <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
-          <span className="text-xs text-slate-400 font-mono">Strategy Winrate</span>
+          <span className="text-xs text-slate-400 font-mono">Winrate</span>
           <p className="text-xl font-black text-emerald-400 font-mono mt-1">{winrate}%</p>
           <span className="text-[11px] text-slate-500 font-mono">{winningTrades.length} winning cycles</span>
         </div>
 
         <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
-          <span className="text-xs text-slate-400 font-mono">Target Risk Rule</span>
-          <p className="text-xl font-black text-white font-mono mt-1">7.0x</p>
-          <span className="text-[11px] text-honey-400 font-mono">TP +5.0% / SL -1.5%</span>
+          <span className="text-xs text-slate-400 font-mono">Execution Model</span>
+          <p className="text-xl font-black text-white font-mono mt-1">
+            {activeTab === 'user' ? 'Live API' : activeTab === 'master' ? 'Daemon Ref' : 'Unified'}
+          </p>
+          <span className="text-[11px] text-honey-400 font-mono">7.0x Leverage</span>
         </div>
 
         <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
-          <span className="text-xs text-slate-400 font-mono">Average Slot Allocation</span>
-          <p className="text-xl font-black text-white font-mono mt-1">$1,000</p>
-          <span className="text-[11px] text-slate-500 font-mono">$7,000 Total Volume</span>
+          <span className="text-xs text-slate-400 font-mono">Target Take-Profit</span>
+          <p className="text-xl font-black text-emerald-400 font-mono mt-1">+5.0%</p>
+          <span className="text-[11px] text-rose-400 font-mono">Stop-Loss -1.5%</span>
         </div>
       </div>
 
@@ -177,33 +294,96 @@ export default function HistoryPage() {
         {loading ? (
           <div className="p-12 text-center text-slate-500 font-mono text-sm">Loading trade history...</div>
         ) : filteredPositions.length === 0 ? (
-          <div className="p-12 text-center">
-            <History className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-            <h3 className="text-base font-semibold text-white">No closed trades found</h3>
-            <p className="text-xs text-slate-400 mt-1">
-              {activeTab === 'user'
-                ? 'Your bot has not closed any live exchange trades yet. Switch to "Master Bot Strategy" tab to view 6 months of audited strategy performance.'
-                : 'No trades match the selected filter.'}
-            </p>
+          <div className="p-12 text-center max-w-md mx-auto">
+            {activeTab === 'user' ? (
+              <>
+                <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-3">
+                  <KeyRound className="w-6 h-6" />
+                </div>
+                <h3 className="text-base font-bold text-white">No Live Trades on Your Account Yet</h3>
+                <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+                  The bot hasn't executed trades on your exchange account yet. Connect your exchange API keys in Settings and click "Start Trading" to begin mirroring every master strategy signal.
+                </p>
+                <div className="flex items-center justify-center gap-3 mt-5">
+                  <Link
+                    href="/settings/exchange"
+                    className="px-4 py-2 text-xs font-bold rounded-xl bg-honey-500 hover:bg-honey-400 text-dark-950 shadow-md shadow-honey-500/20 transition-all flex items-center gap-1.5"
+                  >
+                    <KeyRound className="w-3.5 h-3.5" />
+                    Connect Exchange Keys
+                  </Link>
+                  <button
+                    onClick={() => setActiveTab('master')}
+                    className="px-4 py-2 text-xs font-semibold rounded-xl bg-dark-800 hover:bg-dark-700 text-slate-300 hover:text-white transition-colors"
+                  >
+                    View Master Benchmark
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <History className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+                <h3 className="text-base font-semibold text-white">No trades found</h3>
+                <p className="text-xs text-slate-400 mt-1">No closed trades match the selected pair filter.</p>
+              </>
+            )}
           </div>
         ) : (
-          <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+          <div className="overflow-x-auto max-h-[650px] overflow-y-auto">
             <table className="w-full text-left text-sm">
-              <thead className="bg-dark-950/80 sticky top-0 z-10 text-[11px] uppercase tracking-wider text-slate-400 font-mono border-b border-dark-800 backdrop-blur-md">
+              <thead className="bg-dark-950/85 sticky top-0 z-10 text-[11px] uppercase tracking-wider text-slate-400 font-mono border-b border-dark-800 backdrop-blur-md">
                 <tr>
-                  <th className="px-5 py-3">Pair Symbol</th>
-                  <th className="px-5 py-3">Exit Reason</th>
-                  <th className="px-5 py-3">Entry → Exit Ratio</th>
-                  <th className="px-5 py-3">Execution Dates</th>
-                  <th className="px-5 py-3 text-right">Realized PnL ($)</th>
+                  <th className="px-5 py-3.5">Execution Source</th>
+                  <th className="px-5 py-3.5">Pair Symbol</th>
+                  <th className="px-5 py-3.5">Exit Reason</th>
+                  <th className="px-5 py-3.5">Entry → Exit Ratio</th>
+                  <th className="px-5 py-3.5">Margin & Volume</th>
+                  <th className="px-5 py-3.5">Execution Dates</th>
+                  <th className="px-5 py-3.5 text-right">Realized PnL</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-dark-800 font-mono text-xs">
                 {filteredPositions.map((pos) => {
                   const pnl = Number(pos.realized_pnl_usd) || 0;
                   const pnlPct = Number(pos.pnl_pct) || 0;
+                  const isUserTrade = !pos.is_master && Boolean(pos.user_id);
+                  const exchangeName =
+                    pos.exchange_accounts?.exchange?.toUpperCase() ||
+                    (isUserTrade ? 'EXCHANGE' : 'MASTER');
+
                   return (
-                    <tr key={pos.id} className="hover:bg-dark-850/50 transition-colors">
+                    <tr
+                      key={pos.id}
+                      className={`transition-colors ${
+                        isUserTrade
+                          ? 'bg-emerald-500/[0.03] hover:bg-emerald-500/[0.08]'
+                          : 'hover:bg-dark-850/50'
+                      }`}
+                    >
+                      {/* Column 1: Explicit Execution Source */}
+                      <td className="px-5 py-4">
+                        {isUserTrade ? (
+                          <div>
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] uppercase font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                              My Account ({exchangeName})
+                            </span>
+                            <div className="text-[10px] text-emerald-400/80 mt-1 font-semibold">
+                              Live API Execution
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] uppercase font-bold bg-honey-500/15 text-honey-400 border border-honey-500/30">
+                              <Sparkles className="w-3.5 h-3.5 text-honey-400" />
+                              Master Strategy
+                            </span>
+                            <div className="text-[10px] text-slate-500 mt-1">Algorithm Signal</div>
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Column 2: Pair Symbol */}
                       <td className="px-5 py-4">
                         <div className="font-bold text-white text-sm">{pos.pair_symbol}</div>
                         <div className="text-[10px] text-slate-500">
@@ -211,6 +391,7 @@ export default function HistoryPage() {
                         </div>
                       </td>
 
+                      {/* Column 3: Exit Reason */}
                       <td className="px-5 py-4">
                         <span
                           className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold ${
@@ -229,6 +410,7 @@ export default function HistoryPage() {
                         </span>
                       </td>
 
+                      {/* Column 4: Ratio Spread */}
                       <td className="px-5 py-4 text-slate-300">
                         <div>
                           <span className="text-slate-400">{Number(pos.entry_ratio).toFixed(4)}</span>
@@ -242,6 +424,15 @@ export default function HistoryPage() {
                         </div>
                       </td>
 
+                      {/* Column 5: Margin & Volume */}
+                      <td className="px-5 py-4 text-slate-300">
+                        <div>${Number(pos.allocated_margin_usd || 1000).toFixed(0)} Margin</div>
+                        <div className="text-[10px] text-slate-500">
+                          Vol: ${Number(pos.total_position_volume_usd || 7000).toFixed(0)} (7x)
+                        </div>
+                      </td>
+
+                      {/* Column 6: Execution Dates */}
                       <td className="px-5 py-4 text-slate-400 text-[11px]">
                         <div>In: {new Date(pos.opened_at).toLocaleDateString('en-US')}</div>
                         {pos.closed_at && (
@@ -251,6 +442,7 @@ export default function HistoryPage() {
                         )}
                       </td>
 
+                      {/* Column 7: Realized PnL */}
                       <td className="px-5 py-4 text-right">
                         <div
                           className={`font-bold text-sm ${
