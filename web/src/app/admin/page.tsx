@@ -76,7 +76,7 @@ export default function AdminDashboardPage() {
     // Load all invoices
     const { data: allInvoices } = await supabase
       .from('invoices')
-      .select('*, users_profile(email, full_name)')
+      .select('*, users_profile:users_profile!invoices_user_id_fkey(email, full_name)')
       .order('created_at', { ascending: false });
 
     if (allInvoices) setInvoices(allInvoices);
@@ -84,7 +84,7 @@ export default function AdminDashboardPage() {
     // Load all open and recently closed positions across all users
     const { data: allPositions } = await supabase
       .from('bot_positions')
-      .select('*, users_profile(email)')
+      .select('*, users_profile:users_profile!user_id(email)')
       .order('opened_at', { ascending: false })
       .limit(50);
 
@@ -138,6 +138,8 @@ export default function AdminDashboardPage() {
     setIsConfirmModalOpen(false);
 
     try {
+      const { data: { user: adminUser } } = await supabase.auth.getUser();
+
       if (actionType === 'approve') {
         // 1. Mark invoice paid
         await supabase
@@ -145,6 +147,7 @@ export default function AdminDashboardPage() {
           .update({
             status: 'paid',
             paid_at: new Date().toISOString(),
+            approved_by_admin_id: adminUser?.id || null,
           })
           .eq('id', selectedInvoice.id);
 
@@ -391,6 +394,7 @@ export default function AdminDashboardPage() {
                     <th className="px-5 py-3">Connected Exchange</th>
                     <th className="px-5 py-3">Bot Status</th>
                     <th className="px-5 py-3 text-right">High-Water Mark</th>
+                    <th className="px-5 py-3 text-center">User Control</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-dark-800 font-mono text-xs">
@@ -456,6 +460,27 @@ export default function AdminDashboardPage() {
                         </td>
                         <td className="px-5 py-4 text-right text-slate-200 font-bold">
                           ${Number(u.high_water_mark_equity || 0).toFixed(2)}
+                        </td>
+                        <td className="px-5 py-4 text-center">
+                          {u.role !== 'admin' && (
+                            <button
+                              onClick={async () => {
+                                const nextFrozen = !u.is_frozen;
+                                await supabase
+                                  .from('users_profile')
+                                  .update({ is_frozen: nextFrozen })
+                                  .eq('id', u.id);
+                                checkAdminAndLoadData();
+                              }}
+                              className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all ${
+                                u.is_frozen
+                                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30'
+                                  : 'bg-rose-500/15 text-rose-400 border border-rose-500/30 hover:bg-rose-500/25'
+                              }`}
+                            >
+                              {u.is_frozen ? 'Unfreeze' : 'Freeze'}
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );

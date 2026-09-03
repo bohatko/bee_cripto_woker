@@ -33,23 +33,29 @@ export class HealthCheckJob {
         details = { error: err.message };
       }
 
-      await supabase.from('system_health_logs').insert({
-        component: target.name,
-        status,
-        latency_ms: latency,
-        details,
-        pinged_at: new Date().toISOString(),
-      });
+      await supabase.from('system_health_logs').upsert(
+        {
+          component: target.name,
+          status,
+          latency_ms: latency,
+          details,
+          pinged_at: new Date().toISOString(),
+        },
+        { onConflict: 'component' }
+      );
     }
 
     // Ping worker engine itself
-    await supabase.from('system_health_logs').insert({
-      component: 'engine_daemon',
-      status: 'healthy',
-      latency_ms: 1,
-      details: { uptime_sec: Math.floor(process.uptime()) },
-      pinged_at: new Date().toISOString(),
-    });
+    await supabase.from('system_health_logs').upsert(
+      {
+        component: 'engine_daemon',
+        status: 'healthy',
+        latency_ms: 1,
+        details: { uptime_sec: Math.floor(process.uptime()) },
+        pinged_at: new Date().toISOString(),
+      },
+      { onConflict: 'component' }
+    );
   }
 
   public start() {

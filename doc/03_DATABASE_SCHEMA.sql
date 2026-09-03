@@ -182,7 +182,7 @@ CREATE TABLE IF NOT EXISTS public.invoices (
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.system_health_logs (
     id BIGSERIAL PRIMARY KEY,
-    component TEXT NOT NULL, -- 'binance_ws', 'okx_ws', 'bybit_ws', 'engine_daemon'
+    component TEXT NOT NULL UNIQUE, -- 'binance_ws', 'okx_ws', 'bybit_ws', 'engine_daemon'
     status component_health_status NOT NULL,
     latency_ms INTEGER,
     details JSONB,

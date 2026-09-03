@@ -15,6 +15,9 @@ import {
   Clock,
   KeyRound,
   AlertCircle,
+  RefreshCw,
+  Building2,
+  ExternalLink,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
@@ -23,9 +26,10 @@ import { PanicCloseModal } from '@/components/modals/PanicCloseModal';
 export default function DashboardPage() {
   const [positions, setPositions] = useState<any[]>([]);
   const [settings, setSettings] = useState<any>(null);
-  const [account, setAccount] = useState<any>(null);
-  const [healthLogs, setHealthLogs] = useState<any[]>([]);
+  const [accounts, setAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
 
   // Modals state
   const [isToggleModalOpen, setIsToggleModalOpen] = useState(false);
@@ -33,7 +37,9 @@ export default function DashboardPage() {
   const [isMissingExchangeModalOpen, setIsMissingExchangeModalOpen] = useState(false);
 
   async function loadDashboardData() {
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return;
 
     // 1. Fetch user trading settings
@@ -45,18 +51,21 @@ export default function DashboardPage() {
 
     if (sett) setSettings(sett);
 
-    // 2. Fetch connected exchange account
-    const { data: acc } = await supabase
+    // 2. Fetch all active connected exchange accounts
+    const { data: accs } = await supabase
       .from('exchange_accounts')
       .select('*')
       .eq('user_id', user.id)
       .eq('is_active', true)
-      .maybeSingle();
+      .order('created_at', { ascending: true });
 
-    setAccount(acc || null);
+    const currentAccounts = accs || [];
+    setAccounts(currentAccounts);
 
-    // Auto-disable bot if exchange keys were removed/missing
-    if ((!acc || !acc.is_validated) && sett?.is_bot_active) {
+    const hasValidated = currentAccounts.some((a) => a.is_validated);
+
+    // Auto-disable bot if all exchange keys were removed/missing
+    if (!hasValidated && sett?.is_bot_active) {
       await supabase
         .from('trading_settings')
         .update({ is_bot_active: false })
@@ -73,22 +82,42 @@ export default function DashboardPage() {
 
     if (pos) setPositions(pos);
 
-    // 4. Fetch latest system health logs
-    const { data: health } = await supabase
-      .from('system_health_logs')
-      .select('*')
-      .order('pinged_at', { ascending: false })
-      .limit(4);
-
-    if (health) setHealthLogs(health);
-
     setLoading(false);
+  }
+
+  async function handleSyncBalances() {
+    setSyncing(true);
+    setSyncMsg(null);
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const res = await fetch('/api/exchange/sync-balances', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      const data = await res.json();
+      if (data.success && Array.isArray(data.accounts)) {
+        setAccounts(data.accounts);
+        setSyncMsg('Balances updated directly from exchange APIs!');
+        setTimeout(() => setSyncMsg(null), 4000);
+      }
+    } catch (err: any) {
+      console.error('Failed to sync live balances:', err);
+    } finally {
+      setSyncing(false);
+    }
   }
 
   useEffect(() => {
     loadDashboardData();
 
-    // Subscribe to realtime updates for positions and health
+    // Subscribe to realtime updates for positions, exchange accounts, and settings
     const posChannel = supabase
       .channel('dashboard_realtime')
       .on(
@@ -98,7 +127,7 @@ export default function DashboardPage() {
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'system_health_logs' },
+        { event: '*', schema: 'public', table: 'exchange_accounts' },
         () => loadDashboardData()
       )
       .on(
@@ -118,11 +147,20 @@ export default function DashboardPage() {
     0
   );
 
+  const hasValidatedAccount = accounts.some((a) => a.is_validated);
+
+  const totalAggregatedEquity = accounts.reduce(
+    (sum, a) => sum + (Number(a.last_balance_usd) || 0),
+    0
+  );
+
+  const totalAvailableMargin = totalAggregatedEquity * 0.75;
+
   const handleToggleBot = async () => {
     if (!settings) return;
 
-    // Check if exchange account is linked and validated
-    if (!account || !account.is_validated) {
+    // Check if at least one exchange account is linked and validated
+    if (!hasValidatedAccount) {
       setIsToggleModalOpen(false);
       setIsMissingExchangeModalOpen(true);
       return;
@@ -171,9 +209,21 @@ export default function DashboardPage() {
 
         {/* Action Controls */}
         <div className="flex items-center gap-3">
+          {accounts.length > 0 && (
+            <button
+              onClick={handleSyncBalances}
+              disabled={syncing}
+              className="px-3 py-2.5 rounded-xl font-bold text-xs bg-dark-900 border border-dark-700 hover:border-honey-500/50 text-slate-300 hover:text-white flex items-center gap-2 transition-all shadow-md disabled:opacity-50"
+              title="Query exchange APIs for latest wallet balances"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-honey-400 ${syncing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">{syncing ? 'Syncing...' : 'Sync Balances'}</span>
+            </button>
+          )}
+
           <button
             onClick={() => {
-              if (!settings?.is_bot_active && (!account || !account.is_validated)) {
+              if (!settings?.is_bot_active && !hasValidatedAccount) {
                 setIsMissingExchangeModalOpen(true);
               } else {
                 setIsToggleModalOpen(true);
@@ -207,8 +257,15 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {syncMsg && (
+        <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-mono flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <span>{syncMsg}</span>
+        </div>
+      )}
+
       {/* Warning banner if exchange is not linked */}
-      {(!account || !account.is_validated) && (
+      {!hasValidatedAccount && (
         <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-start sm:items-center gap-3">
             <div className="p-2 rounded-xl bg-amber-500/15 text-honey-400 shrink-0">
@@ -247,21 +304,21 @@ export default function DashboardPage() {
           <div className="flex items-center gap-2.5">
             <span
               className={`w-2.5 h-2.5 rounded-full ${
-                account?.is_validated ? 'bg-emerald-400' : 'bg-amber-400'
+                hasValidatedAccount ? 'bg-emerald-400' : 'bg-amber-400'
               }`}
             />
             <span className="text-xs font-medium text-slate-300">
-              Exchange ({account?.exchange?.toUpperCase() || 'NOT LINKED'})
+              Exchanges ({accounts.length > 0 ? accounts.map((a) => a.exchange.toUpperCase()).join(', ') : 'NONE'})
             </span>
           </div>
           <span
             className={`text-[11px] font-mono px-2 py-0.5 rounded border ${
-              account?.is_validated
+              hasValidatedAccount
                 ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
                 : 'text-amber-400 bg-amber-500/10 border-amber-500/20'
             }`}
           >
-            {account?.is_validated ? 'CONNECTED' : 'WAITING KEYS'}
+            {hasValidatedAccount ? `${accounts.length} CONNECTED` : 'WAITING KEYS'}
           </span>
         </div>
 
@@ -288,25 +345,48 @@ export default function DashboardPage() {
 
       {/* Key Financial Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-dark-900 border border-dark-800 p-5 rounded-2xl shadow-xl">
+        {/* Total Account Equity Card */}
+        <div className="bg-dark-900 border border-dark-800 p-5 rounded-2xl shadow-xl relative">
           <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
             <span>Total Account Equity</span>
-            <Wallet className="w-4 h-4 text-honey-400" />
+            <div className="flex items-center gap-2">
+              {accounts.length > 0 && (
+                <button
+                  onClick={handleSyncBalances}
+                  disabled={syncing}
+                  className="text-slate-500 hover:text-honey-400 transition-colors p-1"
+                  title="Refresh live exchange balances"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin text-honey-400' : ''}`} />
+                </button>
+              )}
+              <Wallet className="w-4 h-4 text-honey-400" />
+            </div>
           </div>
           <p className="text-2xl font-black text-white font-mono mt-2">
-            ${(Number(account?.last_balance_usd) || 0.0).toLocaleString('en-US', {
+            ${totalAggregatedEquity.toLocaleString('en-US', {
               minimumFractionDigits: 2,
             })}{' '}
             <span className="text-xs text-slate-500 font-normal">USDT</span>
           </p>
-          <div className="mt-2 text-[11px] text-slate-400 font-mono">
-            Available Margin:{' '}
-            <span className="text-slate-200 font-semibold">
-              ${((Number(account?.last_balance_usd) || 0.0) * 0.75).toFixed(2)}
+          <div className="mt-2 text-[11px] text-slate-400 font-mono flex items-center justify-between">
+            <span>
+              Available Margin:{' '}
+              <span className="text-slate-200 font-semibold">
+                ${totalAvailableMargin.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </span>
             </span>
+            {accounts.length > 0 ? (
+              <span className="text-[10px] text-emerald-400">{accounts.length} exchange(s)</span>
+            ) : (
+              <Link href="/settings/exchange" className="text-[10px] text-honey-400 hover:underline">
+                + Connect
+              </Link>
+            )}
           </div>
         </div>
 
+        {/* Basket Floating PnL Card */}
         <div className="bg-dark-900 border border-dark-800 p-5 rounded-2xl shadow-xl">
           <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
             <span>Basket Floating PnL</span>
@@ -328,12 +408,13 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* Target Risk Rules */}
         <div className="bg-dark-900 border border-dark-800 p-5 rounded-2xl shadow-xl">
           <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
-            <span>Risk Constraints</span>
+            <span>Active Risk Guards</span>
             <ShieldCheck className="w-4 h-4 text-honey-400" />
           </div>
-          <div className="mt-2 flex items-baseline gap-3 font-mono">
+          <div className="mt-3 flex items-center gap-4 font-mono">
             <div>
               <span className="text-xs text-slate-400">TP: </span>
               <span className="text-base font-bold text-emerald-400">+5.0%</span>
@@ -352,6 +433,66 @@ export default function DashboardPage() {
           </p>
         </div>
       </div>
+
+      {/* Individual Exchange Balances Breakdown */}
+      {accounts.length > 0 && (
+        <div className="bg-dark-900 border border-dark-800 rounded-2xl p-5 shadow-xl">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-honey-400" />
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                Connected Exchanges Balance Breakdown ({accounts.length})
+              </h3>
+            </div>
+            <Link
+              href="/settings/exchange"
+              className="text-xs font-mono text-honey-400 hover:text-honey-300 flex items-center gap-1 transition-colors"
+            >
+              Manage Exchanges
+              <ExternalLink className="w-3 h-3" />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {accounts.map((acc) => (
+              <div
+                key={acc.id}
+                className="bg-dark-950 border border-dark-800 p-4 rounded-xl flex items-center justify-between"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="text-xs font-black uppercase text-white tracking-wider">
+                      {acc.exchange}
+                    </span>
+                  </div>
+                  <p className="text-lg font-black font-mono text-white mt-1">
+                    ${Number(acc.last_balance_usd || 0).toLocaleString('en-US', {
+                      minimumFractionDigits: 2,
+                    })}{' '}
+                    <span className="text-[10px] text-slate-500 font-normal">USDT</span>
+                  </p>
+                  <p className="text-[10px] text-slate-500 font-mono mt-0.5">
+                    Synced:{' '}
+                    {acc.last_sync_at ? new Date(acc.last_sync_at).toLocaleTimeString() : 'Never'}
+                  </p>
+                </div>
+
+                <div className="text-right flex flex-col items-end">
+                  <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                    FUTURES
+                  </span>
+                  {acc.last_error_msg && (
+                    <span className="text-[9px] text-rose-400 font-mono mt-1" title={acc.last_error_msg}>
+                      ⚠️ Sync issue
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Active Basket Positions Table */}
       <div className="bg-dark-900 border border-dark-800 rounded-2xl shadow-2xl overflow-hidden">
@@ -449,70 +590,40 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* Start/Pause Bot Confirmation Modal */}
+      {/* Confirmation & Panic Modals */}
       <ConfirmModal
         isOpen={isToggleModalOpen}
-        title={settings?.is_bot_active ? 'Pause Autonomous Trading?' : 'Activate Autonomous Trading?'}
+        onCancel={() => setIsToggleModalOpen(false)}
+        onConfirm={handleToggleBot}
+        title={settings?.is_bot_active ? 'Pause Autonomous Bot' : 'Start Autonomous Bot'}
         description={
           settings?.is_bot_active
-            ? 'The bot will stop opening new basket entries. Existing open positions will continue to be safely monitored until Take-Profit or Stop-Loss.'
-            : 'The engine will begin mirroring multi-pair basket orders on your connected exchange account with 7x leverage and 1.5% stop-loss.'
+            ? 'Pausing will stop the bot from opening new pairs. Currently open pairs will continue to be monitored by the Risk Guard until TP (+5%) or SL (-1.5%).'
+            : 'Starting the bot activates automated execution across your connected exchanges. Ensure your exchange accounts have sufficient USDT futures margin.'
         }
-        confirmText={settings?.is_bot_active ? 'Pause Bot' : 'Start Bot'}
-        onConfirm={handleToggleBot}
-        onCancel={() => setIsToggleModalOpen(false)}
+        confirmText={settings?.is_bot_active ? 'Pause Strategy' : 'Start Strategy'}
       />
 
-      {/* Emergency Panic Close Modal */}
       <PanicCloseModal
         isOpen={isPanicModalOpen}
-        unrealizedPnl={totalUnrealizedPnl}
-        openPositionsCount={positions.length}
-        onConfirm={handlePanicClose}
         onCancel={() => setIsPanicModalOpen(false)}
+        onConfirm={handlePanicClose}
+        openPositionsCount={positions.length}
+        unrealizedPnl={totalUnrealizedPnl}
       />
 
-      {/* Missing Exchange Warning Modal */}
-      {isMissingExchangeModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-          <div className="relative w-full max-w-md bg-dark-900 border border-amber-500/40 rounded-2xl p-6 shadow-2xl">
-            <div className="flex items-start gap-4 mb-4">
-              <div className="p-3 rounded-xl bg-amber-500/15 text-honey-400 border border-amber-500/30">
-                <AlertCircle className="w-7 h-7" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-white">Exchange Connection Required</h3>
-                <p className="text-sm text-slate-300 mt-1.5 leading-relaxed">
-                  You cannot start trading because no valid exchange API is connected. Please link at least one exchange (Binance, OKX, or Bybit) in settings first.
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-dark-950 border border-dark-800 rounded-xl p-3.5 my-4 text-xs font-mono text-slate-400 space-y-1">
-              <div>• Required: Futures trading permission</div>
-              <div>• Whitelist IP: <span className="text-honey-400">54.198.120.45</span></div>
-              <div className="text-rose-400 font-semibold">• Strictly disable withdrawal permissions</div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                onClick={() => setIsMissingExchangeModalOpen(false)}
-                className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-white bg-dark-800 hover:bg-dark-700 rounded-xl transition-colors"
-              >
-                Cancel
-              </button>
-              <Link
-                href="/settings/exchange"
-                onClick={() => setIsMissingExchangeModalOpen(false)}
-                className="px-4 py-2 text-xs font-bold rounded-xl bg-honey-500 hover:bg-honey-400 text-dark-950 flex items-center gap-1.5 transition-all shadow-md shadow-honey-500/20"
-              >
-                <KeyRound className="w-4 h-4" />
-                Connect Exchange API
-              </Link>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Modal: Missing Exchange Account */}
+      <ConfirmModal
+        isOpen={isMissingExchangeModalOpen}
+        onCancel={() => setIsMissingExchangeModalOpen(false)}
+        onConfirm={() => {
+          setIsMissingExchangeModalOpen(false);
+          window.location.href = '/settings/exchange';
+        }}
+        title="Exchange API Required"
+        description="You cannot start the trading bot without linking at least one validated exchange API (Binance, OKX, or Bybit). Please connect your exchange credentials first."
+        confirmText="Connect Exchange"
+      />
     </div>
   );
 }

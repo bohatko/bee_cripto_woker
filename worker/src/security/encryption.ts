@@ -32,15 +32,38 @@ export function encryptString(plainText: string): EncryptedPayload {
   };
 }
 
-export function decryptString(encryptedHex: string, ivHex: string, tagHex: string): string {
+export function decryptString(encryptedHex: string, ivHex?: string, tagHex?: string): string {
+  let actualEncrypted = encryptedHex;
+  let actualIv = ivHex || '';
+  let actualTag = tagHex || '';
+
+  // Self-contained package format "iv:tag:ciphertext"
+  if (encryptedHex && encryptedHex.includes(':')) {
+    const parts = encryptedHex.split(':');
+    if (parts.length === 3) {
+      actualIv = parts[0];
+      actualTag = parts[1];
+      actualEncrypted = parts[2];
+    }
+  }
+
+  if (!actualIv || !actualTag) {
+    throw new Error('Missing IV or Auth Tag for AES-256-GCM decryption');
+  }
+
   const decipher = crypto.createDecipheriv(
     ALGORITHM,
     getMasterKey(),
-    Buffer.from(ivHex, 'hex')
+    Buffer.from(actualIv, 'hex')
   );
-  decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
+  decipher.setAuthTag(Buffer.from(actualTag, 'hex'));
 
-  let decrypted = decipher.update(encryptedHex, 'hex', 'utf8');
+  let decrypted = decipher.update(actualEncrypted, 'hex', 'utf8');
   decrypted += decipher.final('utf8');
   return decrypted;
+}
+
+export function encryptPayload(plainText: string): string {
+  const payload = encryptString(plainText);
+  return `${payload.iv}:${payload.tag}:${payload.encrypted}`;
 }
