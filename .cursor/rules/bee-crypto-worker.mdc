@@ -1,0 +1,41 @@
+---
+description: Core architecture, strategy rules, and security guidelines for Bee Crypto Worker
+alwaysApply: true
+---
+
+# Bee Crypto Worker Project Rules
+
+## Documentation Map
+Always consult the documentation in `doc/` before modifying architectural, database, or algorithmic components:
+- `doc/01_TECHNICAL_SPECIFICATION.md` — SaaS monetization, business model, architecture.
+- `doc/02_STRATEGY_AND_BACKTESTS.md` — Market-neutral alpha math, 4 pairs basket, backtests.
+- `doc/03_DATABASE_SCHEMA.sql` — Supabase PostgreSQL schema, RLS, Realtime.
+- `doc/04_WORKER_ENGINE_SPECIFICATION.md` — Railway daemon, CCXT integration, encryption.
+- `doc/05_FRONTEND_AND_UI_SPECIFICATION.md` — UI/UX Next.js specifications.
+- `doc/06_IMPLEMENTATION_ROADMAP_AND_AGENTS_GUIDE.md` — Implementation roadmap.
+- `AGENTS.md` — Full AI Agent Handbook.
+
+## Language and UI Rules
+- Always reply to the user in **Russian** (Русский).
+- All code interface text, labels, buttons, console logs, and errors must be in **English only**.
+
+## Strategy & Risk Constraints
+- Basket consists of 4 pairs: `ZEC/AVAX`, `ENA/SUI`, `SOL/ADA`, `BNB/ETH`.
+- Entry condition: `Ratio > EMA10` on 4h timeframe.
+- Margin split: 25% of available free margin per pair.
+- Leverage: 7.0x.
+- Take Profit: +5.0% on net pair.
+- Stop Loss: -1.5% on net pair.
+- Trend Flip: immediate market exit if ratio drops below EMA10.
+
+## Security Rules
+- API keys MUST be encrypted with AES-256-GCM before database storage (`worker/src/security/encryption.ts`).
+- NEVER store unencrypted keys or keys with withdrawal permissions enabled.
+- All critical actions (bot toggle, delete keys, logout) require confirmation modals (`ConfirmModal.tsx`).
+- Emergency liquidation requires typing `CLOSE` in `PanicCloseModal.tsx`.
+- Overdue invoice policy: **Variant A (Safe Freeze)** — block new trades, continue managing open positions until TP/SL.
+
+## Database & Tech Stack
+- Supabase Project ID: `uxsbjkymrqrmlcshizns` (PostgreSQL with RLS on all tables).
+- Next.js 15 (App Router) in `web/`.
+- Railway Worker Daemon in `worker/` (Static Egress IP `54.198.120.45`).
