@@ -87,10 +87,11 @@ function simulatePairHistory(
     if (!inPos) {
       // Entry: Ratio crosses above EMA 10 or current ratio > EMA 10
       if (curr.ratio > curr.ema && prev.ratio <= prev.ema) {
-        const margin = 1000;
+        // Starting balance: $50,000 -> 4 slots = $12,500 margin per slot, 7x leverage = $87,500 position volume
+        const margin = 12500;
         const lev = 7.0;
-        const vol = margin * lev;
-        const legVol = vol / 2;
+        const vol = margin * lev; // 87,500 USDT
+        const legVol = vol / 2; // 43,750 USDT per leg
 
         inPos = {
           is_master: true,

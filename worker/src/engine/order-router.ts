@@ -82,10 +82,11 @@ export class OrderRouter {
       return; // Master position already open
     }
 
-    const refMargin = 1000;
+    // Master strategy uses $50,000 reference capital (4 pairs = $12,500 margin per slot, 7x = $87,500 volume)
+    const refMargin = 12500;
     const lev = 7.0;
-    const vol = refMargin * lev;
-    const legVol = vol / 2;
+    const vol = refMargin * lev; // 87,500 USDT
+    const legVol = vol / 2; // 43,750 USDT per leg
 
     const longQty = Number((legVol / signal.longPrice).toFixed(4));
     const shortQty = Number((legVol / signal.shortPrice).toFixed(4));

@@ -683,9 +683,11 @@ export default function DashboardPage() {
                         </div>
                       </td>
                       <td className="px-5 py-4 text-slate-300">
-                        ${Number(p.allocated_margin_usd).toFixed(2)}
-                        <div className="text-[10px] text-slate-500">
-                          Vol: ${Number(p.total_position_volume_usd).toFixed(0)}
+                        <div className="font-bold text-white">
+                          ${Number(p.total_position_volume_usd || 87500).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </div>
+                        <div className="text-[10px] text-slate-400">
+                          Margin: ${Number(p.allocated_margin_usd || 12500).toLocaleString('en-US', { minimumFractionDigits: 2 })} (7.0x)
                         </div>
                       </td>
                       <td className="px-5 py-4 text-right">

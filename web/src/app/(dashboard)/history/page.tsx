@@ -16,6 +16,9 @@ import {
   UserCheck,
   Bot,
   ExternalLink,
+  Wallet,
+  DollarSign,
+  Scale,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 
@@ -25,6 +28,8 @@ export default function HistoryPage() {
   const [masterPositions, setMasterPositions] = useState<any[]>([]);
   const [userPositions, setUserPositions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const BOT_STARTING_BALANCE = 50000; // $50,000 starting base capital for Master Strategy
 
   useEffect(() => {
     async function loadHistory() {
@@ -79,6 +84,11 @@ export default function HistoryPage() {
     0
   );
 
+  const totalVolumeTraded = filteredPositions.reduce(
+    (acc, p) => acc + (Number(p.total_position_volume_usd) || 0),
+    0
+  );
+
   const winningTrades = filteredPositions.filter((p) => Number(p.realized_pnl_usd) > 0);
   const winrate =
     filteredPositions.length > 0
@@ -101,7 +111,7 @@ export default function HistoryPage() {
             </span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            Complete track record distinguishing platform Master Strategy signals from trades executed on your personal exchange account.
+            Complete trading log showing exact trade amounts, margin allocation ($50,000 starting base), and executed PnL.
           </p>
         </div>
 
@@ -122,7 +132,7 @@ export default function HistoryPage() {
 
       {/* Dual Context Explainer Cards: Master Strategy vs My Account */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Card 1: Master Bot Strategy Signals */}
+        {/* Card 1: Master Bot Strategy Signals ($50k Base Capital) */}
         <div
           onClick={() => setActiveTab('master')}
           className={`cursor-pointer p-4 sm:p-5 rounded-2xl border transition-all ${
@@ -140,11 +150,11 @@ export default function HistoryPage() {
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
                   Master Bot Strategy
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-honey-500/20 text-honey-400 font-bold">
-                    BENCHMARK
+                    $50,000 BASE
                   </span>
                 </h3>
                 <span className="text-[11px] font-mono text-slate-400">
-                  {masterPositions.length} historical & live reference trades
+                  {masterPositions.length} historical trades • $87,500 trade volume per pair
                 </span>
               </div>
             </div>
@@ -157,7 +167,7 @@ export default function HistoryPage() {
             </span>
           </div>
           <p className="mt-3 text-xs text-slate-300 leading-relaxed">
-            Autonomous multi-pair market-neutral signals calculated and monitored 24/7 by the core trading daemon. Demonstrates verified 6-month historical win rate and pure algorithmic performance.
+            Autonomous multi-pair market-neutral signals calculated from a standard $50,000 reference capital ($12,500 margin × 7x leverage = $87,500 position size per basket slot).
           </p>
         </div>
 
@@ -196,7 +206,7 @@ export default function HistoryPage() {
             </span>
           </div>
           <p className="mt-3 text-xs text-slate-300 leading-relaxed">
-            Actual positions executed on your connected exchange account (Binance, OKX, or Bybit) via encrypted API keys. Mirrors master signals directly using your allocated margin and leverage.
+            Actual positions executed on your connected exchange account (Binance, OKX, or Bybit) via encrypted API keys. Mirrors master signals sized to your exchange balance.
           </p>
         </div>
       </div>
@@ -216,18 +226,6 @@ export default function HistoryPage() {
         </button>
 
         <button
-          onClick={() => setActiveTab('user')}
-          className={`pb-3 px-3 border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'user'
-              ? 'border-emerald-500 text-emerald-400 font-black'
-              : 'border-transparent text-slate-400 hover:text-white'
-          }`}
-        >
-          <UserCheck className="w-4 h-4 text-emerald-400" />
-          My Account Trades ({userPositions.length})
-        </button>
-
-        <button
           onClick={() => setActiveTab('master')}
           className={`pb-3 px-3 border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
             activeTab === 'master'
@@ -238,36 +236,70 @@ export default function HistoryPage() {
           <Sparkles className="w-4 h-4 text-honey-400" />
           Master Strategy Benchmark ({masterPositions.length})
         </button>
+
+        <button
+          onClick={() => setActiveTab('user')}
+          className={`pb-3 px-3 border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'user'
+              ? 'border-emerald-500 text-emerald-400 font-black'
+              : 'border-transparent text-slate-400 hover:text-white'
+          }`}
+        >
+          <UserCheck className="w-4 h-4 text-emerald-400" />
+          My Account Trades ({userPositions.length})
+        </button>
       </div>
 
-      {/* Performance Summary Cards */}
+      {/* Performance Summary Cards - Highlighting $50,000 Base & Trade Amounts */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
-          <span className="text-xs text-slate-400 font-mono">Filtered Trades</span>
-          <p className="text-xl font-black text-white font-mono mt-1">{filteredPositions.length}</p>
+          <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
+            <span>Bot Starting Base</span>
+            <Wallet className="w-3.5 h-3.5 text-honey-400" />
+          </div>
+          <p className="text-xl font-black text-white font-mono mt-1">
+            ${BOT_STARTING_BALANCE.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+          </p>
           <span className="text-[11px] text-slate-500 font-mono">
-            {tpCount} TP • {slCount} SL • {flipCount} Flip
+            4 slots × $12,500 margin
           </span>
         </div>
 
         <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
-          <span className="text-xs text-slate-400 font-mono">Winrate</span>
-          <p className="text-xl font-black text-emerald-400 font-mono mt-1">{winrate}%</p>
-          <span className="text-[11px] text-slate-500 font-mono">{winningTrades.length} winning cycles</span>
-        </div>
-
-        <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
-          <span className="text-xs text-slate-400 font-mono">Execution Model</span>
-          <p className="text-xl font-black text-white font-mono mt-1">
-            {activeTab === 'user' ? 'Live API' : activeTab === 'master' ? 'Daemon Ref' : 'Unified'}
+          <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
+            <span>Trade Volume / Slot</span>
+            <Scale className="w-3.5 h-3.5 text-honey-400" />
+          </div>
+          <p className="text-xl font-black text-honey-400 font-mono mt-1">
+            $87,500.00
           </p>
-          <span className="text-[11px] text-honey-400 font-mono">7.0x Leverage</span>
+          <span className="text-[11px] text-slate-500 font-mono">
+            $12,500 margin × 7.0x leverage
+          </span>
         </div>
 
         <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
-          <span className="text-xs text-slate-400 font-mono">Target Take-Profit</span>
-          <p className="text-xl font-black text-emerald-400 font-mono mt-1">+5.0%</p>
-          <span className="text-[11px] text-rose-400 font-mono">Stop-Loss -1.5%</span>
+          <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
+            <span>Total Realized Profit</span>
+            <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+          </div>
+          <p className="text-xl font-black text-emerald-400 font-mono mt-1">
+            +${totalRealizedPnl.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+          </p>
+          <span className="text-[11px] text-emerald-400/80 font-mono font-semibold">
+            +{((totalRealizedPnl / BOT_STARTING_BALANCE) * 100).toFixed(1)}% ROI on $50k base
+          </span>
+        </div>
+
+        <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
+          <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
+            <span>Strategy Winrate</span>
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+          </div>
+          <p className="text-xl font-black text-white font-mono mt-1">{winrate}%</p>
+          <span className="text-[11px] text-slate-500 font-mono">
+            {tpCount} TP (+5%) • {slCount} SL (-1.5%)
+          </span>
         </div>
       </div>
 
@@ -331,15 +363,15 @@ export default function HistoryPage() {
         ) : (
           <div className="overflow-x-auto max-h-[650px] overflow-y-auto">
             <table className="w-full text-left text-sm">
-              <thead className="bg-dark-950/85 sticky top-0 z-10 text-[11px] uppercase tracking-wider text-slate-400 font-mono border-b border-dark-800 backdrop-blur-md">
+              <thead className="bg-dark-950/90 sticky top-0 z-10 text-[11px] uppercase tracking-wider text-slate-400 font-mono border-b border-dark-800 backdrop-blur-md">
                 <tr>
                   <th className="px-5 py-3.5">Execution Source</th>
                   <th className="px-5 py-3.5">Pair Symbol</th>
+                  <th className="px-5 py-3.5">Trade Amount / Volume</th>
                   <th className="px-5 py-3.5">Exit Reason</th>
                   <th className="px-5 py-3.5">Entry → Exit Ratio</th>
-                  <th className="px-5 py-3.5">Margin & Volume</th>
                   <th className="px-5 py-3.5">Execution Dates</th>
-                  <th className="px-5 py-3.5 text-right">Realized PnL</th>
+                  <th className="px-5 py-3.5 text-right">Realized PnL ($)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-dark-800 font-mono text-xs">
@@ -350,6 +382,10 @@ export default function HistoryPage() {
                   const exchangeName =
                     pos.exchange_accounts?.exchange?.toUpperCase() ||
                     (isUserTrade ? 'EXCHANGE' : 'MASTER');
+
+                  const marginUsd = Number(pos.allocated_margin_usd || 12500);
+                  const volumeUsd = Number(pos.total_position_volume_usd || marginUsd * 7);
+                  const legVolume = volumeUsd / 2;
 
                   return (
                     <tr
@@ -378,7 +414,9 @@ export default function HistoryPage() {
                               <Sparkles className="w-3.5 h-3.5 text-honey-400" />
                               Master Strategy
                             </span>
-                            <div className="text-[10px] text-slate-500 mt-1">Algorithm Signal</div>
+                            <div className="text-[10px] text-slate-500 mt-1 font-mono">
+                              $50k Base Capital
+                            </div>
                           </div>
                         )}
                       </td>
@@ -391,7 +429,22 @@ export default function HistoryPage() {
                         </div>
                       </td>
 
-                      {/* Column 3: Exit Reason */}
+                      {/* Column 3: Prominent Trade Amount & Margin */}
+                      <td className="px-5 py-4">
+                        <div className="font-black text-white text-sm">
+                          ${volumeUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
+                          <span className="text-[10px] font-normal text-honey-400">USDT</span>
+                        </div>
+                        <div className="text-[11px] text-slate-400 font-semibold mt-0.5">
+                          Margin: ${marginUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
+                          <span className="text-honey-400 font-bold">(7.0x)</span>
+                        </div>
+                        <div className="text-[10px] text-slate-500 mt-0.5">
+                          L: ${legVolume.toLocaleString('en-US', { maximumFractionDigits: 0 })} | S: ${legVolume.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                        </div>
+                      </td>
+
+                      {/* Column 4: Exit Reason */}
                       <td className="px-5 py-4">
                         <span
                           className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold ${
@@ -410,7 +463,7 @@ export default function HistoryPage() {
                         </span>
                       </td>
 
-                      {/* Column 4: Ratio Spread */}
+                      {/* Column 5: Ratio Spread & Prices */}
                       <td className="px-5 py-4 text-slate-300">
                         <div>
                           <span className="text-slate-400">{Number(pos.entry_ratio).toFixed(4)}</span>
@@ -421,14 +474,6 @@ export default function HistoryPage() {
                         </div>
                         <div className="text-[10px] text-slate-500">
                           L: ${Number(pos.long_entry_price).toFixed(2)} | S: ${Number(pos.short_entry_price).toFixed(2)}
-                        </div>
-                      </td>
-
-                      {/* Column 5: Margin & Volume */}
-                      <td className="px-5 py-4 text-slate-300">
-                        <div>${Number(pos.allocated_margin_usd || 1000).toFixed(0)} Margin</div>
-                        <div className="text-[10px] text-slate-500">
-                          Vol: ${Number(pos.total_position_volume_usd || 7000).toFixed(0)} (7x)
                         </div>
                       </td>
 
@@ -445,14 +490,20 @@ export default function HistoryPage() {
                       {/* Column 7: Realized PnL */}
                       <td className="px-5 py-4 text-right">
                         <div
-                          className={`font-bold text-sm ${
+                          className={`font-black text-sm ${
                             pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'
                           }`}
                         >
-                          {pnl >= 0 ? `+${pnlPct.toFixed(2)}%` : `${pnlPct.toFixed(2)}%`}
+                          {pnl >= 0
+                            ? `+$${pnl.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                            : `-$${Math.abs(pnl).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                         </div>
-                        <div className="text-[11px] text-slate-400">
-                          {pnl >= 0 ? `+$${pnl.toFixed(2)}` : `-$${Math.abs(pnl).toFixed(2)}`}
+                        <div
+                          className={`text-[11px] font-bold ${
+                            pnl >= 0 ? 'text-emerald-400/80' : 'text-rose-400/80'
+                          }`}
+                        >
+                          {pnl >= 0 ? `+${pnlPct.toFixed(2)}%` : `${pnlPct.toFixed(2)}%`}
                         </div>
                       </td>
                     </tr>
