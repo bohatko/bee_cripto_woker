@@ -1,0 +1,28 @@
+{
+  "name": "bee-crypto-worker-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Bee Crypto Worker - Market-Neutral Crypto SaaS Platform",
+  "workspaces": [
+    "web",
+    "worker"
+  ],
+  "scripts": {
+    "dev": "npm run dev:web",
+    "dev:web": "npm run dev --workspace=web",
+    "dev:worker": "npm run dev --workspace=worker",
+    "build:web": "npm run build --workspace=web",
+    "build:worker": "npm run build --workspace=worker",
+    "build": "npm run build:worker && npm run build:web"
+  },
+  "keywords": [
+    "crypto",
+    "market-neutral",
+    "trading",
+    "saas",
+    "railway",
+    "supabase"
+  ],
+  "author": "bohatko",
+  "license": "MIT"
+}
