@@ -61,6 +61,7 @@ export interface PairMarketData {
   current_ratio: number;
   ema_10: number;
   is_in_trend: boolean;
+  readiness_pct?: number;
   long_price: number;
   short_price: number;
   last_signal_at: string;
@@ -69,10 +70,11 @@ export interface PairMarketData {
 
 export interface BotPosition {
   id: string;
-  user_id: string;
-  exchange_account_id: string;
+  user_id?: string | null;
+  exchange_account_id?: string | null;
   pair_symbol: string;
   status: PositionStatus;
+  is_master?: boolean;
   entry_ratio: number;
   current_ratio: number | null;
   exit_ratio: number | null;

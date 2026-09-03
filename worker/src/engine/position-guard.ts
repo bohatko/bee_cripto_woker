@@ -37,7 +37,7 @@ export class PositionGuard {
       const account: ExchangeAccount = pos.exchange_accounts;
       const market = marketMap.get(position.pair_symbol);
 
-      if (!market || !account) continue;
+      if (!market) continue;
 
       const currentLongPrice = Number(market.long_price);
       const currentShortPrice = Number(market.short_price);
@@ -61,25 +61,26 @@ export class PositionGuard {
         .eq('id', position.id);
 
       // Check exit conditions:
-      // Condition 1: Take Profit (+5.0%)
+      let exitReason: 'tp' | 'sl' | 'trend_flip' | null = null;
       if (netPnlPct >= CONFIG.takeProfitPct) {
         console.log(`🎯 [TP TRIGGERED] ${position.pair_symbol} PnL: +${netPnlPct.toFixed(2)}% >= ${CONFIG.takeProfitPct}%`);
-        await this.orderRouter.executePairExit(position, account, 'tp', currentLongPrice, currentShortPrice);
-        continue;
-      }
-
-      // Condition 2: Stop Loss (-1.5%)
-      if (netPnlPct <= -CONFIG.stopLossPct) {
+        exitReason = 'tp';
+      } else if (netPnlPct <= -CONFIG.stopLossPct) {
         console.log(`🛡️ [SL TRIGGERED] ${position.pair_symbol} PnL: ${netPnlPct.toFixed(2)}% <= -${CONFIG.stopLossPct}%`);
-        await this.orderRouter.executePairExit(position, account, 'sl', currentLongPrice, currentShortPrice);
-        continue;
+        exitReason = 'sl';
+      } else if (!isTrendActive) {
+        console.log(`🔄 [TREND FLIP TRIGGERED] ${position.pair_symbol} Ratio dropped below EMA10`);
+        exitReason = 'trend_flip';
       }
 
-      // Condition 3: Trend Flip (Ratio dropped below EMA 10)
-      if (!isTrendActive) {
-        console.log(`🔄 [TREND FLIP TRIGGERED] ${position.pair_symbol} Ratio dropped below EMA10`);
-        await this.orderRouter.executePairExit(position, account, 'trend_flip', currentLongPrice, currentShortPrice);
-        continue;
+      if (exitReason) {
+        if (position.is_master || !account) {
+          // Master benchmark trade exit
+          await this.orderRouter.executeMasterExit(position, exitReason, currentLongPrice, currentShortPrice);
+        } else {
+          // User exchange trade exit
+          await this.orderRouter.executePairExit(position, account, exitReason, currentLongPrice, currentShortPrice);
+        }
       }
     }
   }

@@ -130,6 +130,14 @@ export class MarketScanner {
   }
 
   private async persistMarketData(signal: MarketSignal) {
+    const gapPct = signal.ema10 > 0 ? ((signal.currentRatio - signal.ema10) / signal.ema10) * 100 : 0;
+    let readinessPct = 100.0;
+    if (!signal.isInTrend) {
+      // Benchmark pullback distance: 3.0% below EMA10 = 0% readiness
+      const MAX_PULLBACK = 3.0;
+      readinessPct = Math.max(0, Math.min(99.0, Number((100 + (gapPct / MAX_PULLBACK) * 100).toFixed(1))));
+    }
+
     const record: Partial<PairMarketData> = {
       pair_symbol: signal.pairConfig.pairSymbol,
       long_coin: signal.pairConfig.longCoin,
@@ -137,6 +145,7 @@ export class MarketScanner {
       current_ratio: Number(signal.currentRatio.toFixed(8)),
       ema_10: Number(signal.ema10.toFixed(8)),
       is_in_trend: signal.isInTrend,
+      readiness_pct: readinessPct,
       long_price: Number(signal.longPrice.toFixed(8)),
       short_price: Number(signal.shortPrice.toFixed(8)),
       last_signal_at: new Date().toISOString(),

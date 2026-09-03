@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
+import { toast } from '@/components/ui/sonner';
 
 export default function AdminDashboardPage() {
   const router = useRouter();
@@ -41,7 +42,6 @@ export default function AdminDashboardPage() {
   const [actionType, setActionType] = useState<'approve' | 'reject' | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
-  const [statusNotice, setStatusNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   async function checkAdminAndLoadData() {
     setLoading(true);
@@ -163,10 +163,8 @@ export default function AdminDashboardPage() {
           })
           .eq('id', selectedInvoice.user_id);
 
-        setStatusNotice({
-          type: 'success',
-          text: `Invoice ${selectedInvoice.invoice_number} successfully approved! User subscription extended by 7 days.`,
-        });
+        const successText = `Invoice ${selectedInvoice.invoice_number} successfully approved! User subscription extended by 7 days.`;
+        toast.success(successText);
       } else if (actionType === 'reject') {
         await supabase
           .from('invoices')
@@ -176,15 +174,14 @@ export default function AdminDashboardPage() {
           })
           .eq('id', selectedInvoice.id);
 
-        setStatusNotice({
-          type: 'error',
-          text: `Invoice ${selectedInvoice.invoice_number} rejected. Returned to 'issued' status.`,
-        });
+        const errorText = `Invoice ${selectedInvoice.invoice_number} rejected. Returned to 'issued' status.`;
+        toast.error(errorText);
       }
 
       checkAdminAndLoadData();
     } catch (err: any) {
-      setStatusNotice({ type: 'error', text: err.message || 'Action failed' });
+      const errorText = err.message || 'Action failed';
+      toast.error(errorText);
     }
   };
 
@@ -252,21 +249,6 @@ export default function AdminDashboardPage() {
 
       {/* Main Admin Content */}
       <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full space-y-8">
-        {statusNotice && (
-          <div
-            className={`p-4 rounded-xl border text-xs font-mono flex items-center justify-between ${
-              statusNotice.type === 'success'
-                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-                : 'bg-rose-500/10 border-rose-500/20 text-rose-400'
-            }`}
-          >
-            <span>{statusNotice.text}</span>
-            <button onClick={() => setStatusNotice(null)} className="text-slate-400 hover:text-white">
-              ✕
-            </button>
-          </div>
-        )}
-
         {/* Top Summary Metrics */}
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
           <div className="bg-dark-900 border border-dark-800 p-5 rounded-2xl shadow-xl">

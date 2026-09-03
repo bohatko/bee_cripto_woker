@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   KeyRound,
   ShieldAlert,
@@ -8,7 +8,6 @@ import {
   Check,
   CheckCircle2,
   Trash2,
-  AlertTriangle,
   Server,
   Lock,
   RefreshCw,
@@ -18,6 +17,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
+import { toast } from '@/components/ui/sonner';
 
 interface ExchangeAccountItem {
   id: string;
@@ -40,9 +40,6 @@ export default function ExchangeSettingsPage() {
   const [loading, setLoading] = useState(false);
   const [syncingAll, setSyncingAll] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(
-    null
-  );
 
   const [accounts, setAccounts] = useState<ExchangeAccountItem[]>([]);
   const [accountToDelete, setAccountToDelete] = useState<ExchangeAccountItem | null>(null);
@@ -50,6 +47,8 @@ export default function ExchangeSettingsPage() {
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
 
   const railwayStaticIp = process.env.NEXT_PUBLIC_RAILWAY_EGRESS_IP || '54.198.120.45';
+
+  const hasAutoSyncedRef = useRef(false);
 
   async function loadAccounts() {
     const {
@@ -64,7 +63,12 @@ export default function ExchangeSettingsPage() {
       .order('created_at', { ascending: true });
 
     if (data) {
-      setAccounts(data as ExchangeAccountItem[]);
+      const accList = data as ExchangeAccountItem[];
+      setAccounts(accList);
+      if (accList.length > 0 && !hasAutoSyncedRef.current) {
+        hasAutoSyncedRef.current = true;
+        handleSyncAll(true);
+      }
     }
   }
 
@@ -75,12 +79,12 @@ export default function ExchangeSettingsPage() {
   const handleCopyIp = () => {
     navigator.clipboard.writeText(railwayStaticIp);
     setCopied(true);
+    toast.success('Railway static IP copied to clipboard!');
     setTimeout(() => setCopied(false), 2000);
   };
 
   const handleSaveKeys = async () => {
     setLoading(true);
-    setStatusMsg(null);
     setIsSaveModalOpen(false);
 
     try {
@@ -109,30 +113,26 @@ export default function ExchangeSettingsPage() {
         throw new Error(resData.error || 'Failed to validate exchange API credentials');
       }
 
-      setStatusMsg({
-        type: 'success',
-        text: `Successfully validated and linked ${exchange.toUpperCase()}! Live futures balance: $${Number(
-          resData.balanceUsd || 0
-        ).toLocaleString('en-US', { minimumFractionDigits: 2 })} USDT`,
-      });
+      const successText = `Successfully validated and linked ${exchange.toUpperCase()}! Live futures balance: $${Number(
+        resData.balanceUsd || 0
+      ).toLocaleString('en-US', { minimumFractionDigits: 2 })} USDT`;
+
+      toast.success(successText);
 
       setApiKey('');
       setApiSecret('');
       setPassphrase('');
       await loadAccounts();
     } catch (err: any) {
-      setStatusMsg({
-        type: 'error',
-        text: err.message || 'Failed to save exchange credentials',
-      });
+      const errorText = err.message || 'Failed to save exchange credentials';
+      toast.error(errorText);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSyncAll = async () => {
+  const handleSyncAll = async (silent = false) => {
     setSyncingAll(true);
-    setStatusMsg(null);
 
     try {
       const {
@@ -150,20 +150,21 @@ export default function ExchangeSettingsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to sync balances');
 
-      setStatusMsg({
-        type: 'success',
-        text: `Live balances refreshed: Total $${Number(data.totalEquityUsd || 0).toLocaleString(
-          'en-US',
-          { minimumFractionDigits: 2 }
-        )} USDT across ${data.accounts?.length || 0} exchange(s).`,
-      });
+      const successText = `Live balances refreshed: Total $${Number(data.totalEquityUsd || 0).toLocaleString(
+        'en-US',
+        { minimumFractionDigits: 2 }
+      )} USDT across ${data.accounts?.length || 0} exchange(s).`;
+
+      if (!silent) {
+        toast.success(successText);
+      }
 
       await loadAccounts();
     } catch (err: any) {
-      setStatusMsg({
-        type: 'error',
-        text: err.message || 'Failed to sync exchange balances',
-      });
+      const errorText = err.message || 'Failed to sync exchange balances';
+      if (!silent) {
+        toast.error(errorText);
+      }
     } finally {
       setSyncingAll(false);
     }
@@ -186,12 +187,10 @@ export default function ExchangeSettingsPage() {
         .eq('user_id', user.id);
     }
 
+    const removedMsg = `${accountToDelete.exchange.toUpperCase()} API keys removed completely from database.`;
     setAccountToDelete(null);
     setIsDeleteModalOpen(false);
-    setStatusMsg({
-      type: 'success',
-      text: `${accountToDelete.exchange.toUpperCase()} API keys removed completely from database.`,
-    });
+    toast.success(removedMsg);
     await loadAccounts();
   };
 
@@ -215,7 +214,7 @@ export default function ExchangeSettingsPage() {
 
         {accounts.length > 0 && (
           <button
-            onClick={handleSyncAll}
+            onClick={() => handleSyncAll(false)}
             disabled={syncingAll}
             className="px-4 py-2.5 rounded-xl text-xs font-bold bg-dark-900 border border-dark-700 hover:border-honey-500 text-slate-200 hover:text-white flex items-center gap-2 transition-all shadow-lg disabled:opacity-50"
           >
@@ -224,23 +223,6 @@ export default function ExchangeSettingsPage() {
           </button>
         )}
       </div>
-
-      {statusMsg && (
-        <div
-          className={`p-4 rounded-xl border text-xs font-mono flex items-center gap-2 ${
-            statusMsg.type === 'success'
-              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-              : 'bg-rose-500/10 border-rose-500/20 text-rose-400'
-          }`}
-        >
-          {statusMsg.type === 'success' ? (
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
-          ) : (
-            <AlertTriangle className="w-4 h-4 shrink-0" />
-          )}
-          <span>{statusMsg.text}</span>
-        </div>
-      )}
 
       {/* Railway Static IP Whitelist Card */}
       <div className="bg-dark-900 border border-honey-500/30 rounded-2xl p-5 shadow-xl relative overflow-hidden">

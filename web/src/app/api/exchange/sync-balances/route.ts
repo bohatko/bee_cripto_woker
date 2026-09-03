@@ -20,6 +20,7 @@ export async function POST(request: Request) {
       .eq('is_active', true);
 
     if (error) {
+      console.error('[SyncBalances] Error querying exchange accounts:', error);
       return NextResponse.json(
         { error: `Failed to load accounts: ${error.message}` },
         { status: 500 }
@@ -44,6 +45,7 @@ export async function POST(request: Request) {
       const balanceResult = await fetchLiveBalanceFromDecryptedAccount(acc);
 
       if (balanceResult.error) {
+        console.warn(`[SyncBalances] Balance sync warning for account ${acc.id} (${acc.exchange}):`, balanceResult.error);
         // Record sync error without zeroing out previous known balance
         await supabase
           .from('exchange_accounts')
@@ -96,6 +98,7 @@ export async function POST(request: Request) {
       message: `Successfully refreshed balances for ${updatedAccounts.length} exchange(s).`,
     });
   } catch (err: any) {
+    console.error('[SyncBalances] Unhandled error during sync:', err);
     return NextResponse.json(
       { error: err.message || 'Internal server error while syncing balances' },
       { status: 500 }

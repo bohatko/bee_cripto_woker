@@ -6,20 +6,24 @@ import { getExchangeSymbol } from '../exchanges/symbols.js';
 
 export class OrderRouter {
   /**
-   * Handle entry signal for all eligible users
+   * Handle entry signal:
+   * 1. ALWAYS ensures master platform trade is opened and recorded in DB (regardless of user count)
+   * 2. If eligible users exist with active connected exchanges, mirrors orders to their exchange accounts
    */
   public async handleEntrySignal(signal: MarketSignal) {
     if (!signal.isInTrend) return; // Only enter when trend is active (Ratio > EMA10)
 
-    // 1. Fetch eligible users who have bot active and active_pairs containing this pair
+    // 1. Always record & manage Master Bot reference position in DB
+    await this.ensureMasterEntry(signal);
+
+    // 2. Fetch eligible users who have bot active and active_pairs containing this pair
     const { data: eligibleSettings, error } = await supabase
       .from('trading_settings')
       .select('*, users_profile(*), exchange_accounts(*)')
       .eq('is_bot_active', true)
       .contains('active_pairs', [signal.pairConfig.pairSymbol]);
 
-    if (error || !eligibleSettings) {
-      console.error('Error fetching eligible trading settings:', error?.message);
+    if (error || !eligibleSettings || eligibleSettings.length === 0) {
       return;
     }
 
@@ -41,7 +45,7 @@ export class OrderRouter {
         continue;
       }
 
-      // 2. Check if user already has an OPEN position for this pair
+      // 3. Check if user already has an OPEN position for this pair
       const { data: existingPos } = await supabase
         .from('bot_positions')
         .select('id')
@@ -55,9 +59,95 @@ export class OrderRouter {
         continue;
       }
 
-      // 3. Execute order on exchange
+      // 4. Execute order on user's exchange
       await this.executePairEntry(user, account, setting, signal);
     }
+  }
+
+  /**
+   * Ensure master platform strategy trade is active and recorded in DB
+   */
+  public async ensureMasterEntry(signal: MarketSignal) {
+    const pairSymbol = signal.pairConfig.pairSymbol;
+
+    const { data: existingMaster } = await supabase
+      .from('bot_positions')
+      .select('id')
+      .eq('is_master', true)
+      .eq('pair_symbol', pairSymbol)
+      .eq('status', 'open')
+      .maybeSingle();
+
+    if (existingMaster) {
+      return; // Master position already open
+    }
+
+    const refMargin = 1000;
+    const lev = 7.0;
+    const vol = refMargin * lev;
+    const legVol = vol / 2;
+
+    const longQty = Number((legVol / signal.longPrice).toFixed(4));
+    const shortQty = Number((legVol / signal.shortPrice).toFixed(4));
+
+    const masterRecord: Partial<BotPosition> = {
+      is_master: true,
+      user_id: null,
+      exchange_account_id: null,
+      pair_symbol: pairSymbol,
+      status: 'open',
+      entry_ratio: Number(signal.currentRatio.toFixed(8)),
+      current_ratio: Number(signal.currentRatio.toFixed(8)),
+      long_symbol: `${signal.pairConfig.longCoin}/USDT`,
+      long_entry_price: signal.longPrice,
+      long_qty: longQty,
+      short_symbol: `${signal.pairConfig.shortCoin}/USDT`,
+      short_entry_price: signal.shortPrice,
+      short_qty: shortQty,
+      allocated_margin_usd: refMargin,
+      total_position_volume_usd: vol,
+      unrealized_pnl_usd: 0,
+      pnl_pct: 0,
+      opened_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase.from('bot_positions').insert(masterRecord);
+    if (!error) {
+      console.log(`🐝 [MASTER BOT ENTRY] Recorded new basket trade: ${pairSymbol} @ ratio ${signal.currentRatio.toFixed(4)}`);
+    }
+  }
+
+  /**
+   * Close a master platform strategy trade in DB
+   */
+  public async executeMasterExit(
+    position: BotPosition,
+    exitReason: ExitReasonType,
+    currentLongPrice: number,
+    currentShortPrice: number
+  ) {
+    const exitRatio = currentLongPrice / currentShortPrice;
+    const longPnl = (currentLongPrice - position.long_entry_price) * position.long_qty;
+    const shortPnl = (position.short_entry_price - currentShortPrice) * position.short_qty;
+    const realizedPnl = Number((longPnl + shortPnl).toFixed(2));
+    const pnlPct = Number(((realizedPnl / position.allocated_margin_usd) * 100).toFixed(2));
+
+    await supabase
+      .from('bot_positions')
+      .update({
+        status: 'closed',
+        closed_at: new Date().toISOString(),
+        exit_ratio: Number(exitRatio.toFixed(8)),
+        long_exit_price: currentLongPrice,
+        short_exit_price: currentShortPrice,
+        realized_pnl_usd: realizedPnl,
+        unrealized_pnl_usd: 0,
+        pnl_pct: pnlPct,
+        exit_reason: exitReason,
+      })
+      .eq('id', position.id);
+
+    console.log(`🏁 [MASTER BOT EXIT] Closed ${position.pair_symbol} (${exitReason.toUpperCase()}) | PnL: ${realizedPnl >= 0 ? '+' : ''}$${realizedPnl} (${pnlPct}%)`);
   }
 
   private async executePairEntry(
@@ -75,6 +165,18 @@ export class OrderRouter {
       // Fetch current free balance
       const balance = await exchangeClient.fetchBalance({ type: 'future' });
       const freeUsdt = Number(balance.free?.USDT || balance.total?.USDT || account.last_balance_usd || 1000);
+      const totalUsdt = Number(balance.total?.USDT || balance.USDT?.total || 0);
+
+      // Keep DB synchronized with live exchange balance
+      if (totalUsdt > 0) {
+        await supabase
+          .from('exchange_accounts')
+          .update({
+            last_balance_usd: totalUsdt,
+            last_sync_at: new Date().toISOString(),
+          })
+          .eq('id', account.id);
+      }
 
       // 4 pairs in basket => 25% of free capital allocated per pair
       const slotMargin = Math.max(10, freeUsdt * 0.25);

@@ -94,6 +94,7 @@ CREATE TABLE IF NOT EXISTS public.pair_market_data (
     current_ratio NUMERIC(18, 8) NOT NULL,
     ema_10 NUMERIC(18, 8) NOT NULL,
     is_in_trend BOOLEAN NOT NULL, -- ratio > ema_10
+    readiness_pct NUMERIC(5, 2) DEFAULT 0.00, -- Готовность сделки к входу (0-100%)
     long_price NUMERIC(18, 8) NOT NULL,
     short_price NUMERIC(18, 8) NOT NULL,
     last_signal_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
@@ -105,10 +106,11 @@ CREATE TABLE IF NOT EXISTS public.pair_market_data (
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.bot_positions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES public.users_profile(id) ON DELETE CASCADE,
-    exchange_account_id UUID NOT NULL REFERENCES public.exchange_accounts(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES public.users_profile(id) ON DELETE CASCADE,
+    exchange_account_id UUID REFERENCES public.exchange_accounts(id) ON DELETE CASCADE,
     pair_symbol TEXT NOT NULL,
     status position_status DEFAULT 'open'::position_status NOT NULL,
+    is_master BOOLEAN DEFAULT FALSE NOT NULL,
     
     -- Метрики соотношения
     entry_ratio NUMERIC(18, 8) NOT NULL,

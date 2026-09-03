@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
+import { toast } from '@/components/ui/sonner';
 
 export default function DashboardLayout({
   children,
@@ -54,6 +55,7 @@ export default function DashboardLayout({
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setIsLogoutModalOpen(false);
+    toast.info('Signed out of trading session.');
     router.push('/login');
   };
 

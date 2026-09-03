@@ -7,14 +7,13 @@ import {
   Clock,
   Copy,
   Check,
-  AlertCircle,
-  CheckCircle2,
   FileText,
   DollarSign,
   ShieldCheck,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
+import { toast } from '@/components/ui/sonner';
 
 export default function BillingPage() {
   const [profile, setProfile] = useState<any>(null);
@@ -24,7 +23,6 @@ export default function BillingPage() {
   const [copied, setCopied] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
-  const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const walletAddresses = {
     TRC20: 'TJY4mFakeTRC20DepositWalletBeeWorkerXXXXXXXXXX',
@@ -61,6 +59,7 @@ export default function BillingPage() {
   const handleCopyWallet = () => {
     navigator.clipboard.writeText(walletAddresses[selectedNetwork]);
     setCopied(true);
+    toast.success(`Deposit address (${selectedNetwork}) copied to clipboard!`);
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -82,12 +81,9 @@ export default function BillingPage() {
     setSubmitting(false);
 
     if (error) {
-      setMsg({ type: 'error', text: error.message });
+      toast.error(error.message);
     } else {
-      setMsg({
-        type: 'success',
-        text: 'Transaction submitted! Administrator will verify and update your subscription within 1 hour.',
-      });
+      toast.success('Transaction submitted! Administrator will verify and update your subscription within 1 hour.');
       setTxHash('');
       loadBilling();
     }
@@ -103,23 +99,6 @@ export default function BillingPage() {
           7-day free trial, followed by $20/week + 10% performance fee on new net profits (High-Water Mark).
         </p>
       </div>
-
-      {msg && (
-        <div
-          className={`p-4 rounded-xl border text-xs font-mono flex items-center gap-2 ${
-            msg.type === 'success'
-              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-              : 'bg-rose-500/10 border-rose-500/20 text-rose-400'
-          }`}
-        >
-          {msg.type === 'success' ? (
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
-          ) : (
-            <AlertCircle className="w-4 h-4 shrink-0" />
-          )}
-          <span>{msg.text}</span>
-        </div>
-      )}
 
       {/* Subscription Summary Card */}
       <div className="bg-dark-900 border border-dark-800 rounded-2xl p-6 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">

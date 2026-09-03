@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { ArrowRight, Lock, Mail } from 'lucide-react';
+import { toast } from '@/components/ui/sonner';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -25,8 +26,10 @@ export default function LoginPage() {
 
     if (error) {
       setErrorMsg(error.message);
+      toast.error(error.message);
       setLoading(false);
     } else {
+      toast.success('Signed in successfully!');
       router.push('/dashboard');
     }
   };

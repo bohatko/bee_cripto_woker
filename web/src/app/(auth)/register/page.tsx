@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { ArrowRight, Lock, Mail, User, CheckCircle2 } from 'lucide-react';
+import { toast } from '@/components/ui/sonner';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -31,8 +32,10 @@ export default function RegisterPage() {
 
     if (error) {
       setErrorMsg(error.message);
+      toast.error(error.message);
       setLoading(false);
     } else {
+      toast.success('Registration successful! Welcome aboard.');
       router.push('/dashboard');
     }
   };

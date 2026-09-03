@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import {
   Play,
@@ -11,7 +11,6 @@ import {
   Activity,
   Layers,
   ShieldCheck,
-  CheckCircle2,
   Clock,
   KeyRound,
   AlertCircle,
@@ -22,14 +21,18 @@ import {
 import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { PanicCloseModal } from '@/components/modals/PanicCloseModal';
+import { TradeReadinessMonitor } from '@/components/dashboard/TradeReadinessMonitor';
+import { toast } from '@/components/ui/sonner';
 
 export default function DashboardPage() {
   const [positions, setPositions] = useState<any[]>([]);
   const [settings, setSettings] = useState<any>(null);
   const [accounts, setAccounts] = useState<any[]>([]);
+  const [marketData, setMarketData] = useState<any[]>([]);
+  const [isShowingMaster, setIsShowingMaster] = useState(false);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const hasAutoSyncedRef = useRef(false);
 
   // Modals state
   const [isToggleModalOpen, setIsToggleModalOpen] = useState(false);
@@ -73,21 +76,46 @@ export default function DashboardPage() {
       setSettings((prev: any) => (prev ? { ...prev, is_bot_active: false } : null));
     }
 
-    // 3. Fetch active open positions
-    const { data: pos } = await supabase
+    // 3. Fetch active open positions (check user's first, fallback to Master Bot live positions)
+    const { data: userPos } = await supabase
       .from('bot_positions')
       .select('*')
       .eq('user_id', user.id)
       .eq('status', 'open');
 
-    if (pos) setPositions(pos);
+    if (userPos && userPos.length > 0) {
+      setPositions(userPos);
+      setIsShowingMaster(false);
+    } else {
+      const { data: masterPos } = await supabase
+        .from('bot_positions')
+        .select('*')
+        .eq('is_master', true)
+        .eq('status', 'open');
+      setPositions(masterPos || []);
+      setIsShowingMaster(true);
+    }
+
+    // 4. Fetch live market scanner data for trade readiness
+    const { data: mData } = await supabase
+      .from('pair_market_data')
+      .select('*')
+      .order('pair_symbol', { ascending: true });
+
+    if (mData) setMarketData(mData);
 
     setLoading(false);
+
+    // Auto-sync live balances once on initial load if exchanges are validated
+    if (hasValidated && !hasAutoSyncedRef.current) {
+      hasAutoSyncedRef.current = true;
+      handleSyncBalances(false);
+    }
   }
 
-  async function handleSyncBalances() {
+  async function handleSyncBalances(silent = false) {
+    if (syncing) return;
     setSyncing(true);
-    setSyncMsg(null);
     try {
       const {
         data: { session },
@@ -101,14 +129,34 @@ export default function DashboardPage() {
         },
       });
 
-      const data = await res.json();
-      if (data.success && Array.isArray(data.accounts)) {
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch {
+        const text = await res.text().catch(() => '');
+        throw new Error(text || `Server returned status ${res.status}`);
+      }
+
+      if (res.ok && data?.success && Array.isArray(data.accounts)) {
         setAccounts(data.accounts);
-        setSyncMsg('Balances updated directly from exchange APIs!');
-        setTimeout(() => setSyncMsg(null), 4000);
+        const errorAccounts = data.accounts.filter(
+          (a: any) => a.syncStatus === 'error' || a.last_error_msg
+        );
+        if (!silent) {
+          if (errorAccounts.length > 0 && errorAccounts[0].last_error_msg) {
+            toast.error(`Exchange API sync error: ${errorAccounts[0].last_error_msg}`);
+          } else {
+            toast.success('Balances updated directly from exchange APIs!');
+          }
+        }
+      } else if (!silent) {
+        toast.error(data?.error || 'Failed to sync balances from exchange APIs');
       }
     } catch (err: any) {
       console.error('Failed to sync live balances:', err);
+      if (!silent) {
+        toast.error(err.message || 'Failed to sync live balances');
+      }
     } finally {
       setSyncing(false);
     }
@@ -117,7 +165,21 @@ export default function DashboardPage() {
   useEffect(() => {
     loadDashboardData();
 
-    // Subscribe to realtime updates for positions, exchange accounts, and settings
+    // Auto-refresh balances silently every 60 seconds while viewing dashboard
+    const syncInterval = setInterval(() => {
+      handleSyncBalances(true);
+    }, 60000);
+
+    // Auto-refresh market data every 10 seconds for real-time trade readiness tracking
+    const marketInterval = setInterval(async () => {
+      const { data: mData } = await supabase
+        .from('pair_market_data')
+        .select('*')
+        .order('pair_symbol', { ascending: true });
+      if (mData) setMarketData(mData);
+    }, 10000);
+
+    // Subscribe to realtime updates for positions, exchange accounts, settings, and market data
     const posChannel = supabase
       .channel('dashboard_realtime')
       .on(
@@ -135,9 +197,24 @@ export default function DashboardPage() {
         { event: '*', schema: 'public', table: 'trading_settings' },
         () => loadDashboardData()
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'pair_market_data' },
+        () => {
+          supabase
+            .from('pair_market_data')
+            .select('*')
+            .order('pair_symbol', { ascending: true })
+            .then(({ data }) => {
+              if (data) setMarketData(data);
+            });
+        }
+      )
       .subscribe();
 
     return () => {
+      clearInterval(syncInterval);
+      clearInterval(marketInterval);
       supabase.removeChannel(posChannel);
     };
   }, []);
@@ -163,35 +240,55 @@ export default function DashboardPage() {
     if (!hasValidatedAccount) {
       setIsToggleModalOpen(false);
       setIsMissingExchangeModalOpen(true);
+      toast.error('Connect and validate an exchange API before starting the bot.');
       return;
     }
 
     const nextState = !settings.is_bot_active;
 
-    await supabase
-      .from('trading_settings')
-      .update({ is_bot_active: nextState })
-      .eq('id', settings.id);
+    try {
+      const { error } = await supabase
+        .from('trading_settings')
+        .update({ is_bot_active: nextState })
+        .eq('id', settings.id);
 
-    setSettings({ ...settings, is_bot_active: nextState });
-    setIsToggleModalOpen(false);
+      if (error) throw error;
+
+      setSettings({ ...settings, is_bot_active: nextState });
+      setIsToggleModalOpen(false);
+
+      if (nextState) {
+        toast.success('Trading bot started successfully!');
+      } else {
+        toast.info('Trading bot paused.');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update trading bot status');
+    }
   };
 
   const handlePanicClose = async () => {
     if (!settings) return;
 
-    // Trigger panic signal in trading_settings
-    await supabase
-      .from('trading_settings')
-      .update({
-        panic_closed_at: new Date().toISOString(),
-        is_bot_active: false,
-      })
-      .eq('id', settings.id);
+    try {
+      // Trigger panic signal in trading_settings
+      const { error } = await supabase
+        .from('trading_settings')
+        .update({
+          panic_closed_at: new Date().toISOString(),
+          is_bot_active: false,
+        })
+        .eq('id', settings.id);
 
-    setIsPanicModalOpen(false);
-    // Reload positions after signal
-    setTimeout(loadDashboardData, 1500);
+      if (error) throw error;
+
+      setIsPanicModalOpen(false);
+      toast.error('Emergency panic close initiated! Liquidating all open positions immediately.');
+      // Reload positions after signal
+      setTimeout(loadDashboardData, 1500);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to trigger panic close');
+    }
   };
 
   return (
@@ -211,7 +308,7 @@ export default function DashboardPage() {
         <div className="flex items-center gap-3">
           {accounts.length > 0 && (
             <button
-              onClick={handleSyncBalances}
+              onClick={() => handleSyncBalances(false)}
               disabled={syncing}
               className="px-3 py-2.5 rounded-xl font-bold text-xs bg-dark-900 border border-dark-700 hover:border-honey-500/50 text-slate-300 hover:text-white flex items-center gap-2 transition-all shadow-md disabled:opacity-50"
               title="Query exchange APIs for latest wallet balances"
@@ -256,13 +353,6 @@ export default function DashboardPage() {
           </button>
         </div>
       </div>
-
-      {syncMsg && (
-        <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-mono flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 shrink-0" />
-          <span>{syncMsg}</span>
-        </div>
-      )}
 
       {/* Warning banner if exchange is not linked */}
       {!hasValidatedAccount && (
@@ -352,7 +442,7 @@ export default function DashboardPage() {
             <div className="flex items-center gap-2">
               {accounts.length > 0 && (
                 <button
-                  onClick={handleSyncBalances}
+                  onClick={() => handleSyncBalances(false)}
                   disabled={syncing}
                   className="text-slate-500 hover:text-honey-400 transition-colors p-1"
                   title="Refresh live exchange balances"
@@ -494,14 +584,43 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Trade Readiness & Signal Proximity Monitor (100% Scale) */}
+      <TradeReadinessMonitor
+        marketData={marketData}
+        positions={positions}
+        isBotActive={Boolean(settings?.is_bot_active)}
+        hasValidatedAccount={hasValidatedAccount}
+        onStartBotClick={() => {
+          if (!settings?.is_bot_active && !hasValidatedAccount) {
+            setIsMissingExchangeModalOpen(true);
+          } else {
+            setIsToggleModalOpen(true);
+          }
+        }}
+      />
+
       {/* Active Basket Positions Table */}
       <div className="bg-dark-900 border border-dark-800 rounded-2xl shadow-2xl overflow-hidden">
-        <div className="p-5 border-b border-dark-800 flex items-center justify-between">
+        <div className="p-5 border-b border-dark-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center gap-2.5">
             <Layers className="w-5 h-5 text-honey-400" />
-            <h2 className="text-base font-bold text-white tracking-tight">
-              Active Long-Short Basket Pairs
-            </h2>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-white tracking-tight">
+                  Active Long-Short Basket Pairs
+                </h2>
+                {isShowingMaster && (
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-honey-500/15 text-honey-400 border border-honey-500/30">
+                    MASTER STRATEGY
+                  </span>
+                )}
+              </div>
+              {isShowingMaster && (
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Displaying live signals actively traded by the Master Bot Strategy in real time.
+                </p>
+              )}
+            </div>
           </div>
           <span className="text-xs font-mono text-slate-400">
             {positions.length} Positions Open
