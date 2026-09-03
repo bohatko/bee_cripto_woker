@@ -56,12 +56,14 @@ export async function POST(request: Request) {
           .eq('id', acc.id);
 
         const fallbackBalance = Number(acc.last_balance_usd) || 0;
+        const fallbackFree = Number(acc.free_balance_usd ?? fallbackBalance * 0.75) || 0;
         totalEquity += fallbackBalance;
-        totalFreeMargin += fallbackBalance * 0.75;
+        totalFreeMargin += fallbackFree;
 
         updatedAccounts.push({
           ...acc,
           last_error_msg: balanceResult.error,
+          free_balance_usd: fallbackFree,
           syncStatus: 'error',
         });
       } else {
@@ -72,6 +74,7 @@ export async function POST(request: Request) {
           .from('exchange_accounts')
           .update({
             last_balance_usd: liveTotal,
+            free_balance_usd: liveFree,
             last_sync_at: new Date().toISOString(),
             last_error_msg: null,
             is_validated: true,
@@ -84,6 +87,7 @@ export async function POST(request: Request) {
         updatedAccounts.push({
           ...acc,
           last_balance_usd: liveTotal,
+          free_balance_usd: liveFree,
           last_error_msg: null,
           syncStatus: 'synced',
         });

@@ -73,6 +73,7 @@ export async function POST(request: Request) {
       can_withdraw: false,
       can_trade_futures: true,
       last_balance_usd: validation.totalBalanceUsd,
+      free_balance_usd: validation.freeBalanceUsd,
       last_sync_at: new Date().toISOString(),
       last_error_msg: null,
       is_active: true,

@@ -15,7 +15,7 @@ async function main() {
 
   const orderRouter = new OrderRouter();
   const scanner = new MarketScanner(CONFIG.scannerIntervalMs);
-  const guard = new PositionGuard(orderRouter, 5000);
+  const guard = new PositionGuard(orderRouter, scanner, 5000);
   const healthCheck = new HealthCheckJob(CONFIG.healthPingIntervalMs);
   const billingCron = new BillingCronJob(CONFIG.billingCronIntervalMs);
 

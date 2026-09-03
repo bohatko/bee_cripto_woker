@@ -25,10 +25,11 @@ import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { toast } from '@/components/ui/sonner';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { LanguageSwitcher } from '@/lib/i18n/LanguageSwitcher';
+import { isUnfilledSimulation } from '@/lib/positions';
 
 export default function AdminDashboardPage() {
   const router = useRouter();
-  const { t, dateLocale } = useLanguage();
+  const { t, dateLocale, formatDate, formatDateTime } = useLanguage();
   const [activeTab, setActiveTab] = useState<'users' | 'invoices' | 'positions' | 'health'>('users');
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -91,7 +92,7 @@ export default function AdminDashboardPage() {
       .order('opened_at', { ascending: false })
       .limit(50);
 
-    if (allPositions) setPositions(allPositions);
+    if (allPositions) setPositions(allPositions.filter((p) => !isUnfilledSimulation(p)));
 
     // Load system health logs
     const { data: health } = await supabase
@@ -523,8 +524,8 @@ export default function AdminDashboardPage() {
                             </div>
                           </td>
                           <td className="px-5 py-4 text-slate-400 text-[11px]">
-                            {new Date(inv.period_start).toLocaleDateString(dateLocale)} –{' '}
-                            {new Date(inv.period_end).toLocaleDateString(dateLocale)}
+                            {formatDate(inv.period_start)} –{' '}
+                            {formatDate(inv.period_end)}
                           </td>
                           <td className="px-5 py-4">
                             <div className="font-bold text-honey-400 text-sm">
@@ -707,7 +708,7 @@ export default function AdminDashboardPage() {
                       </td>
                       <td className="px-5 py-4 text-honey-400 font-bold">{log.latency_ms} ms</td>
                       <td className="px-5 py-4 text-right text-slate-400 text-[11px]">
-                        {new Date(log.pinged_at).toLocaleTimeString(dateLocale)}
+                        {formatDateTime(log.pinged_at)}
                       </td>
                     </tr>
                   ))}

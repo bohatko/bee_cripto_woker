@@ -17,6 +17,7 @@ import {
   RefreshCw,
   Building2,
   ExternalLink,
+  AlertTriangle,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
@@ -24,9 +25,11 @@ import { PanicCloseModal } from '@/components/modals/PanicCloseModal';
 import { TradeReadinessMonitor } from '@/components/dashboard/TradeReadinessMonitor';
 import { toast } from '@/components/ui/sonner';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { isUnfilledSimulation } from '@/lib/positions';
+import { playWarningSound } from '@/lib/sound';
 
 export default function DashboardPage() {
-  const { t, dateLocale } = useLanguage();
+  const { t, dateLocale, formatDateTime } = useLanguage();
   const [positions, setPositions] = useState<any[]>([]);
   const [settings, setSettings] = useState<any>(null);
   const [accounts, setAccounts] = useState<any[]>([]);
@@ -35,6 +38,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const hasAutoSyncedRef = useRef(false);
+  const hasWarnedMarginRef = useRef(false);
 
   // Modals state
   const [isToggleModalOpen, setIsToggleModalOpen] = useState(false);
@@ -85,8 +89,10 @@ export default function DashboardPage() {
       .eq('user_id', user.id)
       .eq('status', 'open');
 
-    if (userPos && userPos.length > 0) {
-      setPositions(userPos);
+    const liveUserPos = (userPos || []).filter((p) => !isUnfilledSimulation(p));
+
+    if (liveUserPos.length > 0) {
+      setPositions(liveUserPos);
       setIsShowingMaster(false);
     } else {
       const { data: masterPos } = await supabase
@@ -108,16 +114,46 @@ export default function DashboardPage() {
 
     setLoading(false);
 
-    // Auto-sync live balances once on initial load if exchanges are validated
-    if (hasValidated && !hasAutoSyncedRef.current) {
-      hasAutoSyncedRef.current = true;
-      handleSyncBalances(false);
+    // Initial check for low free margin
+    const freeMarginSum = currentAccounts.reduce(
+      (sum, a) =>
+        sum +
+        (a.free_balance_usd !== null && a.free_balance_usd !== undefined
+          ? Number(a.free_balance_usd)
+          : Number(a.last_balance_usd) * 0.75),
+      0
+    );
+    const primAcc =
+      currentAccounts.find((a) => a.id === sett?.exchange_account_id) || currentAccounts[0];
+    const isMarginLow =
+      hasValidated &&
+      (freeMarginSum < 20 ||
+        Boolean(
+          primAcc?.last_error_msg &&
+            (primAcc.last_error_msg.toLowerCase().includes('insufficient free') ||
+              primAcc.last_error_msg.toLowerCase().includes('free usdt'))
+        ));
+
+    if (isMarginLow && sett?.is_bot_active && !hasWarnedMarginRef.current) {
+      hasWarnedMarginRef.current = true;
+      playWarningSound();
+      toast.warning(t('dashboard.toastLowMarginTitle'), {
+        description: t('dashboard.toastLowMarginDesc', {
+          free: freeMarginSum.toFixed(2),
+          min: '20.00',
+        }),
+        duration: 9000,
+      });
     }
   }
 
-  async function handleSyncBalances(silent = false) {
+  async function handleSyncBalances(
+    silent = false,
+    opts?: { botActive?: boolean }
+  ) {
     if (syncing) return;
     setSyncing(true);
+    const botActive = opts?.botActive ?? Boolean(settings?.is_bot_active);
     try {
       const {
         data: { session },
@@ -141,14 +177,45 @@ export default function DashboardPage() {
 
       if (res.ok && data?.success && Array.isArray(data.accounts)) {
         setAccounts(data.accounts);
-        const errorAccounts = data.accounts.filter(
-          (a: any) => a.syncStatus === 'error' || a.last_error_msg
+
+        const freeMarginSum = data.accounts.reduce(
+          (sum: number, a: any) =>
+            sum +
+            (a.free_balance_usd !== null && a.free_balance_usd !== undefined
+              ? Number(a.free_balance_usd)
+              : Number(a.last_balance_usd) * 0.75),
+          0
         );
+        const primAcc =
+          data.accounts.find((a: any) => a.id === settings?.exchange_account_id) || data.accounts[0];
+        const isMarginLow =
+          freeMarginSum < 20 ||
+          Boolean(
+            primAcc?.last_error_msg &&
+              (primAcc.last_error_msg.toLowerCase().includes('insufficient free') ||
+                primAcc.last_error_msg.toLowerCase().includes('free usdt'))
+          );
+
         if (!silent) {
-          if (errorAccounts.length > 0 && errorAccounts[0].last_error_msg) {
-            toast.error(t('dashboard.toastSyncError', { msg: errorAccounts[0].last_error_msg }));
+          // Margin warnings only matter while the bot is actively trading
+          if (botActive && isMarginLow) {
+            playWarningSound();
+            toast.warning(t('dashboard.toastLowMarginTitle'), {
+              description: t('dashboard.toastLowMarginDesc', {
+                free: freeMarginSum.toFixed(2),
+                min: '20.00',
+              }),
+              duration: 9000,
+            });
           } else {
-            toast.success(t('dashboard.toastBalancesUpdated'));
+            const errorAccounts = data.accounts.filter(
+              (a: any) => a.syncStatus === 'error' || a.last_error_msg
+            );
+            if (errorAccounts.length > 0 && errorAccounts[0].last_error_msg) {
+              toast.error(t('dashboard.toastSyncError', { msg: errorAccounts[0].last_error_msg }));
+            } else {
+              toast.success(t('dashboard.toastBalancesUpdated'));
+            }
           }
         }
       } else if (!silent) {
@@ -166,11 +233,6 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadDashboardData();
-
-    // Auto-refresh balances silently every 60 seconds while viewing dashboard
-    const syncInterval = setInterval(() => {
-      handleSyncBalances(true);
-    }, 60000);
 
     // Auto-refresh market data every 10 seconds for real-time trade readiness tracking
     const marketInterval = setInterval(async () => {
@@ -215,11 +277,30 @@ export default function DashboardPage() {
       .subscribe();
 
     return () => {
-      clearInterval(syncInterval);
       clearInterval(marketInterval);
       supabase.removeChannel(posChannel);
     };
   }, []);
+
+  // Auto-sync exchange balances every 60s only while trading is active
+  useEffect(() => {
+    if (!settings?.is_bot_active) {
+      hasAutoSyncedRef.current = false;
+      hasWarnedMarginRef.current = false;
+      return;
+    }
+
+    const isFirstSyncAfterStart = !hasAutoSyncedRef.current;
+    hasAutoSyncedRef.current = true;
+    // First sync after start may show margin toast; later interval syncs stay silent
+    handleSyncBalances(!isFirstSyncAfterStart, { botActive: true });
+
+    const syncInterval = setInterval(() => {
+      handleSyncBalances(true, { botActive: true });
+    }, 60000);
+
+    return () => clearInterval(syncInterval);
+  }, [settings?.is_bot_active]);
 
   const totalUnrealizedPnl = positions.reduce(
     (acc, p) => acc + (Number(p.unrealized_pnl_usd) || 0),
@@ -228,12 +309,34 @@ export default function DashboardPage() {
 
   const hasValidatedAccount = accounts.some((a) => a.is_validated);
 
+  const primaryAccount =
+    accounts.find((a) => a.id === settings?.exchange_account_id) || accounts[0];
+
   const totalAggregatedEquity = accounts.reduce(
     (sum, a) => sum + (Number(a.last_balance_usd) || 0),
     0
   );
 
-  const totalAvailableMargin = totalAggregatedEquity * 0.75;
+  const totalFreeMargin = accounts.reduce(
+    (sum, a) =>
+      sum +
+      (a.free_balance_usd !== null && a.free_balance_usd !== undefined
+        ? Number(a.free_balance_usd)
+        : Number(a.last_balance_usd) * 0.75),
+    0
+  );
+
+  const isBotActive = Boolean(settings?.is_bot_active);
+
+  const hasInsufficientMargin =
+    isBotActive &&
+    hasValidatedAccount &&
+    (totalFreeMargin < 20 ||
+      Boolean(
+        primaryAccount?.last_error_msg &&
+          (primaryAccount.last_error_msg.toLowerCase().includes('insufficient free') ||
+            primaryAccount.last_error_msg.toLowerCase().includes('free usdt'))
+      ));
 
   const handleToggleBot = async () => {
     if (!settings) return;
@@ -260,8 +363,10 @@ export default function DashboardPage() {
       setIsToggleModalOpen(false);
 
       if (nextState) {
+        hasWarnedMarginRef.current = false;
         toast.success(t('dashboard.toastBotStarted'));
       } else {
+        hasWarnedMarginRef.current = false;
         toast.info(t('dashboard.toastBotPaused'));
       }
     } catch (err: any) {
@@ -435,6 +540,59 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Insufficient Margin Warning Banner */}
+      {hasInsufficientMargin && (
+        <div className="bg-gradient-to-r from-amber-950/40 via-amber-900/20 to-dark-900 border border-amber-500/40 rounded-2xl p-5 shadow-2xl relative overflow-hidden animate-in fade-in duration-200">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="p-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 shrink-0 mt-0.5">
+                <AlertTriangle className="w-5 h-5 animate-pulse" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-sm font-bold text-white tracking-tight">
+                    {t('dashboard.insufficientMarginTitle')}
+                  </h3>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full font-bold uppercase bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                    {t('dashboard.freeMargin')}: ${totalFreeMargin.toFixed(2)} USDT
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed max-w-3xl">
+                  {t('dashboard.insufficientMarginDesc', {
+                    exchange: (primaryAccount?.exchange || 'exchange').toUpperCase(),
+                    free: totalFreeMargin.toFixed(2),
+                    total: totalAggregatedEquity.toFixed(2),
+                    min: '20.00',
+                    minTotal: '80.00',
+                  })}
+                </p>
+                <p className="text-[11px] text-amber-400 font-medium">
+                  {t('dashboard.insufficientMarginHint')}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-center">
+              <button
+                onClick={() => handleSyncBalances(false)}
+                disabled={syncing}
+                className="px-3.5 py-2 rounded-xl bg-dark-900 border border-dark-700 hover:border-honey-500/40 text-xs font-mono font-medium text-slate-300 hover:text-white transition-colors flex items-center gap-1.5"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin text-honey-400' : ''}`} />
+                <span>{syncing ? t('common.loading') : t('dashboard.syncBalances')}</span>
+              </button>
+              <Link
+                href="/settings/exchange"
+                className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-dark-950 text-xs font-bold font-mono transition-colors flex items-center gap-1"
+              >
+                {t('dashboard.manageExchanges')}
+                <ExternalLink className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Key Financial Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Total Account Equity Card */}
@@ -463,13 +621,25 @@ export default function DashboardPage() {
           </p>
           <div className="mt-2 text-[11px] text-slate-400 font-mono flex items-center justify-between">
             <span>
-              {t('dashboard.availableMargin')}{' '}
-              <span className="text-slate-200 font-semibold">
-                ${totalAvailableMargin.toLocaleString(dateLocale, { minimumFractionDigits: 2 })}
+              {t('dashboard.freeMargin')}:{' '}
+              <span
+                className={`font-semibold ${
+                  totalFreeMargin < 20 ? 'text-rose-400 font-bold' : 'text-emerald-400'
+                }`}
+              >
+                ${totalFreeMargin.toLocaleString(dateLocale, { minimumFractionDigits: 2 })}
               </span>
+              {totalFreeMargin < 20 && (
+                <span className="ml-1 text-[9px] px-1 py-0.2 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                  {t('dashboard.lowMarginBadge')}
+                </span>
+              )}
             </span>
             {accounts.length > 0 ? (
-              <span className="text-[10px] text-emerald-400">{t('dashboard.exchangesCount', { count: accounts.length })}</span>
+              <span className="text-[10px] text-slate-400">
+                {t('dashboard.lockedMargin')}: $
+                {Math.max(0, totalAggregatedEquity - totalFreeMargin).toFixed(2)}
+              </span>
             ) : (
               <Link href="/settings/exchange" className="text-[10px] text-honey-400 hover:underline">
                 {t('dashboard.connect')}
@@ -563,15 +733,36 @@ export default function DashboardPage() {
                       </span>
                     )}
                   </div>
-                  <p className="text-lg font-black font-mono text-white mt-1">
-                    ${Number(acc.last_balance_usd || 0).toLocaleString(dateLocale, {
-                      minimumFractionDigits: 2,
-                    })}{' '}
-                    <span className="text-[10px] text-slate-500 font-normal">USDT</span>
-                  </p>
-                  <p className="text-[10px] text-slate-500 font-mono mt-0.5">
+                  <div className="flex flex-wrap items-baseline gap-2 mt-1 font-mono">
+                    <p className="text-lg font-black text-white">
+                      ${Number(acc.last_balance_usd || 0).toLocaleString(dateLocale, {
+                        minimumFractionDigits: 2,
+                      })}{' '}
+                      <span className="text-[10px] text-slate-500 font-normal">USDT</span>
+                    </p>
+                    <span className="text-xs text-slate-600">•</span>
+                    <p
+                      className={`text-xs font-bold ${
+                        Number(acc.free_balance_usd ?? 0) < 20 ? 'text-rose-400' : 'text-emerald-400'
+                      }`}
+                    >
+                      {t('dashboard.freeMargin')}: $
+                      {Number(acc.free_balance_usd ?? 0).toLocaleString(dateLocale, {
+                        minimumFractionDigits: 2,
+                      })}
+                    </p>
+                  </div>
+                  {acc.last_error_msg && (
+                    <div className="mt-1.5 flex items-start gap-1.5 text-[10px] text-rose-400 font-mono bg-rose-500/10 p-1.5 rounded border border-rose-500/20 max-w-xs">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-rose-400" />
+                      <span className="line-clamp-2" title={acc.last_error_msg}>
+                        {acc.last_error_msg}
+                      </span>
+                    </div>
+                  )}
+                  <p className="text-[10px] text-slate-500 font-mono mt-1">
                     {t('dashboard.synced')}{' '}
-                    {acc.last_sync_at ? new Date(acc.last_sync_at).toLocaleTimeString(dateLocale) : t('common.never')}
+                    {acc.last_sync_at ? formatDateTime(acc.last_sync_at) : t('common.never')}
                   </p>
                 </div>
 
@@ -595,8 +786,10 @@ export default function DashboardPage() {
       <TradeReadinessMonitor
         marketData={marketData}
         positions={positions}
-        isBotActive={Boolean(settings?.is_bot_active)}
+        isBotActive={isBotActive}
         hasValidatedAccount={hasValidatedAccount}
+        freeMargin={totalFreeMargin}
+        hasInsufficientMargin={hasInsufficientMargin}
         onStartBotClick={() => {
           if (!settings?.is_bot_active && !hasValidatedAccount) {
             setIsMissingExchangeModalOpen(true);

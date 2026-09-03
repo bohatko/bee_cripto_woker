@@ -18,6 +18,7 @@ import {
   type Locale,
   type TranslationVars,
 } from './types';
+import { formatDate, formatDateTime, formatTime } from '@/lib/datetime';
 
 const dictionaries: Record<Locale, Dictionary> = { en, ru };
 
@@ -26,6 +27,9 @@ type LanguageContextValue = {
   setLocale: (locale: Locale) => void;
   t: (path: string, vars?: TranslationVars) => string;
   dateLocale: string;
+  formatDate: (value: string | number | Date | null | undefined) => string;
+  formatDateTime: (value: string | number | Date | null | undefined) => string;
+  formatTime: (value: string | number | Date | null | undefined) => string;
 };
 
 const LanguageContext = createContext<LanguageContextValue | null>(null);
@@ -102,6 +106,9 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
       setLocale,
       t,
       dateLocale: locale === 'ru' ? 'ru-RU' : 'en-US',
+      formatDate,
+      formatDateTime,
+      formatTime,
     }),
     [locale, setLocale, t]
   );

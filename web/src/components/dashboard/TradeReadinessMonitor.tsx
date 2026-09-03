@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import {
   Compass,
   TrendingUp,
@@ -14,6 +15,7 @@ import {
   ArrowUpRight,
   ShieldCheck,
   AlertCircle,
+  AlertTriangle,
   Play,
   CheckCircle2,
 } from 'lucide-react';
@@ -38,6 +40,8 @@ export interface TradeReadinessMonitorProps {
   positions: any[];
   isBotActive: boolean;
   hasValidatedAccount: boolean;
+  freeMargin?: number;
+  hasInsufficientMargin?: boolean;
   onStartBotClick?: () => void;
 }
 
@@ -85,6 +89,8 @@ export function TradeReadinessMonitor({
   positions,
   isBotActive,
   hasValidatedAccount,
+  freeMargin = 0,
+  hasInsufficientMargin = false,
   onStartBotClick,
 }: TradeReadinessMonitorProps) {
   const { t } = useLanguage();
@@ -208,10 +214,22 @@ export function TradeReadinessMonitor({
         <div className="flex flex-wrap items-center gap-3">
           {/* Next Trade Highlight Pill */}
           <div className="bg-dark-950 border border-dark-800 px-3.5 py-2 rounded-xl flex items-center gap-2.5">
-            <Zap className={`w-4 h-4 ${readyToEnterPairs.length > 0 ? 'text-emerald-400 animate-pulse' : 'text-honey-400'}`} />
+            <Zap
+              className={`w-4 h-4 ${
+                readyToEnterPairs.length > 0
+                  ? hasInsufficientMargin
+                    ? 'text-amber-400 animate-pulse'
+                    : 'text-emerald-400 animate-pulse'
+                  : 'text-honey-400'
+              }`}
+            />
             <div className="text-left font-mono">
               <div className="text-[10px] text-slate-400 uppercase tracking-wider">
-                {readyToEnterPairs.length > 0 ? t('readiness.signalReady') : t('readiness.closestSetup')}
+                {readyToEnterPairs.length > 0
+                  ? hasInsufficientMargin
+                    ? t('readiness.awaitingMargin')
+                    : t('readiness.signalReady')
+                  : t('readiness.closestSetup')}
               </div>
               <div className="text-xs font-bold text-white flex items-center gap-1.5">
                 {highestReadinessPair ? (
@@ -220,7 +238,9 @@ export function TradeReadinessMonitor({
                     <span
                       className={`text-[11px] px-1.5 py-0.2 rounded ${
                         highestReadinessPair.readinessPct >= 100
-                          ? 'bg-emerald-500/20 text-emerald-400'
+                          ? hasInsufficientMargin
+                            ? 'bg-amber-500/20 text-amber-300'
+                            : 'bg-emerald-500/20 text-emerald-400'
                           : 'bg-honey-500/15 text-honey-400'
                       }`}
                     >
@@ -284,8 +304,30 @@ export function TradeReadinessMonitor({
         </div>
       )}
 
+      {/* Insufficient Margin Warning when Signals Ready */}
+      {readyToEnterPairs.length > 0 && hasInsufficientMargin && isBotActive && (
+        <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in duration-200">
+          <div className="flex items-center gap-2.5 text-xs">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping shrink-0" />
+            <span className="text-amber-200 font-medium">
+              {t('readiness.insufficientMarginAlert', {
+                pairs: readyToEnterPairs.map((p) => p.meta.pairSymbol).join(', '),
+                free: Number(freeMargin || 0).toFixed(2),
+                min: '20.00',
+              })}
+            </span>
+          </div>
+          <Link
+            href="/settings/exchange"
+            className="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-dark-950 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-amber-500/20 shrink-0"
+          >
+            {t('readiness.manageMargin')}
+          </Link>
+        </div>
+      )}
+
       {/* Quick Action Prompt if Signal Ready but Bot is Idle */}
-      {readyToEnterPairs.length > 0 && !isBotActive && (
+      {readyToEnterPairs.length > 0 && !isBotActive && !hasInsufficientMargin && (
         <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 text-xs">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
@@ -333,10 +375,17 @@ export function TradeReadinessMonitor({
             barBg = 'from-emerald-600 to-teal-400';
             statusText = t('readiness.activeTrade');
           } else if (readinessPct >= 100 || isInTrend) {
-            badgeText = t('readiness.signalActive');
-            badgeBg = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 animate-pulse';
-            barBg = 'from-emerald-500 to-green-400';
-            statusText = isBotActive ? t('readiness.readyAwaiting') : t('readiness.readyIdle');
+            if (hasInsufficientMargin) {
+              badgeText = t('readiness.awaitingMargin');
+              badgeBg = 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse';
+              barBg = 'from-amber-600 to-yellow-400';
+              statusText = t('readiness.awaitingMargin');
+            } else {
+              badgeText = t('readiness.signalActive');
+              badgeBg = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 animate-pulse';
+              barBg = 'from-emerald-500 to-green-400';
+              statusText = isBotActive ? t('readiness.readyAwaiting') : t('readiness.readyIdle');
+            }
           } else if (readinessPct < 80) {
             badgeText = t('readiness.accumulating', { pct: readinessPct });
             badgeBg = 'bg-dark-800 text-slate-400 border-dark-700';

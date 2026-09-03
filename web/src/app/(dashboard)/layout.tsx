@@ -17,6 +17,7 @@ import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { toast } from '@/components/ui/sonner';
 import { LanguageSwitcher } from '@/lib/i18n/LanguageSwitcher';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { playTradeOpenSound } from '@/lib/sound';
 
 export default function DashboardLayout({
   children,
@@ -51,6 +52,60 @@ export default function DashboardLayout({
     }
     loadUser();
   }, [router]);
+
+  // Real-time listener for new trade executions with Sound & Sonner Toast
+  useEffect(() => {
+    if (!user) return;
+
+    const notifiedPosIds = new Set<string>();
+
+    const channel = supabase
+      .channel(`realtime_trade_alerts_${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'bot_positions',
+        },
+        (payload: any) => {
+          const newPos = payload.new;
+          if (!newPos || newPos.status !== 'open') return;
+
+          const isUserPos = newPos.user_id === user.id;
+          const isMaster = Boolean(newPos.is_master);
+
+          if (!isUserPos && !isMaster) return;
+          if (notifiedPosIds.has(newPos.id)) return;
+          notifiedPosIds.add(newPos.id);
+
+          // Audio chime
+          playTradeOpenSound();
+
+          // Sonner toast notification
+          const pairSymbol = newPos.pair_symbol || '';
+          const [longCoin, shortCoin] = pairSymbol.split('/');
+          const shortTradeId = String(newPos.id || '').slice(0, 8).toUpperCase();
+
+          toast.success(
+            t('dashboard.toastTradeOpened', { pair: pairSymbol, id: shortTradeId }),
+            {
+              description: t('dashboard.toastTradeOpenedDesc', {
+                long: longCoin || 'LONG',
+                short: shortCoin || 'SHORT',
+                leverage: '7.0',
+              }),
+              duration: 8000,
+            }
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, t]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();

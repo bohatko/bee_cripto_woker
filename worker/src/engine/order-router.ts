@@ -3,8 +3,13 @@ import { BotPosition, ExchangeAccount, ExitReasonType, TradingSettings, UserProf
 import { MarketSignal } from './market-scanner.js';
 import { createExchangeInstance } from '../exchanges/exchange-factory.js';
 import { getExchangeSymbol } from '../exchanges/symbols.js';
+import { extractUsdtBalance, isUnfilledSimulation, MIN_SLOT_MARGIN_USD } from '../exchanges/balance.js';
+
+const SKIP_LOG_COOLDOWN_MS = 60_000;
 
 export class OrderRouter {
+  private lastSkipLogAt = new Map<string, number>();
+
   /**
    * Handle entry signal:
    * 1. ALWAYS ensures master platform trade is opened and recorded in DB (regardless of user count)
@@ -163,35 +168,52 @@ export class OrderRouter {
     try {
       const exchangeClient = createExchangeInstance(account);
 
-      // Fetch current free balance
       const balance = await exchangeClient.fetchBalance({ type: 'future' });
-      const freeUsdt = Number(balance.free?.USDT || balance.total?.USDT || account.last_balance_usd || 1000);
-      const totalUsdt = Number(balance.total?.USDT || balance.USDT?.total || 0);
+      const { free: freeUsdt, total: totalUsdt } = extractUsdtBalance(balance);
+      const equityUsdt = totalUsdt > 0 ? totalUsdt : freeUsdt;
 
-      // Keep DB synchronized with live exchange balance
-      if (totalUsdt > 0) {
+      if (equityUsdt > 0 || freeUsdt >= 0) {
         await supabase
           .from('exchange_accounts')
           .update({
-            last_balance_usd: totalUsdt,
+            last_balance_usd: equityUsdt,
+            free_balance_usd: freeUsdt,
             last_sync_at: new Date().toISOString(),
           })
           .eq('id', account.id);
       }
 
-      // 4 pairs in basket => 25% of free capital allocated per pair
-      const slotMargin = Math.max(10, freeUsdt * 0.25);
+      // 4 pairs in basket => 25% of FREE (not occupied) USDT margin per pair
+      const slotMargin = freeUsdt * 0.25;
+      if (!Number.isFinite(freeUsdt) || slotMargin < MIN_SLOT_MARGIN_USD) {
+        await this.skipEntry(
+          user,
+          account,
+          pairSymbol,
+          `Insufficient free USDT futures margin to open ${pairSymbol}. Free: $${freeUsdt.toFixed(2)}, occupied equity: $${equityUsdt.toFixed(2)}. New entries are skipped until free margin is available.`
+        );
+        return;
+      }
+
       const leverage = Number(settings.effective_leverage || 7.0);
       const totalVolume = slotMargin * leverage;
-      const legVolume = totalVolume / 2; // Half in Long, half in Short
+      const legVolume = totalVolume / 2;
 
       const longQty = Number((legVolume / signal.longPrice).toFixed(4));
       const shortQty = Number((legVolume / signal.shortPrice).toFixed(4));
+      if (longQty <= 0 || shortQty <= 0) {
+        await this.skipEntry(
+          user,
+          account,
+          pairSymbol,
+          `Calculated order size is zero for ${pairSymbol} (free margin $${freeUsdt.toFixed(2)}).`
+        );
+        return;
+      }
 
       const longSym = getExchangeSymbol(signal.pairConfig.longCoin, account.exchange);
       const shortSym = getExchangeSymbol(signal.pairConfig.shortCoin, account.exchange);
 
-      // Set leverage on exchange if supported
       try {
         if (exchangeClient.has['setLeverage']) {
           await exchangeClient.setLeverage(leverage, longSym).catch(() => {});
@@ -199,22 +221,47 @@ export class OrderRouter {
         }
       } catch {}
 
-      // Execute orders concurrently
-      let longOrderId = 'sim-long-' + Date.now();
-      let shortOrderId = 'sim-short-' + Date.now();
+      const [longResult, shortResult] = await Promise.allSettled([
+        exchangeClient.createMarketBuyOrder(longSym, longQty),
+        exchangeClient.createMarketSellOrder(shortSym, shortQty),
+      ]);
 
-      try {
-        const [longOrder, shortOrder] = await Promise.all([
-          exchangeClient.createMarketBuyOrder(longSym, longQty),
-          exchangeClient.createMarketSellOrder(shortSym, shortQty),
-        ]);
-        longOrderId = longOrder.id;
-        shortOrderId = shortOrder.id;
-      } catch (orderErr: any) {
-        console.warn(`⚠️ Exchange order error (falling back to simulated record): ${orderErr.message}`);
+      if (longResult.status !== 'fulfilled' || shortResult.status !== 'fulfilled') {
+        if (longResult.status === 'fulfilled') {
+          await exchangeClient.createMarketSellOrder(longSym, longQty).catch((unwindErr: any) => {
+            console.error(`❌ Failed to unwind LONG after partial fill on ${pairSymbol}: ${unwindErr.message}`);
+          });
+        }
+        if (shortResult.status === 'fulfilled') {
+          await exchangeClient.createMarketBuyOrder(shortSym, shortQty).catch((unwindErr: any) => {
+            console.error(`❌ Failed to unwind SHORT after partial fill on ${pairSymbol}: ${unwindErr.message}`);
+          });
+        }
+
+        const longErr = longResult.status === 'rejected' ? String(longResult.reason?.message || longResult.reason) : null;
+        const shortErr = shortResult.status === 'rejected' ? String(shortResult.reason?.message || shortResult.reason) : null;
+        const reason = [longErr, shortErr].filter(Boolean).join(' | ') || 'Exchange rejected one or both legs';
+        await this.skipEntry(
+          user,
+          account,
+          pairSymbol,
+          `Exchange rejected ${pairSymbol} live orders (no fill recorded): ${reason}`
+        );
+        return;
       }
 
-      // Record position in database
+      const longOrderId = longResult.value?.id;
+      const shortOrderId = shortResult.value?.id;
+      if (!longOrderId || !shortOrderId) {
+        await this.skipEntry(
+          user,
+          account,
+          pairSymbol,
+          `Exchange returned an empty order id for ${pairSymbol}. Position was not recorded.`
+        );
+        return;
+      }
+
       const newPosition: Partial<BotPosition> = {
         user_id: user.id,
         exchange_account_id: account.id,
@@ -223,11 +270,11 @@ export class OrderRouter {
         entry_ratio: signal.currentRatio,
         current_ratio: signal.currentRatio,
         long_symbol: longSym,
-        long_order_id: longOrderId,
+        long_order_id: String(longOrderId),
         long_entry_price: signal.longPrice,
         long_qty: longQty,
         short_symbol: shortSym,
-        short_order_id: shortOrderId,
+        short_order_id: String(shortOrderId),
         short_entry_price: signal.shortPrice,
         short_qty: shortQty,
         allocated_margin_usd: slotMargin,
@@ -241,10 +288,14 @@ export class OrderRouter {
       if (insertErr) {
         console.error('❌ Failed to insert bot_position:', insertErr.message);
       } else {
-        console.log(`✅ [ENTRY SUCCESS] ${pairSymbol} opened for ${user.email} (Margin: $${slotMargin.toFixed(2)}, Vol: $${totalVolume.toFixed(2)})`);
+        await this.clearAccountError(account.id);
+        console.log(
+          `✅ [ENTRY SUCCESS] ${pairSymbol} opened for ${user.email} (Margin: $${slotMargin.toFixed(2)}, Vol: $${totalVolume.toFixed(2)})`
+        );
       }
     } catch (err: any) {
       console.error(`❌ Failed to execute pair entry for ${user.email}:`, err.message);
+      await this.recordAccountError(account.id, err.message || 'Failed to execute pair entry');
     }
   }
 
@@ -260,27 +311,39 @@ export class OrderRouter {
   ) {
     console.log(`🚨 [EXIT] Closing ${position.pair_symbol} (ID: ${position.id}) Reason: ${reason}...`);
 
+    if (isUnfilledSimulation(position)) {
+      const { error } = await supabase.from('bot_positions').delete().eq('id', position.id);
+      if (error) {
+        console.error(`❌ Failed to discard unfilled simulated position ${position.id}:`, error.message);
+      } else {
+        console.warn(`🗑️ Discarded unfilled simulated position ${position.pair_symbol} (${position.id}) — never filled on exchange`);
+      }
+      return;
+    }
+
     try {
       const exchangeClient = createExchangeInstance(account);
 
-      // Close orders: sell long, buy short
-      try {
-        await Promise.all([
-          exchangeClient.createMarketSellOrder(position.long_symbol, position.long_qty),
-          exchangeClient.createMarketBuyOrder(position.short_symbol, position.short_qty),
-        ]);
-      } catch (err: any) {
-        console.warn(`⚠️ Exchange close order warning: ${err.message}`);
+      const [sellLong, buyShort] = await Promise.allSettled([
+        exchangeClient.createMarketSellOrder(position.long_symbol, position.long_qty),
+        exchangeClient.createMarketBuyOrder(position.short_symbol, position.short_qty),
+      ]);
+
+      if (sellLong.status !== 'fulfilled' || buyShort.status !== 'fulfilled') {
+        const sellErr = sellLong.status === 'rejected' ? String(sellLong.reason?.message || sellLong.reason) : null;
+        const buyErr = buyShort.status === 'rejected' ? String(buyShort.reason?.message || buyShort.reason) : null;
+        const reasonText = [sellErr, buyErr].filter(Boolean).join(' | ') || 'Exchange rejected close orders';
+        console.error(`❌ [EXIT ABORTED] ${position.pair_symbol} not marked closed: ${reasonText}`);
+        await this.recordAccountError(account.id, `Failed to close ${position.pair_symbol}: ${reasonText}`);
+        return;
       }
 
-      // Calculate realized PnL
       const longPnl = (currentLongPrice - position.long_entry_price) * position.long_qty;
       const shortPnl = (position.short_entry_price - currentShortPrice) * position.short_qty;
       const totalPnlUsd = longPnl + shortPnl;
       const pnlPct = (totalPnlUsd / position.allocated_margin_usd) * 100;
       const exitRatio = currentLongPrice / currentShortPrice;
 
-      // Update position in database
       const { error } = await supabase
         .from('bot_positions')
         .update({
@@ -298,10 +361,38 @@ export class OrderRouter {
       if (error) {
         console.error(`❌ DB error updating closed position ${position.id}:`, error.message);
       } else {
-        console.log(`🏁 [EXIT CLOSED] ${position.pair_symbol} PnL: $${totalPnlUsd.toFixed(2)} (${pnlPct.toFixed(2)}%) Reason: ${reason}`);
+        await this.clearAccountError(account.id);
+        console.log(
+          `🏁 [EXIT CLOSED] ${position.pair_symbol} PnL: $${totalPnlUsd.toFixed(2)} (${pnlPct.toFixed(2)}%) Reason: ${reason}`
+        );
       }
     } catch (err: any) {
       console.error(`❌ Failed to close position ${position.id}:`, err.message);
+      await this.recordAccountError(account.id, err.message || 'Failed to close position');
     }
+  }
+
+  private async skipEntry(user: UserProfile, account: ExchangeAccount, pairSymbol: string, message: string) {
+    await this.recordAccountError(account.id, message);
+    const key = `${user.id}:${pairSymbol}`;
+    const now = Date.now();
+    const last = this.lastSkipLogAt.get(key) || 0;
+    if (now - last < SKIP_LOG_COOLDOWN_MS) return;
+    this.lastSkipLogAt.set(key, now);
+    console.warn(`⏭️ [ENTRY SKIPPED] ${user.email} ${pairSymbol}: ${message}`);
+  }
+
+  private async recordAccountError(accountId: string, message: string) {
+    await supabase
+      .from('exchange_accounts')
+      .update({
+        last_error_msg: message.slice(0, 500),
+        last_sync_at: new Date().toISOString(),
+      })
+      .eq('id', accountId);
+  }
+
+  private async clearAccountError(accountId: string) {
+    await supabase.from('exchange_accounts').update({ last_error_msg: null }).eq('id', accountId);
   }
 }

@@ -31,6 +31,7 @@ interface ExchangeAccountItem {
   can_withdraw: boolean;
   can_trade_futures: boolean;
   last_balance_usd: number;
+  free_balance_usd?: number | null;
   last_sync_at: string | null;
   last_error_msg: string | null;
 }
@@ -42,7 +43,7 @@ interface TradingSettingsItem {
 }
 
 export default function ExchangeSettingsPage() {
-  const { t, dateLocale } = useLanguage();
+  const { t, dateLocale, formatDateTime } = useLanguage();
   const [selectedExchange, setSelectedExchange] = useState<'binance' | 'okx' | 'bybit'>('binance');
   const [apiKey, setApiKey] = useState('');
   const [apiSecret, setApiSecret] = useState('');
@@ -598,16 +599,43 @@ export default function ExchangeSettingsPage() {
                   <span className="text-[10px] text-slate-400 uppercase font-medium tracking-wider">
                     {t('exchange.futuresBalance')}
                   </span>
-                  <p className="text-2xl font-black text-white font-mono mt-1">
-                    ${Number(currentTabAccount.last_balance_usd || 0).toLocaleString(dateLocale, {
-                      minimumFractionDigits: 2,
-                    })}{' '}
-                    <span className="text-xs text-slate-500 font-normal">USDT</span>
-                  </p>
-                  <p className="text-[10px] text-slate-500 font-mono mt-1.5">
+                  <div className="flex flex-wrap items-baseline gap-3 mt-1 font-mono">
+                    <div>
+                      <span className="text-[10px] text-slate-400 block">{t('dashboard.totalEquity')}:</span>
+                      <p className="text-xl font-black text-white">
+                        ${Number(currentTabAccount.last_balance_usd || 0).toLocaleString(dateLocale, {
+                          minimumFractionDigits: 2,
+                        })}{' '}
+                        <span className="text-[10px] text-slate-500 font-normal">USDT</span>
+                      </p>
+                    </div>
+                    <div className="border-l border-dark-800 pl-3">
+                      <span className="text-[10px] text-slate-400 block">{t('dashboard.freeMargin')}:</span>
+                      <p
+                        className={`text-xl font-black ${
+                          Number(currentTabAccount.free_balance_usd ?? 0) < 20
+                            ? 'text-rose-400'
+                            : 'text-emerald-400'
+                        }`}
+                      >
+                        ${Number(currentTabAccount.free_balance_usd ?? 0).toLocaleString(dateLocale, {
+                          minimumFractionDigits: 2,
+                        })}{' '}
+                        <span className="text-[10px] text-slate-500 font-normal">USDT</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  {Number(currentTabAccount.free_balance_usd ?? 0) < 20 && (
+                    <div className="mt-2 flex items-center gap-1.5 text-[10px] text-rose-300 bg-rose-500/10 px-2 py-1 rounded border border-rose-500/20 font-mono">
+                      <span>⚠️ {t('dashboard.toastLowMarginTitle')}: &lt; $20.00 USDT</span>
+                    </div>
+                  )}
+
+                  <p className="text-[10px] text-slate-500 font-mono mt-2">
                     {t('exchange.lastSynced')}{' '}
                     {currentTabAccount.last_sync_at
-                      ? new Date(currentTabAccount.last_sync_at).toLocaleTimeString(dateLocale)
+                      ? formatDateTime(currentTabAccount.last_sync_at)
                       : t('common.never')}
                   </p>
                 </div>
@@ -630,9 +658,9 @@ export default function ExchangeSettingsPage() {
                   </div>
 
                   {currentTabAccount.last_error_msg && (
-                    <p className="text-[11px] text-rose-400 font-mono mt-2 line-clamp-2">
+                    <div className="mt-2 p-2 rounded bg-rose-500/10 border border-rose-500/20 text-[11px] text-rose-400 font-mono">
                       ⚠️ {currentTabAccount.last_error_msg}
-                    </p>
+                    </div>
                   )}
                 </div>
               </div>

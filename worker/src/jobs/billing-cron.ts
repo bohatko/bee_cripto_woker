@@ -57,15 +57,18 @@ export class BillingCronJob {
     // Calculate realized PnL in the last 7 days
     const { data: closedPositions } = await supabase
       .from('bot_positions')
-      .select('realized_pnl_usd')
+      .select('realized_pnl_usd, long_order_id, short_order_id')
       .eq('user_id', user.id)
       .eq('status', 'closed')
       .gte('closed_at', periodStart.toISOString());
 
-    const realizedProfit = (closedPositions || []).reduce(
-      (sum, p) => sum + (Number(p.realized_pnl_usd) || 0),
-      0
-    );
+    const realizedProfit = (closedPositions || [])
+      .filter((p) => {
+        const longId = String(p.long_order_id || '');
+        const shortId = String(p.short_order_id || '');
+        return !longId.startsWith('sim-') && !shortId.startsWith('sim-');
+      })
+      .reduce((sum, p) => sum + (Number(p.realized_pnl_usd) || 0), 0);
 
     const baseFee = 20.0;
     // 10% fee on net profit above HWM

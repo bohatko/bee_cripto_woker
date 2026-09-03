@@ -1,14 +1,18 @@
 import { supabase, CONFIG } from '../config.js';
-import { BotPosition, ExchangeAccount, TradingSettings } from '../types/index.js';
+import { BotPosition, ExchangeAccount } from '../types/index.js';
 import { OrderRouter } from './order-router.js';
+import { MarketScanner } from './market-scanner.js';
+import { isUnfilledSimulation } from '../exchanges/balance.js';
 
 export class PositionGuard {
   private orderRouter: OrderRouter;
+  private scanner: MarketScanner;
   private timer: NodeJS.Timeout | null = null;
   private checkIntervalMs: number;
 
-  constructor(orderRouter: OrderRouter, checkIntervalMs: number = 5000) {
+  constructor(orderRouter: OrderRouter, scanner: MarketScanner, checkIntervalMs: number = 5000) {
     this.orderRouter = orderRouter;
+    this.scanner = scanner;
     this.checkIntervalMs = checkIntervalMs;
   }
 
@@ -35,6 +39,18 @@ export class PositionGuard {
     for (const pos of openPositions as any[]) {
       const position: BotPosition = pos;
       const account: ExchangeAccount = pos.exchange_accounts;
+
+      if (!position.is_master && isUnfilledSimulation(position)) {
+        await this.orderRouter.executePairExit(
+          position,
+          account,
+          'admin_close',
+          Number(position.long_entry_price),
+          Number(position.short_entry_price)
+        );
+        continue;
+      }
+
       const market = marketMap.get(position.pair_symbol);
 
       if (!market) continue;
@@ -42,7 +58,6 @@ export class PositionGuard {
       const currentLongPrice = Number(market.long_price);
       const currentShortPrice = Number(market.short_price);
       const currentRatio = Number(market.current_ratio);
-      const isTrendActive = Boolean(market.is_in_trend);
 
       // Calculate current unrealized PnL
       const longPnl = (currentLongPrice - position.long_entry_price) * position.long_qty;
@@ -68,8 +83,8 @@ export class PositionGuard {
       } else if (netPnlPct <= -CONFIG.stopLossPct) {
         console.log(`🛡️ [SL TRIGGERED] ${position.pair_symbol} PnL: ${netPnlPct.toFixed(2)}% <= -${CONFIG.stopLossPct}%`);
         exitReason = 'sl';
-      } else if (!isTrendActive) {
-        console.log(`🔄 [TREND FLIP TRIGGERED] ${position.pair_symbol} Ratio dropped below EMA10`);
+      } else if (this.scanner.isClosedFourHourBelowEma(position.pair_symbol)) {
+        console.log(`🔄 [TREND FLIP TRIGGERED] ${position.pair_symbol} last closed 4h ratio dropped below EMA10`);
         exitReason = 'trend_flip';
       }
 

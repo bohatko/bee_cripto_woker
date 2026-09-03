@@ -24,9 +24,10 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { isUnfilledSimulation, resolveRealizedPnl } from '@/lib/positions';
 
 export default function HistoryPage() {
-  const { t, dateLocale } = useLanguage();
+  const { t, dateLocale, formatDateTime } = useLanguage();
   const [activeTab, setActiveTab] = useState<'all' | 'user' | 'master'>('all');
   const [selectedPair, setSelectedPair] = useState<string>('ALL');
   const [masterPositions, setMasterPositions] = useState<any[]>([]);
@@ -63,7 +64,7 @@ export default function HistoryPage() {
           .eq('status', 'closed')
           .order('closed_at', { ascending: false });
 
-        if (userData) setUserPositions(userData);
+        if (userData) setUserPositions(userData.filter((p) => !isUnfilledSimulation(p)));
 
         // Fetch user's active exchange accounts for balance display
         const { data: userAccounts } = await supabase
@@ -102,7 +103,7 @@ export default function HistoryPage() {
       : currentList.filter((p) => p.pair_symbol === selectedPair);
 
   const totalRealizedPnl = filteredPositions.reduce(
-    (acc, p) => acc + (Number(p.realized_pnl_usd) || 0),
+    (acc, p) => acc + resolveRealizedPnl(p).pnlUsd,
     0
   );
 
@@ -111,7 +112,7 @@ export default function HistoryPage() {
     0
   );
 
-  const winningTrades = filteredPositions.filter((p) => Number(p.realized_pnl_usd) > 0);
+  const winningTrades = filteredPositions.filter((p) => resolveRealizedPnl(p).pnlUsd > 0);
   const winrate =
     filteredPositions.length > 0
       ? ((winningTrades.length / filteredPositions.length) * 100).toFixed(1)
@@ -142,7 +143,7 @@ export default function HistoryPage() {
     let peakEq = runningEq;
 
     for (const trade of chronologicalList) {
-      runningEq += Number(trade.realized_pnl_usd) || 0;
+      runningEq += resolveRealizedPnl(trade).pnlUsd;
       if (runningEq > peakEq) {
         peakEq = runningEq;
       }
@@ -537,9 +538,9 @@ export default function HistoryPage() {
               </thead>
               <tbody className="divide-y divide-dark-800 font-mono text-xs">
                 {filteredPositions.map((pos) => {
-                  const pnl = Number(pos.realized_pnl_usd) || 0;
-                  const pnlPct = Number(pos.pnl_pct) || 0;
+                  const { pnlUsd: pnl, pnlPct } = resolveRealizedPnl(pos);
                   const isUserTrade = !pos.is_master && Boolean(pos.user_id);
+                  const isSimulated = isUnfilledSimulation(pos);
                   const exchangeName =
                     pos.exchange_accounts?.exchange?.toUpperCase() ||
                     (isUserTrade ? 'EXCHANGE' : 'MASTER');
@@ -565,8 +566,12 @@ export default function HistoryPage() {
                               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                               {t('history.myAccountBadge', { exchange: exchangeName })}
                             </span>
-                            <div className="text-[10px] text-emerald-400/80 mt-1 font-semibold">
-                              {t('history.liveApi')}
+                            <div
+                              className={`text-[10px] mt-1 font-semibold ${
+                                isSimulated ? 'text-rose-400' : 'text-emerald-400/80'
+                              }`}
+                            >
+                              {isSimulated ? t('history.notFilled') : t('history.liveApi')}
                             </div>
                           </div>
                         ) : (
@@ -634,16 +639,19 @@ export default function HistoryPage() {
                           </span>
                         </div>
                         <div className="text-[10px] text-slate-500">
-                          L: ${Number(pos.long_entry_price).toFixed(2)} | S: ${Number(pos.short_entry_price).toFixed(2)}
+                          L: ${Number(pos.long_entry_price).toFixed(2)} → ${Number(pos.long_exit_price || pos.long_entry_price).toFixed(2)}
+                        </div>
+                        <div className="text-[10px] text-slate-500">
+                          S: ${Number(pos.short_entry_price).toFixed(2)} → ${Number(pos.short_exit_price || pos.short_entry_price).toFixed(2)}
                         </div>
                       </td>
 
                       {/* Column 6: Execution Dates */}
                       <td className="px-5 py-4 text-slate-400 text-[11px]">
-                        <div>{t('history.in')} {new Date(pos.opened_at).toLocaleDateString(dateLocale)}</div>
+                        <div>{t('history.in')} {formatDateTime(pos.opened_at)}</div>
                         {pos.closed_at && (
                           <div className="text-slate-500 text-[10px]">
-                            {t('history.out')} {new Date(pos.closed_at).toLocaleDateString(dateLocale)}
+                            {t('history.out')} {formatDateTime(pos.closed_at)}
                           </div>
                         )}
                       </td>

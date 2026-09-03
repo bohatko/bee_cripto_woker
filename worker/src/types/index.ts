@@ -37,6 +37,7 @@ export interface ExchangeAccount {
   can_withdraw: boolean;
   can_trade_futures: boolean;
   last_balance_usd: number;
+  free_balance_usd?: number | null;
   last_error_msg: string | null;
   last_sync_at: string | null;
 }

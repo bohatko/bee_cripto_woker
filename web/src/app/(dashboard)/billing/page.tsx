@@ -17,7 +17,7 @@ import { toast } from '@/components/ui/sonner';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 export default function BillingPage() {
-  const { t, dateLocale } = useLanguage();
+  const { t, dateLocale, formatDate } = useLanguage();
   const [profile, setProfile] = useState<any>(null);
   const [invoices, setInvoices] = useState<any[]>([]);
   const [selectedNetwork, setSelectedNetwork] = useState<'TRC20' | 'BEP20'>('TRC20');
@@ -120,9 +120,9 @@ export default function BillingPage() {
             </span>
             <span className="text-xs text-slate-400 font-mono">
               {profile?.subscription_status === 'trial'
-                ? t('billing.trialUntil', { date: new Date(profile?.trial_end_at || Date.now()).toLocaleDateString(dateLocale) })
+                ? t('billing.trialUntil', { date: formatDate(profile?.trial_end_at || Date.now()) })
                 : profile?.subscription_paid_until
-                ? t('billing.paidUntil', { date: new Date(profile.subscription_paid_until).toLocaleDateString(dateLocale) })
+                ? t('billing.paidUntil', { date: formatDate(profile.subscription_paid_until) })
                 : t('billing.paymentPending')}
             </span>
           </div>
@@ -148,8 +148,8 @@ export default function BillingPage() {
                 </h2>
               </div>
               <p className="text-xs text-slate-400 mt-1">
-                {t('billing.period')} {new Date(activeInvoice.period_start).toLocaleDateString(dateLocale)} –{' '}
-                {new Date(activeInvoice.period_end).toLocaleDateString(dateLocale)}
+                {t('billing.period')} {formatDate(activeInvoice.period_start)} –{' '}
+                {formatDate(activeInvoice.period_end)}
               </p>
             </div>
 
