@@ -150,11 +150,11 @@ export default function HistoryPage() {
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
                   Master Bot Strategy
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-honey-500/20 text-honey-400 font-bold">
-                    $50,000 BASE
+                    COMPOUNDING ($50k BASE)
                   </span>
                 </h3>
                 <span className="text-[11px] font-mono text-slate-400">
-                  {masterPositions.length} historical trades • $87,500 trade volume per pair
+                  {masterPositions.length} historical trades • Full 100% reinvestment model
                 </span>
               </div>
             </div>
@@ -167,7 +167,7 @@ export default function HistoryPage() {
             </span>
           </div>
           <p className="mt-3 text-xs text-slate-300 leading-relaxed">
-            Autonomous multi-pair market-neutral signals calculated from a standard $50,000 reference capital ($12,500 margin × 7x leverage = $87,500 position size per basket slot).
+            Autonomous multi-pair market-neutral signals calculated from a $50,000 reference capital with 100% profit compounding after every trade, growing position sizes dynamically up to $1M+ portfolio equity.
           </p>
         </div>
 
@@ -267,14 +267,14 @@ export default function HistoryPage() {
 
         <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
           <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
-            <span>Trade Volume / Slot</span>
+            <span>Compounded Equity</span>
             <Scale className="w-3.5 h-3.5 text-honey-400" />
           </div>
           <p className="text-xl font-black text-honey-400 font-mono mt-1">
-            $87,500.00
+            ${(BOT_STARTING_BALANCE + totalRealizedPnl).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
           <span className="text-[11px] text-slate-500 font-mono">
-            $12,500 margin × 7.0x leverage
+            $50k base + 100% reinvestment
           </span>
         </div>
 

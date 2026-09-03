@@ -79,6 +79,9 @@ function simulatePairHistory(
 
   const trades: any[] = [];
   let inPos: any = null;
+  // Dynamic slot balance with full profit reinvestment / compounding
+  // Starting reference margin: $12,500 ($50,000 / 4 pairs)
+  let slotBalance = 12500;
 
   for (let i = 1; i < matched.length; i++) {
     const curr = matched[i];
@@ -87,11 +90,11 @@ function simulatePairHistory(
     if (!inPos) {
       // Entry: Ratio crosses above EMA 10 or current ratio > EMA 10
       if (curr.ratio > curr.ema && prev.ratio <= prev.ema) {
-        // Starting balance: $50,000 -> 4 slots = $12,500 margin per slot, 7x leverage = $87,500 position volume
-        const margin = 12500;
+        // Compounded margin grows with every profitable trade in this slot
+        const margin = Number(slotBalance.toFixed(2));
         const lev = 7.0;
-        const vol = margin * lev; // 87,500 USDT
-        const legVol = vol / 2; // 43,750 USDT per leg
+        const vol = Number((margin * lev).toFixed(2));
+        const legVol = vol / 2;
 
         inPos = {
           is_master: true,
@@ -173,6 +176,9 @@ function simulatePairHistory(
           pnl_pct: Number(finalPnlPct.toFixed(2)),
           exit_reason: exitReason,
         });
+
+        // Reinvest profit / deduct loss into slot balance for true compounding:
+        slotBalance += realizedPnl;
         inPos = null;
       } else {
         // Still open, update unrealized pnl

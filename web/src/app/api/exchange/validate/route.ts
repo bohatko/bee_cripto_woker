@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { exchange, apiKey, apiSecret, passphrase, accountName } = body;
+    const { exchange, apiKey, apiSecret, passphrase, accountName, isPrimary } = body;
 
     if (!exchange || !apiKey || !apiSecret) {
       return NextResponse.json(
@@ -91,18 +91,34 @@ export async function POST(request: Request) {
       );
     }
 
-    // Link account to trading_settings if currently empty
+    // Link account to trading_settings if currently empty or explicitly requested as primary
     const { data: settings } = await supabase
       .from('trading_settings')
-      .select('exchange_account_id')
+      .select('id, exchange_account_id')
       .eq('user_id', user.id)
       .maybeSingle();
 
-    if (settings && !settings.exchange_account_id && savedAccount) {
-      await supabase
-        .from('trading_settings')
-        .update({ exchange_account_id: savedAccount.id })
-        .eq('user_id', user.id);
+    const shouldSetPrimary =
+      isPrimary === true ||
+      !settings ||
+      !settings.exchange_account_id;
+
+    if (savedAccount && shouldSetPrimary) {
+      if (settings) {
+        await supabase
+          .from('trading_settings')
+          .update({ exchange_account_id: savedAccount.id })
+          .eq('user_id', user.id);
+      } else {
+        await supabase
+          .from('trading_settings')
+          .insert({
+            user_id: user.id,
+            exchange_account_id: savedAccount.id,
+            is_bot_active: false,
+            effective_leverage: 7.0,
+          });
+      }
     }
 
     return NextResponse.json({
