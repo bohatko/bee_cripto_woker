@@ -83,11 +83,21 @@ export default function ExchangeSettingsPage() {
         last_sync_at: new Date().toISOString(),
       };
 
-      const { error } = await supabase
+      const { data: savedAccount, error } = await supabase
         .from('exchange_accounts')
-        .upsert(record, { onConflict: 'user_id, exchange' });
+        .upsert(record, { onConflict: 'user_id, exchange' })
+        .select()
+        .single();
 
       if (error) throw error;
+
+      // Link exchange account to trading_settings
+      if (savedAccount) {
+        await supabase
+          .from('trading_settings')
+          .update({ exchange_account_id: savedAccount.id })
+          .eq('user_id', user.id);
+      }
 
       setStatusMsg({
         type: 'success',
@@ -109,12 +119,23 @@ export default function ExchangeSettingsPage() {
 
   const handleDeleteAccount = async () => {
     if (!currentAccount) return;
+    const { data: { user } } = await supabase.auth.getUser();
+
     await supabase.from('exchange_accounts').delete().eq('id', currentAccount.id);
+
+    // Unlink and disable bot in trading_settings
+    if (user) {
+      await supabase
+        .from('trading_settings')
+        .update({ exchange_account_id: null, is_bot_active: false })
+        .eq('user_id', user.id);
+    }
+
     setCurrentAccount(null);
     setIsDeleteModalOpen(false);
     setStatusMsg({
       type: 'success',
-      text: 'API keys removed completely from database.',
+      text: 'API keys removed completely from database. Autonomous trading disabled.',
     });
   };
 

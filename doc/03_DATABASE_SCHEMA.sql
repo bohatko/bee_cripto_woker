@@ -215,12 +215,15 @@ CREATE INDEX IF NOT EXISTS idx_health_component_time ON public.system_health_log
 -- ТРИГГЕРЫ: Автоматическое обновление updated_at
 -- ==============================================================================
 CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER 
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $$
 BEGIN
     NEW.updated_at = NOW();
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 DO $$ 
 BEGIN
@@ -236,23 +239,52 @@ END $$;
 -- ТРИГГЕР: Создание профиля и настроек при регистрации через Supabase Auth
 -- ==============================================================================
 CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER 
+LANGUAGE plpgsql 
+SECURITY DEFINER 
+SET search_path = public, pg_temp
+AS $$
 BEGIN
-    INSERT INTO public.users_profile (id, email, full_name, role, subscription_status)
+    INSERT INTO public.users_profile (
+        id, 
+        email, 
+        full_name, 
+        role, 
+        subscription_status
+    )
     VALUES (
         NEW.id,
-        NEW.email,
+        COALESCE(NEW.email, ''),
         COALESCE(NEW.raw_user_meta_data->>'full_name', 'Трейдер'),
-        'user'::user_role,
-        'trial'::subscription_status
-    );
+        'user'::public.user_role,
+        'trial'::public.subscription_status
+    )
+    ON CONFLICT (id) DO UPDATE SET
+        email = EXCLUDED.email,
+        full_name = COALESCE(EXCLUDED.full_name, public.users_profile.full_name),
+        updated_at = NOW();
 
-    INSERT INTO public.trading_settings (user_id, is_bot_active, effective_leverage)
-    VALUES (NEW.id, FALSE, 7.0);
+    INSERT INTO public.trading_settings (
+        user_id, 
+        is_bot_active, 
+        effective_leverage
+    )
+    VALUES (
+        NEW.id, 
+        FALSE, 
+        7.0
+    )
+    ON CONFLICT (user_id) DO NOTHING;
 
     RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING 'handle_new_user error for user %: %', NEW.id, SQLERRM;
+    RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.handle_new_user() FROM public, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.handle_new_user() TO supabase_auth_admin, postgres, service_role;
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
@@ -272,14 +304,31 @@ ALTER TABLE public.pair_market_data ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.system_health_logs ENABLE ROW LEVEL SECURITY;
 
 -- 1. users_profile
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+    RETURN EXISTS (
+        SELECT 1 FROM public.users_profile
+        WHERE id = auth.uid() AND role = 'admin'::public.user_role
+    );
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.is_admin() FROM anon;
+GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated, service_role, postgres;
+
 CREATE POLICY "Users can view own profile" ON public.users_profile
     FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "Users can insert own profile" ON public.users_profile
+    FOR INSERT WITH CHECK (auth.uid() = id);
 CREATE POLICY "Users can update own profile" ON public.users_profile
     FOR UPDATE USING (auth.uid() = id);
 CREATE POLICY "Admins have full access to profiles" ON public.users_profile
-    FOR ALL USING (
-        EXISTS (SELECT 1 FROM public.users_profile WHERE id = auth.uid() AND role = 'admin'::user_role)
-    );
+    FOR ALL USING (public.is_admin());
 
 -- 2. exchange_accounts
 CREATE POLICY "Users can view own exchange accounts" ON public.exchange_accounts
@@ -290,16 +339,22 @@ CREATE POLICY "Users can update own exchange accounts" ON public.exchange_accoun
     FOR UPDATE USING (auth.uid() = user_id);
 CREATE POLICY "Users can delete own exchange accounts" ON public.exchange_accounts
     FOR DELETE USING (auth.uid() = user_id);
+CREATE POLICY "Admins have full access to exchange accounts" ON public.exchange_accounts
+    FOR ALL USING (public.is_admin());
 
 -- 3. trading_settings
 CREATE POLICY "Users can view own settings" ON public.trading_settings
     FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users can update own settings" ON public.trading_settings
     FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Admins have full access to trading settings" ON public.trading_settings
+    FOR ALL USING (public.is_admin());
 
 -- 4. bot_positions
 CREATE POLICY "Users can view own positions" ON public.bot_positions
     FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Admins have full access to bot positions" ON public.bot_positions
+    FOR ALL USING (public.is_admin());
 
 -- 5. invoices
 CREATE POLICY "Users can view own invoices" ON public.invoices
@@ -307,15 +362,15 @@ CREATE POLICY "Users can view own invoices" ON public.invoices
 CREATE POLICY "Users can submit payment details on own invoices" ON public.invoices
     FOR UPDATE USING (auth.uid() = user_id);
 CREATE POLICY "Admins can manage all invoices" ON public.invoices
-    FOR ALL USING (
-        EXISTS (SELECT 1 FROM public.users_profile WHERE id = auth.uid() AND role = 'admin'::user_role)
-    );
+    FOR ALL USING (public.is_admin());
 
 -- 6. audit_logs
 CREATE POLICY "Users can view own audit logs" ON public.audit_logs
     FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users can insert own audit logs" ON public.audit_logs
     FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Admins have full access to audit logs" ON public.audit_logs
+    FOR ALL USING (public.is_admin());
 
 -- 7. Публичные данные рынка и здоровье (чтение доступно всем авторизованным)
 CREATE POLICY "Authenticated users can read market data" ON public.pair_market_data

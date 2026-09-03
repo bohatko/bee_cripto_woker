@@ -29,7 +29,17 @@ export class OrderRouter {
 
       if (!user || user.is_frozen) continue;
       if (!['trial', 'active'].includes(user.subscription_status)) continue;
-      if (!account || !account.is_active || !account.is_validated) continue;
+      
+      // Strict requirement: User MUST have an active & validated exchange account connected
+      if (!account || !account.is_active || !account.is_validated) {
+        // Auto-pause bot if user has no valid exchange keys
+        await supabase
+          .from('trading_settings')
+          .update({ is_bot_active: false })
+          .eq('id', setting.id);
+        console.warn(`⚠️ [GUARD] Paused bot for ${user.email}: no active validated exchange connected.`);
+        continue;
+      }
 
       // 2. Check if user already has an OPEN position for this pair
       const { data: existingPos } = await supabase

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import {
   Play,
   Pause,
@@ -12,6 +13,8 @@ import {
   ShieldCheck,
   CheckCircle2,
   Clock,
+  KeyRound,
+  AlertCircle,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
@@ -27,6 +30,7 @@ export default function DashboardPage() {
   // Modals state
   const [isToggleModalOpen, setIsToggleModalOpen] = useState(false);
   const [isPanicModalOpen, setIsPanicModalOpen] = useState(false);
+  const [isMissingExchangeModalOpen, setIsMissingExchangeModalOpen] = useState(false);
 
   async function loadDashboardData() {
     const { data: { user } } = await supabase.auth.getUser();
@@ -49,7 +53,16 @@ export default function DashboardPage() {
       .eq('is_active', true)
       .maybeSingle();
 
-    if (acc) setAccount(acc);
+    setAccount(acc || null);
+
+    // Auto-disable bot if exchange keys were removed/missing
+    if ((!acc || !acc.is_validated) && sett?.is_bot_active) {
+      await supabase
+        .from('trading_settings')
+        .update({ is_bot_active: false })
+        .eq('id', sett.id);
+      setSettings((prev: any) => (prev ? { ...prev, is_bot_active: false } : null));
+    }
 
     // 3. Fetch active open positions
     const { data: pos } = await supabase
@@ -107,6 +120,14 @@ export default function DashboardPage() {
 
   const handleToggleBot = async () => {
     if (!settings) return;
+
+    // Check if exchange account is linked and validated
+    if (!account || !account.is_validated) {
+      setIsToggleModalOpen(false);
+      setIsMissingExchangeModalOpen(true);
+      return;
+    }
+
     const nextState = !settings.is_bot_active;
 
     await supabase
@@ -151,7 +172,13 @@ export default function DashboardPage() {
         {/* Action Controls */}
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setIsToggleModalOpen(true)}
+            onClick={() => {
+              if (!settings?.is_bot_active && (!account || !account.is_validated)) {
+                setIsMissingExchangeModalOpen(true);
+              } else {
+                setIsToggleModalOpen(true);
+              }
+            }}
             className={`px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg transition-all ${
               settings?.is_bot_active
                 ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30 hover:bg-amber-500/25'
@@ -180,6 +207,30 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Warning banner if exchange is not linked */}
+      {(!account || !account.is_validated) && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="p-2 rounded-xl bg-amber-500/15 text-honey-400 shrink-0">
+              <KeyRound className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-white">No Exchange Account Connected</h4>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Trading is blocked until you connect at least one exchange API (Binance, OKX, or Bybit).
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/settings/exchange"
+            className="px-4 py-2 rounded-xl text-xs font-bold bg-honey-500 hover:bg-honey-400 text-dark-950 flex items-center justify-center gap-1.5 transition-all shadow-md shadow-honey-500/20 shrink-0"
+          >
+            <KeyRound className="w-3.5 h-3.5" />
+            Connect API Keys
+          </Link>
+        </div>
+      )}
+
       {/* System Health Monitor */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="bg-dark-900 border border-dark-800 p-3.5 rounded-xl flex items-center justify-between">
@@ -194,7 +245,11 @@ export default function DashboardPage() {
 
         <div className="bg-dark-900 border border-dark-800 p-3.5 rounded-xl flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
+            <span
+              className={`w-2.5 h-2.5 rounded-full ${
+                account?.is_validated ? 'bg-emerald-400' : 'bg-amber-400'
+              }`}
+            />
             <span className="text-xs font-medium text-slate-300">
               Exchange ({account?.exchange?.toUpperCase() || 'NOT LINKED'})
             </span>
@@ -239,7 +294,7 @@ export default function DashboardPage() {
             <Wallet className="w-4 h-4 text-honey-400" />
           </div>
           <p className="text-2xl font-black text-white font-mono mt-2">
-            ${(Number(account?.last_balance_usd) || 5000.0).toLocaleString('en-US', {
+            ${(Number(account?.last_balance_usd) || 0.0).toLocaleString('en-US', {
               minimumFractionDigits: 2,
             })}{' '}
             <span className="text-xs text-slate-500 font-normal">USDT</span>
@@ -247,7 +302,7 @@ export default function DashboardPage() {
           <div className="mt-2 text-[11px] text-slate-400 font-mono">
             Available Margin:{' '}
             <span className="text-slate-200 font-semibold">
-              ${((Number(account?.last_balance_usd) || 5000.0) * 0.75).toFixed(2)}
+              ${((Number(account?.last_balance_usd) || 0.0) * 0.75).toFixed(2)}
             </span>
           </div>
         </div>
@@ -416,6 +471,48 @@ export default function DashboardPage() {
         onConfirm={handlePanicClose}
         onCancel={() => setIsPanicModalOpen(false)}
       />
+
+      {/* Missing Exchange Warning Modal */}
+      {isMissingExchangeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-md bg-dark-900 border border-amber-500/40 rounded-2xl p-6 shadow-2xl">
+            <div className="flex items-start gap-4 mb-4">
+              <div className="p-3 rounded-xl bg-amber-500/15 text-honey-400 border border-amber-500/30">
+                <AlertCircle className="w-7 h-7" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">Exchange Connection Required</h3>
+                <p className="text-sm text-slate-300 mt-1.5 leading-relaxed">
+                  You cannot start trading because no valid exchange API is connected. Please link at least one exchange (Binance, OKX, or Bybit) in settings first.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-dark-950 border border-dark-800 rounded-xl p-3.5 my-4 text-xs font-mono text-slate-400 space-y-1">
+              <div>• Required: Futures trading permission</div>
+              <div>• Whitelist IP: <span className="text-honey-400">54.198.120.45</span></div>
+              <div className="text-rose-400 font-semibold">• Strictly disable withdrawal permissions</div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => setIsMissingExchangeModalOpen(false)}
+                className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-white bg-dark-800 hover:bg-dark-700 rounded-xl transition-colors"
+              >
+                Cancel
+              </button>
+              <Link
+                href="/settings/exchange"
+                onClick={() => setIsMissingExchangeModalOpen(false)}
+                className="px-4 py-2 text-xs font-bold rounded-xl bg-honey-500 hover:bg-honey-400 text-dark-950 flex items-center gap-1.5 transition-all shadow-md shadow-honey-500/20"
+              >
+                <KeyRound className="w-4 h-4" />
+                Connect Exchange API
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
