@@ -139,9 +139,9 @@ export default function BillingPage() {
             </span>
             <span className="text-xs text-slate-400 font-mono">
               {profile?.subscription_status === 'trial'
-                ? `Trial valid until ${new Date(profile?.trial_end_at || Date.now()).toLocaleDateString()}`
+                ? `Trial valid until ${new Date(profile?.trial_end_at || Date.now()).toLocaleDateString('en-US')}`
                 : profile?.subscription_paid_until
-                ? `Paid until ${new Date(profile.subscription_paid_until).toLocaleDateString()}`
+                ? `Paid until ${new Date(profile.subscription_paid_until).toLocaleDateString('en-US')}`
                 : 'Payment pending'}
             </span>
           </div>
@@ -167,8 +167,8 @@ export default function BillingPage() {
                 </h2>
               </div>
               <p className="text-xs text-slate-400 mt-1">
-                Period: {new Date(activeInvoice.period_start).toLocaleDateString()} –{' '}
-                {new Date(activeInvoice.period_end).toLocaleDateString()}
+                Period: {new Date(activeInvoice.period_start).toLocaleDateString('en-US')} –{' '}
+                {new Date(activeInvoice.period_end).toLocaleDateString('en-US')}
               </p>
             </div>
 

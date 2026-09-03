@@ -215,7 +215,7 @@ export default function LandingPage() {
               <div className="flex justify-between items-center mb-3">
                 <label className="text-sm font-medium text-slate-300">Your Initial Deposit (USDT):</label>
                 <span className="text-2xl font-extrabold text-honey-400 font-mono">
-                  ${deposit.toLocaleString()}
+                  ${deposit.toLocaleString('en-US')}
                 </span>
               </div>
               <input
@@ -238,7 +238,7 @@ export default function LandingPage() {
               <div className="bg-dark-950 p-5 rounded-xl border border-dark-800">
                 <span className="text-xs text-slate-400 uppercase font-medium">Est. Weekly Profit</span>
                 <p className="text-2xl font-bold text-emerald-400 font-mono mt-1">
-                  +${estimatedWeeklyProfit.toLocaleString()}
+                  +${estimatedWeeklyProfit.toLocaleString('en-US')}
                 </p>
                 <span className="text-[11px] text-slate-500 font-mono">~4.5% / week</span>
               </div>
@@ -246,7 +246,7 @@ export default function LandingPage() {
               <div className="bg-dark-950 p-5 rounded-xl border border-dark-800">
                 <span className="text-xs text-slate-400 uppercase font-medium">Est. Monthly Profit</span>
                 <p className="text-2xl font-bold text-emerald-400 font-mono mt-1">
-                  +${estimatedMonthlyProfit.toLocaleString()}
+                  +${estimatedMonthlyProfit.toLocaleString('en-US')}
                 </p>
                 <span className="text-[11px] text-slate-500 font-mono">~19.8% / month</span>
               </div>
@@ -254,7 +254,7 @@ export default function LandingPage() {
               <div className="bg-dark-950 p-5 rounded-xl border border-dark-800">
                 <span className="text-xs text-slate-400 uppercase font-medium">SaaS Service Cost</span>
                 <p className="text-2xl font-bold text-honey-400 font-mono mt-1">
-                  ${platformFee.toLocaleString()}
+                  ${platformFee.toLocaleString('en-US')}
                 </p>
                 <span className="text-[11px] text-slate-500 font-mono">$20/wk + 10% HWM Fee</span>
               </div>

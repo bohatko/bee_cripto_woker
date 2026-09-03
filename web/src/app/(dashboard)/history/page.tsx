@@ -102,7 +102,7 @@ export default function HistoryPage() {
                         {Number(pos.entry_ratio).toFixed(4)} → {Number(pos.exit_ratio || 0).toFixed(4)}
                       </td>
                       <td className="px-5 py-4 text-slate-500 text-[11px]">
-                        {new Date(pos.opened_at).toLocaleDateString()}
+                        {new Date(pos.opened_at).toLocaleDateString('en-US')}
                       </td>
                       <td className="px-5 py-4 text-right">
                         <span
