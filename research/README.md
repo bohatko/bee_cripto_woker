@@ -9,7 +9,7 @@ This directory contains empirical research, statistical tests, and strategy vali
 ```
 research/
 ├── README.md                          # This file — quickstart for all research scripts
-├── data/                              # Cached historical data (Binance USDT-M Futures)
+├── data/                              # Cached historical data (Binance USDT-M Futures; git-ignored — regenerate via download_data.py)
 │   ├── 4h_*.csv                       # 4h OHLCV (cointegration study)
 │   ├── 1m_*.parquet                   # 1m OHLCV (backtest engine)
 │   └── funding_*.csv                  # Funding rate history (backtest)

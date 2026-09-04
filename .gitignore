@@ -42,3 +42,6 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+# Research data cache (re-downloadable via research/*/download_data.py)
+research/data/
