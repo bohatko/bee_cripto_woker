@@ -845,6 +845,7 @@ export default function DashboardPage() {
                   <th className="px-5 py-3">{t('dashboard.colLong')}</th>
                   <th className="px-5 py-3">{t('dashboard.colShort')}</th>
                   <th className="px-5 py-3">{t('dashboard.colMargin')}</th>
+                  <th className="px-5 py-3 min-w-[210px]">{t('dashboard.colExitReadiness')}</th>
                   <th className="px-5 py-3 text-right">{t('dashboard.colPnl')}</th>
                 </tr>
               </thead>
@@ -852,6 +853,19 @@ export default function DashboardPage() {
                 {positions.map((p) => {
                   const pnl = Number(p.unrealized_pnl_usd) || 0;
                   const pnlPct = Number(p.pnl_pct) || 0;
+                  const tpTarget = Number(settings?.take_profit_pct) || 5.0;
+                  const slTarget = Number(settings?.stop_loss_pct) || 1.5;
+
+                  const isPositive = pnlPct >= 0;
+                  const tpProgress = Math.min(100, Math.max(0, (pnlPct / tpTarget) * 100));
+                  const slRisk = Math.min(100, Math.max(0, (Math.abs(Math.min(0, pnlPct)) / slTarget) * 100));
+                  const bufferToSl = Math.max(0, slTarget + pnlPct);
+                  const remToTp = Math.max(0, tpTarget - pnlPct);
+
+                  const m = marketData.find((item) => item.pair_symbol === p.pair_symbol);
+                  const isTrendSafe = m ? Boolean(m.is_in_trend) : true;
+                  const isNearTp = pnlPct >= tpTarget * 0.75;
+                  const isNearSl = pnlPct <= -slTarget * 0.65;
                   return (
                     <tr key={p.id} className="hover:bg-dark-850/50 transition-colors">
                       <td className="px-5 py-4">
@@ -888,6 +902,82 @@ export default function DashboardPage() {
                         </div>
                         <div className="text-[10px] text-slate-400">
                           {t('dashboard.margin')} ${Number(p.allocated_margin_usd || 12500).toLocaleString(dateLocale, { minimumFractionDigits: 2 })} (7.0x)
+                        </div>
+                      </td>
+                      <td className="px-5 py-4 min-w-[210px]">
+                        <div className="flex items-center justify-between text-[11px] mb-1.5">
+                          <span className="text-rose-400 font-semibold flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                            SL -{slTarget.toFixed(1)}%
+                          </span>
+                          {isNearTp ? (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 animate-pulse">
+                              {t('dashboard.exitApproachingTp', { target: tpTarget.toFixed(1) })}
+                            </span>
+                          ) : isNearSl ? (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse">
+                              {t('dashboard.exitApproachingSl', { target: slTarget.toFixed(1) })}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              {isPositive
+                                ? t('dashboard.exitToTpProgress', {
+                                    pct: tpProgress.toFixed(0),
+                                    rem: remToTp.toFixed(2),
+                                  })
+                                : t('dashboard.exitBufferToSl', {
+                                    rem: bufferToSl.toFixed(2),
+                                  })}
+                            </span>
+                          )}
+                          <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                            TP +{tpTarget.toFixed(1)}%
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          </span>
+                        </div>
+
+                        {/* Dual-Track Visual Progress Meter */}
+                        <div
+                          className="h-2 w-full bg-dark-950 rounded-full border border-dark-700/80 overflow-hidden flex relative"
+                          title={t('dashboard.exitAutoCloseInfo')}
+                        >
+                          {/* Left Half (SL Danger Zone: -slTarget to 0) */}
+                          <div className="w-1/2 h-full flex justify-end bg-rose-950/25 border-r border-dark-700">
+                            {!isPositive && (
+                              <div
+                                className="h-full bg-rose-500 transition-all duration-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]"
+                                style={{ width: `${slRisk}%` }}
+                              />
+                            )}
+                          </div>
+                          {/* Right Half (TP Target Zone: 0 to +tpTarget) */}
+                          <div className="w-1/2 h-full flex justify-start bg-emerald-950/25">
+                            {isPositive && (
+                              <div
+                                className="h-full bg-emerald-500 transition-all duration-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]"
+                                style={{ width: `${tpProgress}%` }}
+                              />
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Trend Status Indicator */}
+                        <div className="flex items-center justify-between text-[10px] text-slate-400 mt-1">
+                          <span className="flex items-center gap-1">
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                isTrendSafe ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
+                              }`}
+                            />
+                            <span className={isTrendSafe ? 'text-slate-400' : 'text-amber-400'}>
+                              {isTrendSafe
+                                ? t('dashboard.exitTrendSafe')
+                                : t('dashboard.exitTrendWarning')}
+                            </span>
+                          </span>
+                          <span className="text-slate-400 font-mono">
+                            {pnlPct >= 0 ? `+${pnlPct.toFixed(2)}%` : `${pnlPct.toFixed(2)}%`}
+                          </span>
                         </div>
                       </td>
                       <td className="px-5 py-4 text-right">
