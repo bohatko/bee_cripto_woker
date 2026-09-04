@@ -4,6 +4,7 @@ import { MarketSignal } from './market-scanner.js';
 import { createExchangeInstance } from '../exchanges/exchange-factory.js';
 import { getExchangeSymbol } from '../exchanges/symbols.js';
 import { extractUsdtBalance, isUnfilledSimulation, MIN_SLOT_MARGIN_USD } from '../exchanges/balance.js';
+import { telegramNotifier } from '../notifications/telegram.js';
 
 const SKIP_LOG_COOLDOWN_MS = 60_000;
 
@@ -120,6 +121,20 @@ export class OrderRouter {
     const { error } = await supabase.from('bot_positions').insert(masterRecord);
     if (!error) {
       console.log(`🐝 [MASTER BOT ENTRY] Recorded new basket trade: ${pairSymbol} @ ratio ${signal.currentRatio.toFixed(4)}`);
+      telegramNotifier.notifyTradeOpened({
+        isMaster: true,
+        pairSymbol,
+        longSymbol: masterRecord.long_symbol!,
+        longQty,
+        longPrice: signal.longPrice,
+        shortSymbol: masterRecord.short_symbol!,
+        shortQty,
+        shortPrice: signal.shortPrice,
+        entryRatio: signal.currentRatio,
+        allocatedMargin: refMargin,
+        totalVolume: vol,
+        leverage: lev,
+      }).catch((err) => console.error('Telegram notification error:', err.message));
     }
   }
 
@@ -154,6 +169,24 @@ export class OrderRouter {
       .eq('id', position.id);
 
     console.log(`🏁 [MASTER BOT EXIT] Closed ${position.pair_symbol} (${exitReason.toUpperCase()}) | PnL: ${realizedPnl >= 0 ? '+' : ''}$${realizedPnl} (${pnlPct}%)`);
+    telegramNotifier.notifyTradeClosed({
+      isMaster: true,
+      pairSymbol: position.pair_symbol,
+      exitReason,
+      realizedPnl,
+      pnlPct,
+      allocatedMargin: Number(position.allocated_margin_usd),
+      longSymbol: position.long_symbol,
+      longEntryPrice: Number(position.long_entry_price),
+      longExitPrice: currentLongPrice,
+      shortSymbol: position.short_symbol,
+      shortEntryPrice: Number(position.short_entry_price),
+      shortExitPrice: currentShortPrice,
+      entryRatio: Number(position.entry_ratio),
+      exitRatio: Number(exitRatio.toFixed(8)),
+      openedAt: position.opened_at,
+      closedAt: new Date().toISOString(),
+    }).catch((err) => console.error('Telegram notification error:', err.message));
   }
 
   private async executePairEntry(
@@ -292,6 +325,25 @@ export class OrderRouter {
         console.log(
           `✅ [ENTRY SUCCESS] ${pairSymbol} opened for ${user.email} (Margin: $${slotMargin.toFixed(2)}, Vol: $${totalVolume.toFixed(2)})`
         );
+        telegramNotifier.notifyTradeOpened({
+          isMaster: false,
+          userEmail: user.email,
+          exchange: account.exchange,
+          accountName: account.account_name,
+          pairSymbol,
+          longSymbol: longSym,
+          longQty,
+          longPrice: signal.longPrice,
+          shortSymbol: shortSym,
+          shortQty,
+          shortPrice: signal.shortPrice,
+          entryRatio: signal.currentRatio,
+          allocatedMargin: slotMargin,
+          totalVolume,
+          leverage,
+          takeProfitPct: Number(settings.take_profit_pct),
+          stopLossPct: Number(settings.stop_loss_pct),
+        }).catch((err) => console.error('Telegram notification error:', err.message));
       }
     } catch (err: any) {
       console.error(`❌ Failed to execute pair entry for ${user.email}:`, err.message);
@@ -365,6 +417,26 @@ export class OrderRouter {
         console.log(
           `🏁 [EXIT CLOSED] ${position.pair_symbol} PnL: $${totalPnlUsd.toFixed(2)} (${pnlPct.toFixed(2)}%) Reason: ${reason}`
         );
+        telegramNotifier.notifyTradeClosed({
+          isMaster: false,
+          exchange: account.exchange,
+          accountName: account.account_name,
+          pairSymbol: position.pair_symbol,
+          exitReason: reason,
+          realizedPnl: Number(totalPnlUsd.toFixed(2)),
+          pnlPct: Number(pnlPct.toFixed(2)),
+          allocatedMargin: Number(position.allocated_margin_usd),
+          longSymbol: position.long_symbol,
+          longEntryPrice: Number(position.long_entry_price),
+          longExitPrice: currentLongPrice,
+          shortSymbol: position.short_symbol,
+          shortEntryPrice: Number(position.short_entry_price),
+          shortExitPrice: currentShortPrice,
+          entryRatio: Number(position.entry_ratio),
+          exitRatio: Number(exitRatio.toFixed(8)),
+          openedAt: position.opened_at,
+          closedAt: new Date().toISOString(),
+        }).catch((err) => console.error('Telegram notification error:', err.message));
       }
     } catch (err: any) {
       console.error(`❌ Failed to close position ${position.id}:`, err.message);

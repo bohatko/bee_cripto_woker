@@ -15,6 +15,11 @@ export const CONFIG = {
   stopLossPct: Number(process.env.STOP_LOSS_PCT || 1.5),
   adminTrc20Wallet: process.env.ADMIN_TRC20_WALLET || 'TFakeWalletAddressForTRC20USDTRechargeXXXX',
   adminBep20Wallet: process.env.ADMIN_BEP20_WALLET || '0xFakeWalletAddressForBEP20USDTRechargeXXXX',
+  telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || '',
+  telegramChatIds: (process.env.TELEGRAM_CHAT_ID || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
 };
 
 if (!CONFIG.supabaseKey) {
