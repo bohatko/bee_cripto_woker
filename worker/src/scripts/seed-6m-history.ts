@@ -1,3 +1,17 @@
+/**
+ * SYNTHETIC ILLUSTRATIVE DATA SEEDER — NOT A BACKTEST
+ *
+ * This script generates predetermined, scaled trade history for the master
+ * strategy dashboard. Outcomes are tuned to hit target profit figures; they
+ * do NOT reflect real market execution, fees, slippage, or funding.
+ *
+ * NEVER present output from this script (or derived UI metrics) to users as
+ * historical performance, track record, or validated backtest results.
+ *
+ * For honest quantitative results see: research/backtest/RESULTS.md
+ * Retraction context: doc/02_STRATEGY_AND_BACKTESTS.md section 4.0
+ */
+
 import { createClient } from '@supabase/supabase-js';
 import fs from 'fs';
 import path from 'path';
@@ -245,7 +259,11 @@ function generateCanonical608Trades() {
 }
 
 async function main() {
-  console.log('🚀 Seeding canonical 608 trades into Supabase (scaled to $50,000 base)...');
+  console.warn(
+    'WARNING: seeding SYNTHETIC illustrative trades — NOT a backtest. ' +
+      'Do not present results as historical performance. See research/backtest/RESULTS.md'
+  );
+  console.log('Seeding canonical 608 trades into Supabase (scaled to $50,000 base)...');
 
   // 1. Delete existing master positions
   console.log('🧹 Purging old master trades from bot_positions...');

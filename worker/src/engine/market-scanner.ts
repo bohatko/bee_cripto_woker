@@ -1,5 +1,5 @@
 import ccxt from 'ccxt';
-import { supabase } from '../config.js';
+import { CONFIG, supabase } from '../config.js';
 import { STRATEGY_PAIRS, StrategyPairConfig } from '../exchanges/symbols.js';
 import { PairMarketData } from '../types/index.js';
 
@@ -10,21 +10,36 @@ export interface MarketSignal {
   longPrice: number;
   shortPrice: number;
   isInTrend: boolean;
+  /** Ratio of the last closed 4h candle, or null if not yet available. */
+  closedRatio: number | null;
+  /** Open timestamp of the last closed 4h candle, or null if not yet available. */
+  lastClosedOpenTs: number | null;
+  /** True only on the first scan tick after a new closed 4h candle is registered. */
+  closedCandleIsNew: boolean;
 }
 
 export type SignalCallback = (signal: MarketSignal) => Promise<void>;
 
 const FOUR_H_MS = 4 * 60 * 60 * 1000;
+const EMA_CANDLES = 60;
+const ATR_PERIOD = 14;
 
 function isFourHourCandleClosed(candleOpenTs: number, now = Date.now()): boolean {
   return candleOpenTs + FOUR_H_MS <= now;
 }
 
+export function shouldSeedAsEmitted(lastClosedOpenTs: number, now: number, graceMs: number): boolean {
+  return now - (lastClosedOpenTs + FOUR_H_MS) > graceMs;
+}
+
 export class MarketScanner {
   private client: any;
   private emaCache: Map<string, number> = new Map();
+  private atrCache: Map<string, number> = new Map();
   private lastClosedRatio: Map<string, number> = new Map();
   private lastClosedOpenTs: Map<string, number> = new Map();
+  /** Tracks which closed-candle open timestamp has already been emitted as "new" per pair. */
+  private lastEmittedClosedTs: Map<string, number> = new Map();
   private lastEmaRefreshAttemptAt = 0;
   private signalCallbacks: SignalCallback[] = [];
   private timer: NodeJS.Timeout | null = null;
@@ -43,15 +58,15 @@ export class MarketScanner {
   }
 
   public async initEmaHistory() {
-    console.log('📊 Initializing 4h EMA10 history for strategy pairs...');
+    console.log('📊 Initializing 4h EMA10 and ATR14 history for strategy pairs...');
     for (const pair of STRATEGY_PAIRS) {
       try {
         const longSym = `${pair.longCoin}/USDT`;
         const shortSym = `${pair.shortCoin}/USDT`;
 
         const [longKlines, shortKlines] = await Promise.all([
-          this.client.fetchOHLCV(longSym, '4h', undefined, 20),
-          this.client.fetchOHLCV(shortSym, '4h', undefined, 20),
+          this.client.fetchOHLCV(longSym, '4h', undefined, EMA_CANDLES),
+          this.client.fetchOHLCV(shortSym, '4h', undefined, EMA_CANDLES),
         ]);
 
         const longClosed = longKlines.filter((k: number[]) => isFourHourCandleClosed(k[0]));
@@ -75,15 +90,61 @@ export class MarketScanner {
           ema = alpha * ratios[i] + (1 - alpha) * ema;
         }
 
+        // ATR14 of the synthetic ratio series using close-to-close log true range.
+        // Because we only have close prices for the ratio, we approximate volatility
+        // as the absolute log return between consecutive ratio closes. Wilder's smoothing
+        // is applied to produce a percentage ATR relative to the latest ratio.
+        let atr = 0;
+        if (ratios.length >= ATR_PERIOD + 1) {
+          const trueRanges: number[] = [];
+          for (let i = 1; i < ratios.length; i++) {
+            trueRanges.push(Math.abs(Math.log(ratios[i] / ratios[i - 1])));
+          }
+          atr = trueRanges.slice(0, ATR_PERIOD).reduce((a, b) => a + b, 0) / ATR_PERIOD;
+          const smoothing = 1 / ATR_PERIOD;
+          for (let i = ATR_PERIOD; i < trueRanges.length; i++) {
+            atr = smoothing * trueRanges[i] + (1 - smoothing) * atr;
+          }
+        }
+        const atrPct = atr * 100;
+
         const lastClosedOpenTs = Math.min(longClosed[minLen - 1][0], shortClosed[minLen - 1][0]);
         this.emaCache.set(pair.pairSymbol, ema);
+        this.atrCache.set(pair.pairSymbol, atrPct);
         this.lastClosedRatio.set(pair.pairSymbol, ratios[ratios.length - 1]);
         this.lastClosedOpenTs.set(pair.pairSymbol, lastClosedOpenTs);
-        console.log(`✅ [${pair.pairSymbol}] Historical EMA10 initialized from closed 4h candles: ${ema.toFixed(6)}`);
+
+        // Cold-start grace: only the initial load (not periodic refresh) may seed
+        // lastEmittedClosedTs. If the last closed 4h candle is older than the grace
+        // window, treat it as already emitted so a redeploy does not open mid-candle.
+        // If it is within the grace window, leave it unseeded so a restart right after
+        // the close can still take the signal.
+        if (!this.lastEmittedClosedTs.has(pair.pairSymbol)) {
+          const now = Date.now();
+          const elapsedSinceCloseMs = now - (lastClosedOpenTs + FOUR_H_MS);
+          if (shouldSeedAsEmitted(lastClosedOpenTs, now, CONFIG.entry4hCloseGraceMs)) {
+            this.lastEmittedClosedTs.set(pair.pairSymbol, lastClosedOpenTs);
+            console.log(
+              `🕐 [${pair.pairSymbol}] Last 4h close was ${(elapsedSinceCloseMs / 60000).toFixed(1)} min ago (> ${CONFIG.entry4hCloseGraceMs / 60000} min grace); seeding as already emitted.`
+            );
+          }
+        }
+
+        console.log(
+          `✅ [${pair.pairSymbol}] Historical EMA10 initialized from closed 4h candles: ${ema.toFixed(6)} (ATR14%: ${atrPct.toFixed(4)}%)`
+        );
       } catch (err: any) {
-        console.error(`❌ Failed to init EMA history for ${pair.pairSymbol}:`, err.message);
+        console.error(`❌ Failed to init EMA/ATR history for ${pair.pairSymbol}:`, err.message);
       }
     }
+  }
+
+  public getLastClosedOpenTs(pairSymbol: string): number | undefined {
+    return this.lastClosedOpenTs.get(pairSymbol);
+  }
+
+  public getAtrPct(pairSymbol: string): number | undefined {
+    return this.atrCache.get(pairSymbol);
   }
 
   public isClosedFourHourBelowEma(pairSymbol: string): boolean {
@@ -94,7 +155,11 @@ export class MarketScanner {
   }
 
   private isEmaRefreshDue(now = Date.now()): boolean {
-    if (now - this.lastEmaRefreshAttemptAt < 60_000) return false;
+    // When ENTRY_ON_4H_CLOSE_ONLY is enabled, refresh closed EMA/ATR more frequently so
+    // entries fire soon after the 4h close. This uses 1 OHLCV request per pair per refresh
+    // (8 requests total for 4 pairs). Keep the default 60s gate for live-tick mode.
+    const minRefreshMs = CONFIG.entryOn4hCloseOnly ? 15_000 : 60_000;
+    if (now - this.lastEmaRefreshAttemptAt < minRefreshMs) return false;
     if (this.lastClosedOpenTs.size < STRATEGY_PAIRS.length) return true;
     for (const ts of this.lastClosedOpenTs.values()) {
       if (now >= ts + 2 * FOUR_H_MS - 5_000) return true;
@@ -137,6 +202,13 @@ export class MarketScanner {
         const closedTrendOk = closedRatio === undefined || closedRatio >= ema10;
         const isInTrend = currentRatio > ema10 && closedTrendOk;
 
+        const lastClosedOpenTs = this.lastClosedOpenTs.get(pair.pairSymbol) ?? null;
+        const prevEmittedTs = this.lastEmittedClosedTs.get(pair.pairSymbol);
+        const closedCandleIsNew = lastClosedOpenTs !== null && prevEmittedTs !== lastClosedOpenTs;
+        if (closedCandleIsNew) {
+          this.lastEmittedClosedTs.set(pair.pairSymbol, lastClosedOpenTs);
+        }
+
         const signal: MarketSignal = {
           pairConfig: pair,
           currentRatio,
@@ -144,6 +216,9 @@ export class MarketScanner {
           longPrice,
           shortPrice,
           isInTrend,
+          closedRatio: closedRatio ?? null,
+          lastClosedOpenTs,
+          closedCandleIsNew,
         };
 
         signals.push(signal);

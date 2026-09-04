@@ -37,5 +37,6 @@ Always consult the documentation in `doc/` before modifying architectural, datab
 
 ## Database & Tech Stack
 - Supabase Project ID: `uxsbjkymrqrmlcshizns` (PostgreSQL with RLS on all tables).
-- Next.js 15 (App Router) in `web/`.
+- Next.js 15 (App Router) in `web/` (`distDir` separates `.next-dev` and `.next`).
+- When checking TypeScript in `web/`, use `npx tsc --noEmit`. NEVER run `npm run build` solely for type checks while the user is testing the dev server.
 - Railway Worker Daemon in `worker/` (Static Egress IP `54.198.120.45`).

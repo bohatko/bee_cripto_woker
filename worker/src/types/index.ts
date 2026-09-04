@@ -6,6 +6,8 @@ export type ExitReasonType = 'tp' | 'sl' | 'trend_flip' | 'panic_close' | 'admin
 export type InvoiceStatus = 'issued' | 'pending_review' | 'paid' | 'frozen' | 'cancelled';
 export type CryptoNetwork = 'TRC20' | 'BEP20' | 'TON';
 export type ComponentHealthStatus = 'healthy' | 'degraded' | 'down';
+export type ExecutionMode = 'market' | 'maker_hedge';
+export type RiskMode = 'margin' | 'spread';
 
 export interface UserProfile {
   id: string;
@@ -93,8 +95,30 @@ export interface BotPosition {
   total_position_volume_usd: number;
   unrealized_pnl_usd: number;
   realized_pnl_usd: number | null;
+  gross_pnl_usd: number | null;
+  entry_fees_usd: number;
+  exit_fees_usd: number;
+  execution_mode: ExecutionMode | null;
   pnl_pct: number | null;
   exit_reason: ExitReasonType | null;
   opened_at: string;
   closed_at: string | null;
+}
+
+/** Normalized fill result from exchange execution (market or maker-hedge). */
+export interface LegFillResult {
+  orderId: string;
+  price: number;
+  qty: number;
+  feeUsd: number;
+  symbol: string;
+  side: 'buy' | 'sell';
+}
+
+export interface PairFillResult {
+  longFill: LegFillResult;
+  shortFill: LegFillResult;
+  mode: ExecutionMode;
+  /** Sum of both leg fees for this execution (entry or exit). */
+  feesUsd: number;
 }

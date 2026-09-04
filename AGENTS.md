@@ -14,11 +14,12 @@
 |---|---|
 | [`doc/README.md`](doc/README.md) | **Главный индекс документации** и быстрый путеводитель. |
 | [`doc/01_TECHNICAL_SPECIFICATION.md`](doc/01_TECHNICAL_SPECIFICATION.md) | **Полное техническое задание**: описание SaaS, бизнес-модель, триал 7 дней, $20/нед + 10% HWM, политика неоплаты (Вариант А), архитектура системы. |
-| [`doc/02_STRATEGY_AND_BACKTESTS.md`](doc/02_STRATEGY_AND_BACKTESTS.md) | **Математика стратегии и бэктесты**: теория рыночно-нейтрального арбитража ($\beta = 0$), состав корзины из 4 пар, результаты бэктеста за 6 месяцев (+$1.34M при просадке 8.7%), стресс-тесты падения рынка. |
+| [`doc/02_STRATEGY_AND_BACKTESTS.md`](doc/02_STRATEGY_AND_BACKTESTS.md) | **Математика стратегии и честные бэктесты**: теория парного трейдинга, состав корзины, Scenario A/C (`research/backtest/`), коинтеграция (`research/cointegration/`), робастность и paper-trading config (раздел 6). |
 | [`doc/03_DATABASE_SCHEMA.sql`](doc/03_DATABASE_SCHEMA.sql) | **SQL-схема Supabase**: 8 таблиц, ENUM-типы, функции, триггеры, политики RLS и настройка публикаций `supabase_realtime`. |
 | [`doc/04_WORKER_ENGINE_SPECIFICATION.md`](doc/04_WORKER_ENGINE_SPECIFICATION.md) | **Спецификация воркера на Railway**: 24/7 демон, статический Egress IP, шифрование ключей AES-256-GCM, CCXT-фабрика, логика расчета EMA 10 и риск-гарда (TP +5%, SL -1.5%). |
 | [`doc/05_FRONTEND_AND_UI_SPECIFICATION.md`](doc/05_FRONTEND_AND_UI_SPECIFICATION.md) | **Спецификация Next.js 15 UI/UX**: цветовая палитра Honey Amber, структура маршрутов App Router, модалки подтверждений, логика QR-оплаты. |
 | [`doc/06_IMPLEMENTATION_ROADMAP_AND_AGENTS_GUIDE.md`](doc/06_IMPLEMENTATION_ROADMAP_AND_AGENTS_GUIDE.md) | **Пошаговый план разработки**: задачи по этапам, чек-листы и правила валидации. |
+| [`research/README.md`](research/README.md) | **Количественные исследования**: честный 1m-бэктест (`research/backtest/`), аудит коинтеграции (`research/cointegration/`), воспроизводимые скрипты и RESULTS.md. |
 
 ---
 
@@ -94,6 +95,8 @@ bee_cripto_woker/
    * **Trend-Flip**: 4-часовая свеча закрылась ниже $\text{EMA}_{10}$ — немедленное закрытие.
    * **Panic Close**: пользователь нажал экстренную кнопку в интерфейсе.
 
+> **Аудит 2026-09-04:** TP/SL по умолчанию — **% выделенной маржи слота** (`RISK_MODE=margin`). При текущих defaults (7x, TP +5%, SL $-1,5%$) честный 1m-бэктест показал **отрицательное матожидание и ликвидацию**; см. [`doc/02_STRATEGY_AND_BACKTESTS.md`](doc/02_STRATEGY_AND_BACKTESTS.md) разделы 4–6 и [`research/backtest/RESULTS.md`](research/backtest/RESULTS.md).
+
 ---
 
 ## 5. Правила Безопасности для Агентов (НЕ НАРУШАТЬ)
@@ -142,8 +145,9 @@ npm start        # Запуск скомпилированного демона
 
 # 2. Запуск фронтенда (Next.js 15)
 cd web
-npm run dev      # Запуск дев-сервера на http://localhost:3000
-npm run build    # Проверка типов и продакшн-сборка
+npm run dev      # Запуск дев-сервера на http://localhost:3000 (использует папку .next-dev)
+npx tsc --noEmit # Быстрая проверка типов (НЕ ломает dev-сервер!)
+npm run build    # Продакшн-сборка (выводит в .next)
 npm start        # Запуск собранного Next.js
 
 # 3. Деплой воркера на Railway

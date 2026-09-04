@@ -25,14 +25,18 @@ C:\Projects\PET-projects\bee_cripto_woker\doc\
    * Поддержка 3 ведущих бирж: Binance, OKX, Bybit.
 
 2. **`02_STRATEGY_AND_BACKTESTS.md`**:
-   * Описание концепции рыночно-нейтрального арбитража (Market Beta = 0).
-   * Состав корзины из 4 фундаментальных пар: `ZEC/AVAX`, `ENA/SUI`, `SOL/ADA`, `BNB/ETH`.
-   * Результаты 6-месячного бэктеста на реальных данных Binance (март–сентябрь 2026):
-     * Стартовый капитал: **$20,000 USDT**.
-     * Итоговый баланс: **$1,367,606 USDT (+6,738%)**.
-     * Максимальная просадка: **всего 8.7%** (при лимите пользователя 50%).
-     * Винрейт: **62.3%** при 608 сделках.
-   * Стресс-тест на реальном обвале рынка (-44.3% за неделю): переход в 100% USDT кэш и сохранение капитала.
+   * Теория парного трейдинга и состав корзины из 4 пар.
+   * **Честный 1m-бэктест** (март–сентябрь 2026): Scenario A (live) = ликвидация $-100%$; Scenario C (paper) = +48,6% / +116,7% taker/maker in-sample с оговорками по робастности.
+   * Отзыв синтетических цифр ($1,37M / 8,7% DD) — см. `research/backtest/RESULTS.md`.
+   * Рекомендуемая конфигурация для paper-trading — раздел 6.
+
+**Research (количественные исследования):**
+
+| Путь | Содержание |
+| :--- | :--- |
+| [`research/README.md`](../research/README.md) | Индекс исследований, установка, запуск скриптов |
+| [`research/backtest/RESULTS.md`](../research/backtest/RESULTS.md) | Честный 1m-бэктест, Scenario A/C, grid, робастность |
+| [`research/cointegration/RESULTS.md`](../research/cointegration/RESULTS.md) | Коинтеграция, Hurst, EMA10 predictive power, beta |
 
 3. **`03_DATABASE_SCHEMA.sql`**:
    * Полный рабочий SQL-код для консоли Supabase.

@@ -1,22 +1,18 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
 import {
   Sparkles,
   TrendingUp,
   TrendingDown,
   Layers,
-  ArrowRight,
-  UserCheck,
   CheckCircle2,
   DollarSign,
-  Scale,
-  Percent,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { resolveRealizedPnl } from '@/lib/positions';
+import { EquityGrowthChart } from '@/components/charts/EquityGrowthChart';
 
 export default function BotHistoryPage() {
   const { t, dateLocale, formatDateTime } = useLanguage();
@@ -127,68 +123,12 @@ export default function BotHistoryPage() {
         </div>
       </div>
 
-      {/* Mode Switch Banners */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Card 1: Bot Strategy Active View */}
-        <div className="p-4 sm:p-5 rounded-2xl border bg-honey-500/10 border-honey-500/40 shadow-lg shadow-honey-500/10 ring-1 ring-honey-500/30">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-honey-500/15 border border-honey-500/30 text-honey-400 flex items-center justify-center font-bold">
-                <Sparkles className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  {t('history.masterBot')}
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-honey-500/20 text-honey-400 font-bold">
-                    {t('history.compounding')}
-                  </span>
-                </h3>
-                <span className="text-[11px] font-mono text-slate-400">
-                  {t('history.masterTrades', { count: masterPositions.length })}
-                </span>
-              </div>
-            </div>
-            <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-honey-500 text-dark-950">
-              {t('history.activeView')}
-            </span>
-          </div>
-          <p className="mt-3 text-xs text-slate-300 leading-relaxed">
-            {t('history.masterDesc')}
-          </p>
-        </div>
-
-        {/* Card 2: Link to User Live Trades */}
-        <Link
-          href="/history"
-          className="p-4 sm:p-5 rounded-2xl border bg-dark-900 border-dark-800 hover:border-emerald-500/40 hover:bg-emerald-500/5 transition-all block group"
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center font-bold group-hover:scale-105 transition-transform">
-                <UserCheck className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  {t('history.myAccount')}
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold">
-                    {t('history.liveAccount')}
-                  </span>
-                </h3>
-                <span className="text-[11px] font-mono text-slate-400">
-                  {t('history.userBannerDesc')}
-                </span>
-              </div>
-            </div>
-            <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-lg text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 group-hover:bg-emerald-500 group-hover:text-dark-950 transition-colors flex items-center gap-1">
-              {t('nav.userTrades')}
-              <ArrowRight className="w-3.5 h-3.5" />
-            </span>
-          </div>
-          <p className="mt-3 text-xs text-slate-300 leading-relaxed">
-            {t('history.userDesc')}
-          </p>
-        </Link>
-      </div>
+      {/* Equity Growth Dynamics Chart (Sample photo theme) */}
+      <EquityGrowthChart
+        positions={filteredPositions}
+        startingBalance={BOT_STARTING_BALANCE}
+        isMaster={true}
+      />
 
       {/* Performance Summary Cards: Master Bot Strategy with Compounding ($50k Base) */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">

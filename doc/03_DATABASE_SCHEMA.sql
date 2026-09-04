@@ -136,8 +136,12 @@ CREATE TABLE IF NOT EXISTS public.bot_positions (
     total_position_volume_usd NUMERIC(18, 4) NOT NULL,
     unrealized_pnl_usd NUMERIC(18, 4) DEFAULT 0.0000,
     realized_pnl_usd NUMERIC(18, 4),
+    gross_pnl_usd NUMERIC(18, 4),
+    entry_fees_usd NUMERIC(18, 4) DEFAULT 0.0000,
+    exit_fees_usd NUMERIC(18, 4) DEFAULT 0.0000,
+    execution_mode TEXT,
     pnl_pct NUMERIC(8, 4),
-    
+
     exit_reason exit_reason_type,
     opened_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     closed_at TIMESTAMPTZ,

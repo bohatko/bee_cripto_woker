@@ -6,57 +6,33 @@ import {
   History,
   TrendingUp,
   TrendingDown,
-  Filter,
-  Sparkles,
   CheckCircle2,
-  ShieldAlert,
-  Layers,
   KeyRound,
-  Play,
-  ArrowRight,
-  UserCheck,
-  Bot,
-  ExternalLink,
   Wallet,
-  DollarSign,
   Scale,
-  Percent,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { isUnfilledSimulation, resolveRealizedPnl } from '@/lib/positions';
+import { EquityGrowthChart } from '@/components/charts/EquityGrowthChart';
 
-export default function HistoryPage() {
+export default function UserHistoryPage() {
   const { t, dateLocale, formatDateTime } = useLanguage();
-  const [activeTab, setActiveTab] = useState<'all' | 'user' | 'master'>('user');
   const [selectedPair, setSelectedPair] = useState<string>('ALL');
-  const [masterPositions, setMasterPositions] = useState<any[]>([]);
   const [userPositions, setUserPositions] = useState<any[]>([]);
   const [userExchangeBalance, setUserExchangeBalance] = useState<number>(0);
   const [userAccountCount, setUserAccountCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
 
-  const BOT_STARTING_BALANCE = 50000; // $50,000 starting base capital for Master Strategy
-
   useEffect(() => {
-    async function loadHistory() {
+    async function loadUserHistory() {
       setLoading(true);
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
-      // 1. Fetch Master bot positions (6-month backtest + live master trades)
-      const { data: masterData } = await supabase
-        .from('bot_positions')
-        .select('*, exchange_accounts(exchange, account_name)')
-        .eq('is_master', true)
-        .eq('status', 'closed')
-        .order('closed_at', { ascending: false });
-
-      if (masterData) setMasterPositions(masterData);
-
-      // 2. Fetch User's personal exchange trades and exchange balance
       if (user) {
+        // Fetch User's personal exchange trades
         const { data: userData } = await supabase
           .from('bot_positions')
           .select('*, exchange_accounts(exchange, account_name)')
@@ -64,7 +40,9 @@ export default function HistoryPage() {
           .eq('status', 'closed')
           .order('closed_at', { ascending: false });
 
-        if (userData) setUserPositions(userData.filter((p) => !isUnfilledSimulation(p)));
+        if (userData) {
+          setUserPositions(userData.filter((p) => !isUnfilledSimulation(p)));
+        }
 
         // Fetch user's active exchange accounts for balance display
         const { data: userAccounts } = await supabase
@@ -85,22 +63,14 @@ export default function HistoryPage() {
 
       setLoading(false);
     }
-    loadHistory();
+    loadUserHistory();
   }, []);
-
-  // Determine current active list based on tab
-  const currentList =
-    activeTab === 'all'
-      ? [...userPositions, ...masterPositions]
-      : activeTab === 'user'
-      ? userPositions
-      : masterPositions;
 
   // Filter by pair
   const filteredPositions =
     selectedPair === 'ALL'
-      ? currentList
-      : currentList.filter((p) => p.pair_symbol === selectedPair);
+      ? userPositions
+      : userPositions.filter((p) => p.pair_symbol === selectedPair);
 
   const totalRealizedPnl = filteredPositions.reduce(
     (acc, p) => acc + resolveRealizedPnl(p).pnlUsd,
@@ -120,20 +90,13 @@ export default function HistoryPage() {
 
   const tpCount = filteredPositions.filter((p) => p.exit_reason === 'tp').length;
   const slCount = filteredPositions.filter((p) => p.exit_reason === 'sl').length;
-  const flipCount = filteredPositions.filter((p) => p.exit_reason === 'trend_flip').length;
 
-  // Calculate Maximum Drawdown over all time based on active tab view
-  // Sort chronological for drawdown calculation
+  // Calculate Maximum Drawdown over all time for user account
   const chronologicalList = [...filteredPositions].sort(
     (a, b) => new Date(a.closed_at || a.opened_at).getTime() - new Date(b.closed_at || b.opened_at).getTime()
   );
 
-  const isUserView = activeTab === 'user';
-  const startingCapital = isUserView
-    ? userExchangeBalance > 0
-      ? userExchangeBalance
-      : 0
-    : BOT_STARTING_BALANCE;
+  const startingCapital = userExchangeBalance > 0 ? userExchangeBalance : 0;
 
   let maxDrawdownPct = 0;
   let maxDrawdownUsd = 0;
@@ -165,7 +128,7 @@ export default function HistoryPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
-            {isUserView ? t('history.userTitle') : t('history.title')}
+            {t('history.userTitle')}
             <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
               {t('history.auditedLog')}
             </span>
@@ -190,273 +153,93 @@ export default function HistoryPage() {
         </div>
       </div>
 
-      {/* Mode Switch Banners */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Card 1: My Personal Exchange Account */}
-        <div
-          onClick={() => setActiveTab('user')}
-          className={`cursor-pointer p-4 sm:p-5 rounded-2xl border transition-all ${
-            activeTab === 'user'
-              ? 'bg-emerald-500/10 border-emerald-500/40 shadow-lg shadow-emerald-500/10 ring-1 ring-emerald-500/30'
-              : 'bg-dark-900 border-dark-800 hover:border-dark-700'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center font-bold">
-                <UserCheck className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  {t('history.myAccount')}
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold">
-                    {t('history.liveAccount')}
-                  </span>
-                </h3>
-                <span className="text-[11px] font-mono text-slate-400">
-                  {t('history.userOrders', { count: userPositions.length })}
-                </span>
-              </div>
-            </div>
-            <span
-              className={`text-xs font-mono font-bold px-2.5 py-1 rounded-lg ${
-                activeTab === 'user' ? 'bg-emerald-500 text-dark-950' : 'text-slate-400 bg-dark-950'
-              }`}
-            >
-              {activeTab === 'user' ? t('history.activeView') : t('history.select')}
-            </span>
+      {/* Realized PnL Growth Dynamics Chart (Strictly trade-by-trade, no exchange capital) */}
+      <EquityGrowthChart
+        positions={filteredPositions}
+        mode="pnl"
+        isMaster={false}
+      />
+
+      {/* Performance Summary Cards - Tailored strictly for Connected Exchange Account */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        {/* Card 1: My Connected Exchange Balance */}
+        <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
+          <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
+            <span>{t('history.myBalance')}</span>
+            <Wallet className="w-3.5 h-3.5 text-emerald-400" />
           </div>
-          <p className="mt-3 text-xs text-slate-300 leading-relaxed">
-            {t('history.userDesc')}
+          <p className="text-xl font-black text-white font-mono mt-1">
+            ${userExchangeBalance.toLocaleString(dateLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
+          <span className="text-[11px] text-slate-500 font-mono">
+            {userAccountCount > 0 ? t('history.activeApi', { count: userAccountCount }) : t('history.noApi')}
+          </span>
         </div>
 
-        {/* Card 2: Link to Bot History ($50k Base) */}
-        <Link
-          href="/history/bot"
-          className="p-4 sm:p-5 rounded-2xl border bg-dark-900 border-dark-800 hover:border-honey-500/40 hover:bg-honey-500/5 transition-all block group"
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-honey-500/15 border border-honey-500/30 text-honey-400 flex items-center justify-center font-bold group-hover:scale-105 transition-transform">
-                <Sparkles className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  {t('history.masterBot')}
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-honey-500/20 text-honey-400 font-bold">
-                    {t('history.compounding')}
-                  </span>
-                </h3>
-                <span className="text-[11px] font-mono text-slate-400">
-                  {t('history.masterTrades', { count: masterPositions.length })}
-                </span>
-              </div>
-            </div>
-            <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-lg text-honey-400 bg-honey-500/10 border border-honey-500/30 group-hover:bg-honey-500 group-hover:text-dark-950 transition-colors flex items-center gap-1">
-              {t('nav.botTrades')}
-              <ArrowRight className="w-3.5 h-3.5" />
-            </span>
+        {/* Card 2: My Account Total Realized PnL */}
+        <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
+          <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
+            <span>{t('history.myProfit')}</span>
+            <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
           </div>
-          <p className="mt-3 text-xs text-slate-300 leading-relaxed">
-            {t('history.masterDesc')}
+          <p
+            className={`text-xl font-black font-mono mt-1 ${
+              totalRealizedPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'
+            }`}
+          >
+            {totalRealizedPnl >= 0
+              ? `+$${totalRealizedPnl.toLocaleString(dateLocale, { minimumFractionDigits: 2 })}`
+              : `-$${Math.abs(totalRealizedPnl).toLocaleString(dateLocale, { minimumFractionDigits: 2 })}`}
           </p>
-        </Link>
-      </div>
-
-      {/* Primary Navigation Tabs */}
-      <div className="flex border-b border-dark-800 gap-3 font-mono text-xs font-bold uppercase overflow-x-auto">
-        <button
-          onClick={() => setActiveTab('user')}
-          className={`pb-3 px-3 border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'user'
-              ? 'border-emerald-500 text-emerald-400 font-black'
-              : 'border-transparent text-slate-400 hover:text-white'
-          }`}
-        >
-          <UserCheck className="w-4 h-4 text-emerald-400" />
-          {t('history.myTrades', { count: userPositions.length })}
-        </button>
-
-        <button
-          onClick={() => setActiveTab('master')}
-          className={`pb-3 px-3 border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'master'
-              ? 'border-honey-500 text-honey-400 font-black'
-              : 'border-transparent text-slate-400 hover:text-white'
-          }`}
-        >
-          <Sparkles className="w-4 h-4 text-honey-400" />
-          {t('history.masterBenchmark', { count: masterPositions.length })}
-        </button>
-
-        <button
-          onClick={() => setActiveTab('all')}
-          className={`pb-3 px-3 border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'all'
-              ? 'border-honey-500 text-honey-400 font-black'
-              : 'border-transparent text-slate-400 hover:text-white'
-          }`}
-        >
-          <Layers className="w-4 h-4" />
-          {t('history.allTrades', { count: userPositions.length + masterPositions.length })}
-        </button>
-      </div>
-
-      {/* Performance Summary Cards - Dynamically tailored for Master Bot vs User Account */}
-      {isUserView ? (
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-          {/* Card 1: My Connected Exchange Balance */}
-          <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
-            <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
-              <span>{t('history.myBalance')}</span>
-              <Wallet className="w-3.5 h-3.5 text-emerald-400" />
-            </div>
-            <p className="text-xl font-black text-white font-mono mt-1">
-              ${userExchangeBalance.toLocaleString(dateLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </p>
-            <span className="text-[11px] text-slate-500 font-mono">
-              {userAccountCount > 0 ? t('history.activeApi', { count: userAccountCount }) : t('history.noApi')}
-            </span>
-          </div>
-
-          {/* Card 2: My Account Total Realized PnL */}
-          <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
-            <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
-              <span>{t('history.myProfit')}</span>
-              <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
-            </div>
-            <p
-              className={`text-xl font-black font-mono mt-1 ${
-                totalRealizedPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'
-              }`}
-            >
-              {totalRealizedPnl >= 0
-                ? `+$${totalRealizedPnl.toLocaleString(dateLocale, { minimumFractionDigits: 2 })}`
-                : `-$${Math.abs(totalRealizedPnl).toLocaleString(dateLocale, { minimumFractionDigits: 2 })}`}
-            </p>
-            <span className="text-[11px] text-slate-500 font-mono">
-              {t('history.closedUserTrades', { count: userPositions.length })}
-            </span>
-          </div>
-
-          {/* Card 3: Max Drawdown */}
-          <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
-            <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
-              <span>{t('history.maxDd')}</span>
-              <TrendingDown className="w-3.5 h-3.5 text-amber-400" />
-            </div>
-            <p className="text-xl font-black text-amber-400 font-mono mt-1">
-              {userPositions.length > 0 ? `${maxDrawdownPct.toFixed(2)}%` : '0.00%'}
-            </p>
-            <span className="text-[11px] text-slate-500 font-mono">
-              {userPositions.length > 0
-                ? t('history.peakDrop', {
-                    amount: maxDrawdownUsd.toLocaleString(dateLocale, { minimumFractionDigits: 2 }),
-                  })
-                : t('history.zeroDd')}
-            </span>
-          </div>
-
-          {/* Card 4: My Strategy Winrate */}
-          <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
-            <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
-              <span>{t('history.accountWinrate')}</span>
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-            </div>
-            <p className="text-xl font-black text-white font-mono mt-1">{winrate}%</p>
-            <span className="text-[11px] text-slate-500 font-mono">
-              {tpCount} TP • {slCount} SL
-            </span>
-          </div>
-
-          {/* Card 5: My Total Volume */}
-          <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl col-span-2 sm:col-span-1">
-            <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
-              <span>{t('history.tradedVolume')}</span>
-              <Scale className="w-3.5 h-3.5 text-slate-400" />
-            </div>
-            <p className="text-xl font-black text-white font-mono mt-1">
-              ${totalVolumeTraded.toLocaleString(dateLocale, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-            </p>
-            <span className="text-[11px] text-slate-500 font-mono">
-              {t('history.leverage7x')}
-            </span>
-          </div>
+          <span className="text-[11px] text-slate-500 font-mono">
+            {t('history.closedUserTrades', { count: userPositions.length })}
+          </span>
         </div>
-      ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-          {/* Card 1: Bot Starting Base */}
-          <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
-            <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
-              <span>{t('history.botStartingBase')}</span>
-              <Wallet className="w-3.5 h-3.5 text-honey-400" />
-            </div>
-            <p className="text-xl font-black text-white font-mono mt-1">
-              ${BOT_STARTING_BALANCE.toLocaleString(dateLocale, { minimumFractionDigits: 2 })}
-            </p>
-            <span className="text-[11px] text-slate-500 font-mono">
-              {t('history.fourSlots')}
-            </span>
-          </div>
 
-          {/* Card 2: Compounded Equity */}
-          <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
-            <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
-              <span>{t('history.compoundedEquity')}</span>
-              <Scale className="w-3.5 h-3.5 text-honey-400" />
-            </div>
-            <p className="text-xl font-black text-honey-400 font-mono mt-1">
-              ${(BOT_STARTING_BALANCE + totalRealizedPnl).toLocaleString(dateLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </p>
-            <span className="text-[11px] text-slate-500 font-mono">
-              {t('history.reinvestment')}
-            </span>
+        {/* Card 3: Max Drawdown */}
+        <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
+          <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
+            <span>{t('history.maxDd')}</span>
+            <TrendingDown className="w-3.5 h-3.5 text-amber-400" />
           </div>
-
-          {/* Card 3: Max Drawdown over all time */}
-          <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
-            <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
-              <span>{t('history.maxDd')}</span>
-              <TrendingDown className="w-3.5 h-3.5 text-amber-400" />
-            </div>
-            <p className="text-xl font-black text-amber-400 font-mono mt-1">
-              {maxDrawdownPct.toFixed(2)}%
-            </p>
-            <span className="text-[11px] text-slate-500 font-mono">
-              {t('history.peakDrop', {
-                amount: maxDrawdownUsd.toLocaleString(dateLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-              })}
-            </span>
-          </div>
-
-          {/* Card 4: Total Realized Profit */}
-          <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
-            <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
-              <span>{t('history.totalProfit')}</span>
-              <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
-            </div>
-            <p className="text-xl font-black text-emerald-400 font-mono mt-1">
-              +${totalRealizedPnl.toLocaleString(dateLocale, { minimumFractionDigits: 2 })}
-            </p>
-            <span className="text-[11px] text-emerald-400/80 font-mono font-semibold">
-              {t('history.roiOnBase', { pct: ((totalRealizedPnl / BOT_STARTING_BALANCE) * 100).toFixed(1) })}
-            </span>
-          </div>
-
-          {/* Card 5: Strategy Winrate */}
-          <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl col-span-2 sm:col-span-1">
-            <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
-              <span>{t('history.strategyWinrate')}</span>
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-            </div>
-            <p className="text-xl font-black text-white font-mono mt-1">{winrate}%</p>
-            <span className="text-[11px] text-slate-500 font-mono">
-              {tpCount} TP (+5%) • {slCount} SL (-1.5%)
-            </span>
-          </div>
+          <p className="text-xl font-black text-amber-400 font-mono mt-1">
+            {userPositions.length > 0 ? `${maxDrawdownPct.toFixed(2)}%` : '0.00%'}
+          </p>
+          <span className="text-[11px] text-slate-500 font-mono">
+            {userPositions.length > 0
+              ? t('history.peakDrop', {
+                  amount: maxDrawdownUsd.toLocaleString(dateLocale, { minimumFractionDigits: 2 }),
+                })
+              : t('history.zeroDd')}
+          </span>
         </div>
-      )}
+
+        {/* Card 4: My Strategy Winrate */}
+        <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl">
+          <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
+            <span>{t('history.accountWinrate')}</span>
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+          </div>
+          <p className="text-xl font-black text-white font-mono mt-1">{winrate}%</p>
+          <span className="text-[11px] text-slate-500 font-mono">
+            {tpCount} TP • {slCount} SL
+          </span>
+        </div>
+
+        {/* Card 5: My Total Volume */}
+        <div className="bg-dark-900 border border-dark-800 p-4 rounded-xl col-span-2 sm:col-span-1">
+          <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
+            <span>{t('history.tradedVolume')}</span>
+            <Scale className="w-3.5 h-3.5 text-slate-400" />
+          </div>
+          <p className="text-xl font-black text-white font-mono mt-1">
+            ${totalVolumeTraded.toLocaleString(dateLocale, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+          </p>
+          <span className="text-[11px] text-slate-500 font-mono">
+            {t('history.leverage7x')}
+          </span>
+        </div>
+      </div>
 
       {/* Pair Filter Pills */}
       <div className="flex flex-wrap items-center gap-2 pt-1 font-mono text-xs">
@@ -482,38 +265,22 @@ export default function HistoryPage() {
           <div className="p-12 text-center text-slate-500 font-mono text-sm">{t('history.loading')}</div>
         ) : filteredPositions.length === 0 ? (
           <div className="p-12 text-center max-w-md mx-auto">
-            {activeTab === 'user' ? (
-              <>
-                <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-3">
-                  <KeyRound className="w-6 h-6" />
-                </div>
-                <h3 className="text-base font-bold text-white">{t('history.noLiveTitle')}</h3>
-                <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
-                  {t('history.noLiveDesc')}
-                </p>
-                <div className="flex items-center justify-center gap-3 mt-5">
-                  <Link
-                    href="/settings/exchange"
-                    className="px-4 py-2 text-xs font-bold rounded-xl bg-honey-500 hover:bg-honey-400 text-dark-950 shadow-md shadow-honey-500/20 transition-all flex items-center gap-1.5"
-                  >
-                    <KeyRound className="w-3.5 h-3.5" />
-                    {t('history.connectKeys')}
-                  </Link>
-                  <button
-                    onClick={() => setActiveTab('master')}
-                    className="px-4 py-2 text-xs font-semibold rounded-xl bg-dark-800 hover:bg-dark-700 text-slate-300 hover:text-white transition-colors"
-                  >
-                    {t('history.viewMaster')}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <History className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-                <h3 className="text-base font-semibold text-white">{t('history.noTradesTitle')}</h3>
-                <p className="text-xs text-slate-400 mt-1">{t('history.noTradesDesc')}</p>
-              </>
-            )}
+            <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-3">
+              <KeyRound className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-white">{t('history.noLiveTitle')}</h3>
+            <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+              {t('history.noLiveDesc')}
+            </p>
+            <div className="flex items-center justify-center gap-3 mt-5">
+              <Link
+                href="/settings/exchange"
+                className="px-4 py-2 text-xs font-bold rounded-xl bg-honey-500 hover:bg-honey-400 text-dark-950 shadow-md shadow-honey-500/20 transition-all flex items-center gap-1.5"
+              >
+                <KeyRound className="w-3.5 h-3.5" />
+                {t('history.connectKeys')}
+              </Link>
+            </div>
           </div>
         ) : (
           <div className="overflow-x-auto max-h-[650px] overflow-y-auto">
@@ -532,52 +299,34 @@ export default function HistoryPage() {
               <tbody className="divide-y divide-dark-800 font-mono text-xs">
                 {filteredPositions.map((pos) => {
                   const { pnlUsd: pnl, pnlPct } = resolveRealizedPnl(pos);
-                  const isUserTrade = !pos.is_master && Boolean(pos.user_id);
                   const isSimulated = isUnfilledSimulation(pos);
                   const exchangeName =
-                    pos.exchange_accounts?.exchange?.toUpperCase() ||
-                    (isUserTrade ? 'EXCHANGE' : 'MASTER');
+                    pos.exchange_accounts?.exchange?.toUpperCase() || 'EXCHANGE';
 
-                  const marginUsd = Number(pos.allocated_margin_usd || 12500);
+                  const marginUsd = Number(pos.allocated_margin_usd || 25);
                   const volumeUsd = Number(pos.total_position_volume_usd || marginUsd * 7);
                   const legVolume = volumeUsd / 2;
 
                   return (
                     <tr
                       key={pos.id}
-                      className={`transition-colors ${
-                        isUserTrade
-                          ? 'bg-emerald-500/[0.03] hover:bg-emerald-500/[0.08]'
-                          : 'hover:bg-dark-850/50'
-                      }`}
+                      className="bg-emerald-500/[0.03] hover:bg-emerald-500/[0.08] transition-colors"
                     >
                       {/* Column 1: Explicit Execution Source */}
                       <td className="px-5 py-4">
-                        {isUserTrade ? (
-                          <div>
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] uppercase font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                              {t('history.myAccountBadge', { exchange: exchangeName })}
-                            </span>
-                            <div
-                              className={`text-[10px] mt-1 font-semibold ${
-                                isSimulated ? 'text-rose-400' : 'text-emerald-400/80'
-                              }`}
-                            >
-                              {isSimulated ? t('history.notFilled') : t('history.liveApi')}
-                            </div>
+                        <div>
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] uppercase font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                            {t('history.myAccountBadge', { exchange: exchangeName })}
+                          </span>
+                          <div
+                            className={`text-[10px] mt-1 font-semibold ${
+                              isSimulated ? 'text-rose-400' : 'text-emerald-400/80'
+                            }`}
+                          >
+                            {isSimulated ? t('history.notFilled') : t('history.liveApi')}
                           </div>
-                        ) : (
-                          <div>
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] uppercase font-bold bg-honey-500/15 text-honey-400 border border-honey-500/30">
-                              <Sparkles className="w-3.5 h-3.5 text-honey-400" />
-                              {t('history.masterBadge')}
-                            </span>
-                            <div className="text-[10px] text-slate-500 mt-1 font-mono">
-                              {t('history.baseCapital')}
-                            </div>
-                          </div>
-                        )}
+                        </div>
                       </td>
 
                       {/* Column 2: Pair Symbol */}

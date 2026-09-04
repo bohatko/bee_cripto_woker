@@ -17,13 +17,17 @@ export class PositionGuard {
   }
 
   public async checkPositions() {
-    // 1. Fetch all currently open positions with exchange account and user settings
+    // 1. Fetch all currently open positions with exchange account, user profile and nested trading settings
     const { data: openPositions, error } = await supabase
       .from('bot_positions')
-      .select('*, exchange_accounts(*), users_profile(*)')
+      .select('*, exchange_accounts(*), users_profile(*, trading_settings(*))')
       .eq('status', 'open');
 
-    if (error || !openPositions || openPositions.length === 0) {
+    if (error) {
+      console.error(`❌ checkPositions DB query failed: ${error.message}`);
+      return;
+    }
+    if (!openPositions || openPositions.length === 0) {
       return;
     }
 
@@ -39,6 +43,8 @@ export class PositionGuard {
     for (const pos of openPositions as any[]) {
       const position: BotPosition = pos;
       const account: ExchangeAccount = pos.exchange_accounts;
+      const nestedTradingSettings = pos.users_profile?.trading_settings;
+      const tradingSettings = Array.isArray(nestedTradingSettings) ? nestedTradingSettings[0] : nestedTradingSettings;
 
       if (!position.is_master && isUnfilledSimulation(position)) {
         await this.orderRouter.executePairExit(
@@ -64,6 +70,10 @@ export class PositionGuard {
       const shortPnl = (position.short_entry_price - currentShortPrice) * position.short_qty;
       const netPnlUsd = longPnl + shortPnl;
       const netPnlPct = (netPnlUsd / position.allocated_margin_usd) * 100;
+      const effectiveLeverage =
+        position.allocated_margin_usd > 0
+          ? position.total_position_volume_usd / position.allocated_margin_usd
+          : CONFIG.defaultLeverage;
 
       // Update unrealized metrics in DB
       await supabase
@@ -75,13 +85,36 @@ export class PositionGuard {
         })
         .eq('id', position.id);
 
+      // Determine per-user or master risk thresholds
+      const isMaster = position.is_master || !account;
+      const userTakeProfitPct = isMaster ? NaN : Number(tradingSettings?.take_profit_pct);
+      const userStopLossPct = isMaster ? NaN : Number(tradingSettings?.stop_loss_pct);
+      const tpSpreadPct: number = Number.isFinite(userTakeProfitPct) ? userTakeProfitPct : CONFIG.takeProfitPct;
+      const slSpreadPct: number = Number.isFinite(userStopLossPct) ? userStopLossPct : CONFIG.stopLossPct;
+
+      // Convert spread thresholds to margin PnL thresholds
+      let tpMarginPct = CONFIG.riskMode === 'spread' ? tpSpreadPct * effectiveLeverage : tpSpreadPct;
+      let slMarginPct = CONFIG.riskMode === 'spread' ? slSpreadPct * effectiveLeverage : slSpreadPct;
+
+      // Optional ATR-based stop: SL threshold in spread terms = SL_ATR_MULT * ATR14%,
+      // converted to margin PnL% via leverage, capped by SL_MAX_MARGIN_PCT.
+      if (CONFIG.slAtrMult > 0) {
+        const atrPct = this.scanner.getAtrPct(position.pair_symbol);
+        if (atrPct !== undefined) {
+          const atrSlMarginPct = CONFIG.slAtrMult * atrPct * effectiveLeverage;
+          // Use the more conservative (larger) of the configured SL and the ATR-based SL
+          slMarginPct = Math.max(slMarginPct, atrSlMarginPct);
+        }
+      }
+      slMarginPct = Math.min(slMarginPct, CONFIG.slMaxMarginPct);
+
       // Check exit conditions:
       let exitReason: 'tp' | 'sl' | 'trend_flip' | null = null;
-      if (netPnlPct >= CONFIG.takeProfitPct) {
-        console.log(`🎯 [TP TRIGGERED] ${position.pair_symbol} PnL: +${netPnlPct.toFixed(2)}% >= ${CONFIG.takeProfitPct}%`);
+      if (!CONFIG.tpDisabled && netPnlPct >= tpMarginPct) {
+        console.log(`🎯 [TP TRIGGERED] ${position.pair_symbol} PnL: +${netPnlPct.toFixed(2)}% >= ${tpMarginPct.toFixed(2)}%`);
         exitReason = 'tp';
-      } else if (netPnlPct <= -CONFIG.stopLossPct) {
-        console.log(`🛡️ [SL TRIGGERED] ${position.pair_symbol} PnL: ${netPnlPct.toFixed(2)}% <= -${CONFIG.stopLossPct}%`);
+      } else if (netPnlPct <= -slMarginPct) {
+        console.log(`🛡️ [SL TRIGGERED] ${position.pair_symbol} PnL: ${netPnlPct.toFixed(2)}% <= -${slMarginPct.toFixed(2)}%`);
         exitReason = 'sl';
       } else if (this.scanner.isClosedFourHourBelowEma(position.pair_symbol)) {
         console.log(`🔄 [TREND FLIP TRIGGERED] ${position.pair_symbol} last closed 4h ratio dropped below EMA10`);

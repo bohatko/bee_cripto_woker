@@ -13,8 +13,8 @@ async function main() {
   console.log('   Supabase Project: uxsbjkymrqrmlcshizns');
   console.log('====================================================');
 
-  const orderRouter = new OrderRouter();
   const scanner = new MarketScanner(CONFIG.scannerIntervalMs);
+  const orderRouter = new OrderRouter(scanner);
   const guard = new PositionGuard(orderRouter, scanner, 5000);
   const healthCheck = new HealthCheckJob(CONFIG.healthPingIntervalMs);
   const billingCron = new BillingCronJob(CONFIG.billingCronIntervalMs);

@@ -234,3 +234,32 @@ bee_crypto_worker_engine/
 │   └── types/
 │       └── index.ts            # TypeScript интерфейсы
 ```
+
+
+## 7. Execution & Risk Configuration (added 2026-09-04)
+
+All new execution and risk parameters are configurable via environment variables in `worker/src/config.ts`. Defaults preserve the original behavior unless noted otherwise.
+
+| Environment Variable | Default | Valid values / unit | Meaning |
+|---|---|---|---|
+| `TAKER_FEE_PCT` | `0.055` | Percent (e.g. `0.055` = 0.055%) | Taker fee rate used for fee estimation when the exchange does not return a fee or the fee currency is unknown. |
+| `MAKER_FEE_PCT` | `0.02` | Percent (e.g. `0.02` = 0.02%) | Maker fee rate used for fee estimation when maker-hedge orders are filled as makers. |
+| `ENTRY_EXECUTION_MODE` | `market` | `market` or `maker_hedge` | Entry execution mode. `market` sends immediate market orders. `maker_hedge` places post-only limit orders at best bid/ask, reprices up to `MAKER_MAX_REPRICES` times, and hedges any unfilled remainder with a market order as soon as one leg fills. |
+| `EXIT_EXECUTION_MODE` | `market` | `market` or `maker_hedge` | Closing mode for `tp` and `trend_flip` exits. `panic_close` and `sl` exits always use market orders. |
+| `MAKER_POLL_MS` | `1500` | Milliseconds | Polling interval for open maker-hedge limit orders. |
+| `MAKER_MAX_REPRICES` | `5` | Count | Maximum number of reprice cycles for maker-hedge orders when the best price moves away by more than one tick. |
+| `MAKER_TIMEOUT_MS` | `45000` | Milliseconds | Maximum time to wait for maker-hedge orders to fill before cancelling unfilled legs and hedging any partial fill. |
+| `REENTRY_GUARD_ENABLED` | `true` | Boolean (`true`/`false`) | Master switch for the re-entry guard. When `false`, all re-entry checks are skipped. |
+| `REENTRY_COOLDOWN_AFTER_SL_MS` | `14400000` (4h) | Milliseconds | Cooldown period after a stop-loss exit before a new position may be opened for the same key (user+pair or master+pair). |
+| `REENTRY_REQUIRE_NEW_4H_CLOSE` | `true` | Boolean | After a stop-loss, require that at least one 4-hour candle has closed since the SL exit timestamp. |
+| `REENTRY_HYSTERESIS_PCT` | `0.5` | Percent | After a stop-loss, require `currentRatio > lastExitRatio * (1 + pct/100)` before re-entering. |
+| `MAX_CONSECUTIVE_SL` | `2` | Count | Consecutive stop-loss exit threshold. If the last N closed positions are all SLs and the latest is within the block window, entry is blocked. |
+| `SL_STREAK_BLOCK_MS` | `86400000` (24h) | Milliseconds | Window during which a `MAX_CONSECUTIVE_SL` streak blocks new entries. |
+| `RISK_MODE` | `margin` | `margin` or `spread` | How TP/SL thresholds are interpreted. `margin` triggers on PnL% of allocated margin (legacy behavior). `spread` interprets the configured TP/SL as a percentage move of the ratio, converted to margin PnL% via effective leverage (`total_position_volume_usd / allocated_margin_usd`). |
+| `SL_ATR_MULT` | `0` | Multiplier (0 = disabled) | Optional ATR-based stop loss. When > 0, the SL threshold in spread terms is `SL_ATR_MULT * ATR14%`. The ATR is computed from the synthetic 4h ratio series using close-to-close log true range and Wilder's smoothing. The resulting margin threshold is capped by `SL_MAX_MARGIN_PCT`. |
+| `SL_MAX_MARGIN_PCT` | `10` | Percent | Maximum margin PnL% for the SL threshold when using `spread` mode or ATR-based stops. |
+| `TP_DISABLED` | `false` | Boolean | When `true`, the fixed take-profit is disabled; exits are triggered only by SL, trend flip or panic close. |
+| `ENTRY_ON_4H_CLOSE_ONLY` | `false` | Boolean | When `true`, entry signals are evaluated only once per new closed 4-hour candle and use the closed candle's ratio against EMA10 (matching the validated backtest). When `false` (default), live-tick entries are allowed whenever `currentRatio > EMA10`. |
+| `ENTRY_4H_CLOSE_GRACE_MS` | `600000` (10 min) | Milliseconds | Cold-start grace window for `ENTRY_ON_4H_CLOSE_ONLY`. On initial EMA load, if the last closed 4h candle is older than this grace window, it is seeded as already emitted so a redeploy does not open positions mid-candle. Candles within the grace window remain eligible as new signals. |
+
+When `ENTRY_ON_4H_CLOSE_ONLY=true`, the scanner refreshes the closed 4h EMA/ATR every 15 seconds (instead of 60 seconds) so entries fire shortly after the 4h close. This consumes one `fetchOHLCV` request per pair per refresh (4 pairs → ~16 requests per minute) and should be enabled only when the backtest-aligned entry behavior is required. The re-entry guard continues to work unchanged; `REENTRY_REQUIRE_NEW_4H_CLOSE` is naturally satisfied because each entry is already gated by a new closed candle.
