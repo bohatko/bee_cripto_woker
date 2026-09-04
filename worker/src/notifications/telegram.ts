@@ -104,7 +104,7 @@ class TelegramNotifier {
     const isMaster = Boolean(data.isMaster);
     const sourceBadge = isMaster
       ? '👑 <b>Мастер-стратегия (Benchmark)</b>'
-      : `⚡ <b>Живой аккаунт: ${escapeHtml((data.exchange || 'EXCHANGE').toUpperCase())}</b> (${escapeHtml(data.accountName || data.userEmail || 'User')})`;
+      : `⚡ <b>LIVE: ${escapeHtml((data.exchange || 'EXCHANGE').toUpperCase())}</b> (${escapeHtml(data.accountName || data.userEmail || 'User')})`;
 
     const tp = data.takeProfitPct ?? CONFIG.takeProfitPct;
     const sl = data.stopLossPct ?? CONFIG.stopLossPct;
@@ -138,7 +138,7 @@ class TelegramNotifier {
     const isMaster = Boolean(data.isMaster);
     const sourceBadge = isMaster
       ? '👑 <b>Мастер-стратегия (Benchmark)</b>'
-      : `⚡ <b>Живой аккаунт: ${escapeHtml((data.exchange || 'EXCHANGE').toUpperCase())}</b> (${escapeHtml(data.accountName || data.userEmail || 'User')})`;
+      : `⚡ <b>LIVE: ${escapeHtml((data.exchange || 'EXCHANGE').toUpperCase())}</b> (${escapeHtml(data.accountName || data.userEmail || 'User')})`;
 
     const isWin = data.realizedPnl >= 0;
     const pnlSign = isWin ? '+' : '';
