@@ -14,6 +14,8 @@ export const en = {
   nav: {
     dashboard: 'Dashboard',
     exchangeKeys: 'Exchange Keys',
+    botTrades: 'Bot Trading History',
+    userTrades: 'My Trades History',
     tradeHistory: 'Trade History',
     billing: 'Billing & Invoices',
     adminPanel: 'Admin Panel',
@@ -249,10 +251,16 @@ export const en = {
   },
   history: {
     title: 'Trade History',
+    botTitle: 'Bot Trading History',
+    userTitle: 'Account Trade History',
     auditedLog: 'AUDITED LOG',
     subtitleUser: 'Complete execution history for your connected exchange accounts.',
     subtitleMaster:
       'Complete trading log showing exact trade amounts, margin allocation ($50,000 starting base), and executed PnL.',
+    botBannerTitle: 'Bot Strategy History ($50,000 Base)',
+    botBannerDesc: 'Benchmark market-neutral arbitrage log based on $50,000 starting capital with 100% profit compounding.',
+    userBannerTitle: 'Live Exchange Executions',
+    userBannerDesc: 'Positions executed directly on your connected exchange (Bybit, OKX, Binance) via API.',
     realizedPnl: 'Realized PnL:',
     masterBot: 'Master Bot Strategy',
     compounding: 'COMPOUNDING ($50k BASE)',

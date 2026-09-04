@@ -28,7 +28,7 @@ import { isUnfilledSimulation, resolveRealizedPnl } from '@/lib/positions';
 
 export default function HistoryPage() {
   const { t, dateLocale, formatDateTime } = useLanguage();
-  const [activeTab, setActiveTab] = useState<'all' | 'user' | 'master'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'user' | 'master'>('user');
   const [selectedPair, setSelectedPair] = useState<string>('ALL');
   const [masterPositions, setMasterPositions] = useState<any[]>([]);
   const [userPositions, setUserPositions] = useState<any[]>([]);
@@ -165,13 +165,13 @@ export default function HistoryPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
-            {t('history.title')}
-            <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-honey-500/15 text-honey-400 border border-honey-500/30">
+            {isUserView ? t('history.userTitle') : t('history.title')}
+            <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
               {t('history.auditedLog')}
             </span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            {isUserView ? t('history.subtitleUser') : t('history.subtitleMaster')}
+            {t('history.subtitleUser')}
           </p>
         </div>
 
@@ -190,48 +190,9 @@ export default function HistoryPage() {
         </div>
       </div>
 
-      {/* Dual Context Explainer Cards: Master Strategy vs My Account */}
+      {/* Mode Switch Banners */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Card 1: Master Bot Strategy Signals ($50k Base Capital) */}
-        <div
-          onClick={() => setActiveTab('master')}
-          className={`cursor-pointer p-4 sm:p-5 rounded-2xl border transition-all ${
-            activeTab === 'master'
-              ? 'bg-honey-500/10 border-honey-500/40 shadow-lg shadow-honey-500/10 ring-1 ring-honey-500/30'
-              : 'bg-dark-900 border-dark-800 hover:border-dark-700'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-honey-500/15 border border-honey-500/30 text-honey-400 flex items-center justify-center font-bold">
-                <Sparkles className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  {t('history.masterBot')}
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-honey-500/20 text-honey-400 font-bold">
-                    {t('history.compounding')}
-                  </span>
-                </h3>
-                <span className="text-[11px] font-mono text-slate-400">
-                  {t('history.masterTrades', { count: masterPositions.length })}
-                </span>
-              </div>
-            </div>
-            <span
-              className={`text-xs font-mono font-bold px-2.5 py-1 rounded-lg ${
-                activeTab === 'master' ? 'bg-honey-500 text-dark-950' : 'text-slate-400 bg-dark-950'
-              }`}
-            >
-              {activeTab === 'master' ? t('history.activeView') : t('history.select')}
-            </span>
-          </div>
-          <p className="mt-3 text-xs text-slate-300 leading-relaxed">
-            {t('history.masterDesc')}
-          </p>
-        </div>
-
-        {/* Card 2: My Personal Exchange Account */}
+        {/* Card 1: My Personal Exchange Account */}
         <div
           onClick={() => setActiveTab('user')}
           className={`cursor-pointer p-4 sm:p-5 rounded-2xl border transition-all ${
@@ -269,20 +230,52 @@ export default function HistoryPage() {
             {t('history.userDesc')}
           </p>
         </div>
+
+        {/* Card 2: Link to Bot History ($50k Base) */}
+        <Link
+          href="/history/bot"
+          className="p-4 sm:p-5 rounded-2xl border bg-dark-900 border-dark-800 hover:border-honey-500/40 hover:bg-honey-500/5 transition-all block group"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-honey-500/15 border border-honey-500/30 text-honey-400 flex items-center justify-center font-bold group-hover:scale-105 transition-transform">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  {t('history.masterBot')}
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-honey-500/20 text-honey-400 font-bold">
+                    {t('history.compounding')}
+                  </span>
+                </h3>
+                <span className="text-[11px] font-mono text-slate-400">
+                  {t('history.masterTrades', { count: masterPositions.length })}
+                </span>
+              </div>
+            </div>
+            <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-lg text-honey-400 bg-honey-500/10 border border-honey-500/30 group-hover:bg-honey-500 group-hover:text-dark-950 transition-colors flex items-center gap-1">
+              {t('nav.botTrades')}
+              <ArrowRight className="w-3.5 h-3.5" />
+            </span>
+          </div>
+          <p className="mt-3 text-xs text-slate-300 leading-relaxed">
+            {t('history.masterDesc')}
+          </p>
+        </Link>
       </div>
 
       {/* Primary Navigation Tabs */}
       <div className="flex border-b border-dark-800 gap-3 font-mono text-xs font-bold uppercase overflow-x-auto">
         <button
-          onClick={() => setActiveTab('all')}
+          onClick={() => setActiveTab('user')}
           className={`pb-3 px-3 border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'all'
-              ? 'border-honey-500 text-honey-400 font-black'
+            activeTab === 'user'
+              ? 'border-emerald-500 text-emerald-400 font-black'
               : 'border-transparent text-slate-400 hover:text-white'
           }`}
         >
-          <Layers className="w-4 h-4" />
-          {t('history.allTrades', { count: userPositions.length + masterPositions.length })}
+          <UserCheck className="w-4 h-4 text-emerald-400" />
+          {t('history.myTrades', { count: userPositions.length })}
         </button>
 
         <button
@@ -298,15 +291,15 @@ export default function HistoryPage() {
         </button>
 
         <button
-          onClick={() => setActiveTab('user')}
+          onClick={() => setActiveTab('all')}
           className={`pb-3 px-3 border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'user'
-              ? 'border-emerald-500 text-emerald-400 font-black'
+            activeTab === 'all'
+              ? 'border-honey-500 text-honey-400 font-black'
               : 'border-transparent text-slate-400 hover:text-white'
           }`}
         >
-          <UserCheck className="w-4 h-4 text-emerald-400" />
-          {t('history.myTrades', { count: userPositions.length })}
+          <Layers className="w-4 h-4" />
+          {t('history.allTrades', { count: userPositions.length + masterPositions.length })}
         </button>
       </div>
 

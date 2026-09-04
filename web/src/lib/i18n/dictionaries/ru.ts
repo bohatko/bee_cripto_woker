@@ -16,6 +16,8 @@ export const ru = {
   nav: {
     dashboard: 'Дашборд',
     exchangeKeys: 'API бирж',
+    botTrades: 'История торгов',
+    userTrades: 'История сделок',
     tradeHistory: 'История сделок',
     billing: 'Оплата и инвойсы',
     adminPanel: 'Админ-панель',
@@ -252,10 +254,16 @@ export const ru = {
   },
   history: {
     title: 'История сделок',
+    botTitle: 'История торгов бота',
+    userTitle: 'История сделок счёта',
     auditedLog: 'АУДИТ-ЛОГ',
     subtitleUser: 'Полная история исполнения на ваших подключённых биржах.',
     subtitleMaster:
       'Полный торговый лог: объёмы, маржа (база $50,000) и исполненный PnL.',
+    botBannerTitle: 'Торговая стратегия бота (База $50,000)',
+    botBannerDesc: 'Эталонный лог рыночно-нейтрального арбитража с базовым капиталом $50,000 и 100% компаундингом прибыли.',
+    userBannerTitle: 'Реальные сделки подключённого счёта',
+    userBannerDesc: 'Сделки, исполненные непосредственно на вашей бирже (Bybit, OKX, Binance) через API.',
     realizedPnl: 'Реализованный PnL:',
     masterBot: 'Master Bot Strategy',
     compounding: 'КОМПАУНДИНГ (БАЗА $50k)',

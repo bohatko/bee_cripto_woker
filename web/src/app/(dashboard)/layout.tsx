@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   KeyRound,
   History,
+  TrendingUp,
   CreditCard,
   LogOut,
   User,
@@ -117,7 +118,8 @@ export default function DashboardLayout({
   const navItems = [
     { name: t('nav.dashboard'), href: '/dashboard', icon: LayoutDashboard },
     { name: t('nav.exchangeKeys'), href: '/settings/exchange', icon: KeyRound },
-    { name: t('nav.tradeHistory'), href: '/history', icon: History },
+    { name: t('nav.botTrades'), href: '/history/bot', icon: TrendingUp },
+    { name: t('nav.userTrades'), href: '/history', icon: History },
     { name: t('nav.billing'), href: '/billing', icon: CreditCard },
   ];
 
