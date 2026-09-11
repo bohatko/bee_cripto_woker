@@ -19,6 +19,12 @@ research/
 │   ├── results_summary.csv
 │   ├── rolling_eg.csv
 │   └── RESULTS.md
+├── pair_selection/                    # Walk-forward systematic screener & OOS MR backtest
+│   ├── download_universe.py
+│   ├── screener.py
+│   ├── mr_backtest.py
+│   ├── out/                           # CSV outputs (funnel, selected pairs, survival, MR summary)
+│   └── RESULTS.md
 └── backtest/                          # 1m simulation: Scenario A/C, grid, robustness
     ├── download_data.py
     ├── backtest.py
@@ -49,6 +55,37 @@ python research/cointegration/cointegration_analysis.py
 ```
 
 Outputs: `research/cointegration/results_summary.csv`, `rolling_eg.csv`, **`RESULTS.md`**.
+
+---
+
+## Pair Selection Screener & Out-of-Sample Backtest
+
+Downloads 18 months of 4h OHLCV across top 60 USDT-M perpetuals, runs a walk-forward 30-day rebalance selection funnel (correlation, Engle-Granger cointegration, half-life, hedge-ratio stability, permutation null FDR control, persistence filter), and conducts an out-of-sample mean-reversion backtest vs hand-picked baselines.
+
+### 1. Download Universe Data
+
+```powershell
+$env:PYTHONIOENCODING="utf-8"
+python research/pair_selection/download_universe.py
+```
+
+### 2. Run Selection Funnel
+
+```powershell
+$env:PYTHONIOENCODING="utf-8"
+python research/pair_selection/screener.py
+```
+
+Outputs: `research/pair_selection/out/funnel_stats.csv`, `selected_pairs.csv`, `pair_survival.csv`.
+
+### 3. Run Out-of-Sample MR Backtest
+
+```powershell
+$env:PYTHONIOENCODING="utf-8"
+python research/pair_selection/mr_backtest.py
+```
+
+Outputs: `research/pair_selection/out/mr_summary.csv`, `mr_period_returns.csv`, trade/equity CSVs for all 3 variants. Full quantitative report: **`research/pair_selection/RESULTS.md`**.
 
 ---
 

@@ -4,6 +4,8 @@ import { OrderRouter } from './engine/order-router.js';
 import { PositionGuard } from './engine/position-guard.js';
 import { HealthCheckJob } from './jobs/health-check.js';
 import { BillingCronJob } from './jobs/billing-cron.js';
+import { PairSelectionJob } from './jobs/pair-selection.js';
+import { pairRegistry } from './exchanges/pair-registry.js';
 
 async function main() {
   console.log('====================================================');
@@ -18,6 +20,7 @@ async function main() {
   const guard = new PositionGuard(orderRouter, scanner, 5000);
   const healthCheck = new HealthCheckJob(CONFIG.healthPingIntervalMs);
   const billingCron = new BillingCronJob(CONFIG.billingCronIntervalMs);
+  const pairSelection = new PairSelectionJob(60_000);
 
   // Wire signal listener to order router
   scanner.onSignal(async (signal) => {
@@ -25,17 +28,22 @@ async function main() {
   });
 
   try {
-    // 1. Initialize EMA 10 history from past klines
+    // 1. Load the dynamic basket from strategy_pairs (fallback: defaults)
+    await pairRegistry.init();
+
+    // 2. Initialize EMA 10 history from past klines
     await scanner.initEmaHistory();
 
-    // 2. Perform initial scan
+    // 3. Perform initial scan
     await scanner.scanOnce();
 
-    // 3. Start background processes
+    // 4. Start background processes
+    pairRegistry.start();
     scanner.start();
     guard.start();
     healthCheck.start();
     billingCron.start();
+    pairSelection.start();
 
     console.log('🚀 All worker modules initialized and running successfully.');
 
@@ -46,6 +54,8 @@ async function main() {
       guard.stop();
       healthCheck.stop();
       billingCron.stop();
+      pairSelection.stop();
+      pairRegistry.stop();
       process.exit(0);
     };
 

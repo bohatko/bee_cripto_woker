@@ -167,8 +167,9 @@ src/app/
 
 ---
 
-## 5. Панель Администратора (`/admin/invoices`)
+## 5. Панель Администратора (`/admin`)
 
+### 5.1. Инвойсы
 * Таблица всех выставленных инвойсов пользователей:
   * ID пользователя и Email.
   * Период и чистая прибыль по HWM.
@@ -177,3 +178,14 @@ src/app/
   * Кнопки действий:
     * 🟢 **Подтвердить (Approve)**: продлевает подписку пользователя на 7 дней в базе Supabase, снимает заморозку, отправляет email.
     * 🔴 **Отклонить (Reject)**: возвращает инвойс в статус неоплаченного с указанием причины (неверный хеш, сумма меньше необходимой).
+
+### 5.2. Pairs & Rotation (added 2026-09-07)
+Вкладка **Pairs** на `/admin` (Realtime на `strategy_pairs` и `pair_selection_runs`):
+
+1. **Current Active Basket** — до 4 активных пар: score, metrics (t-stat / corr / β-diff / funding), `activated_at`.
+2. **Auto-Rotation** toggle → `ConfirmModal` → UPDATE `engine_settings.auto_rotation_enabled` + `audit_logs`.
+3. **Run pair selection now** → `ConfirmModal` → INSERT `pair_selection_runs` (`trigger_source='admin'`, `status='pending'`) + audit; статус прогона обновляется live (pending → running → completed/failed).
+4. **Run history** — последние N прогонов с expandable candidates/replacements JSON.
+
+Фильтры пар на `/history` и `/history/bot` строятся динамически из фактических `pair_symbol` в данных (плюс активная корзина), без хардкода четырёх тикеров.
+Дашборд `TradeReadinessMonitor` читает пары из `pair_market_data` (пишет воркер по union-скану).

@@ -16,13 +16,26 @@ import {
   verifyLeverage,
   computePositionEntry,
   computePositionExit,
+  fetchFundingFeesUsd,
   PairFillResult,
 } from './execution.js';
 import { extractUsdtBalance, isUnfilledSimulation, MIN_SLOT_MARGIN_USD } from '../exchanges/balance.js';
 import { getExchangeSymbol } from '../exchanges/symbols.js';
+import { pairRegistry } from '../exchanges/pair-registry.js';
 import { telegramNotifier } from '../notifications/telegram.js';
 
 const SKIP_LOG_COOLDOWN_MS = 60_000;
+
+function isExternallyFlatPositionError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes('current position is zero') ||
+    m.includes('position is zero') ||
+    m.includes('"retcode":110017') ||
+    m.includes('retcode":110017') ||
+    m.includes('110017')
+  );
+}
 
 export class OrderRouter {
   private scanner: MarketScanner;
@@ -66,17 +79,21 @@ export class OrderRouter {
    */
   public async handleEntrySignal(signal: MarketSignal) {
     if (!signal.isInTrend) return; // Only enter when trend is active (Ratio > EMA10)
+    // New entries only for pairs in the current global basket. The scanner also
+    // emits signals for removed pairs that still back open positions (exit-only).
+    if (!pairRegistry.isActivePair(signal.pairConfig.pairSymbol)) return;
     if (!this.is4hCloseEntryAllowed(signal)) return;
 
     // 1. Always record & manage Master Bot reference position in DB (synchronous, fast)
     await this.ensureMasterEntry(signal);
 
-    // 2. Fetch eligible users who have bot active and active_pairs containing this pair
+    // 2. Fetch eligible users who have the bot active. Entries follow the global
+    // dynamic basket; per-user trading_settings.active_pairs is no longer a filter
+    // (rotation would silently invalidate stale per-user whitelists).
     const { data: eligibleSettings, error } = await supabase
       .from('trading_settings')
       .select('*, users_profile(*), exchange_accounts(*)')
-      .eq('is_bot_active', true)
-      .contains('active_pairs', [signal.pairConfig.pairSymbol]);
+      .eq('is_bot_active', true);
 
     if (error || !eligibleSettings || eligibleSettings.length === 0) {
       return;
@@ -163,6 +180,7 @@ export class OrderRouter {
    * Ensure master platform strategy trade is active and recorded in DB
    */
   public async ensureMasterEntry(signal: MarketSignal) {
+    if (!pairRegistry.isActivePair(signal.pairConfig.pairSymbol)) return;
     if (!this.is4hCloseEntryAllowed(signal)) return;
     const pairSymbol = signal.pairConfig.pairSymbol;
 
@@ -220,6 +238,7 @@ export class OrderRouter {
         total_position_volume_usd: vol,
         entry_fees_usd: entryFeesUsd,
         exit_fees_usd: 0,
+        funding_fees_usd: 0,
         execution_mode: CONFIG.entryExecutionMode,
         gross_pnl_usd: 0,
       unrealized_pnl_usd: 0,
@@ -272,7 +291,8 @@ export class OrderRouter {
       currentLongPrice,
       currentShortPrice,
       position.entry_fees_usd || 0,
-      exitFeesUsd
+      exitFeesUsd,
+      0
     );
 
     await supabase
@@ -285,6 +305,7 @@ export class OrderRouter {
         short_exit_price: currentShortPrice,
         gross_pnl_usd: grossPnlUsd,
         exit_fees_usd: exitFeesUsd,
+        funding_fees_usd: 0,
         realized_pnl_usd: netPnlUsd,
         unrealized_pnl_usd: 0,
         pnl_pct: pnlPct,
@@ -432,6 +453,7 @@ export class OrderRouter {
         total_position_volume_usd: Number(totalPositionVolume.toFixed(4)),
         entry_fees_usd: fill.feesUsd,
         exit_fees_usd: 0,
+        funding_fees_usd: 0,
         execution_mode: fill.mode,
         gross_pnl_usd: 0,
         unrealized_pnl_usd: 0,
@@ -506,6 +528,7 @@ export class OrderRouter {
       const mode: ExecutionMode = reason === 'sl' || reason === 'panic_close' ? 'market' : CONFIG.exitExecutionMode;
 
       let fill: PairFillResult;
+      let externallyFlat = false;
       try {
         if (mode === 'maker_hedge') {
           fill = await executePairMakerHedge(exchangeClient, account, {
@@ -539,17 +562,50 @@ export class OrderRouter {
           });
         }
       } catch (execErr: any) {
-        console.error(`❌ [EXIT ABORTED] ${position.pair_symbol} not marked closed: ${execErr.message}`);
-        await this.recordAccountError(account.id, `Failed to close ${position.pair_symbol}: ${execErr.message}`);
-        return;
+        const msg = String(execErr?.message || execErr);
+        if (isExternallyFlatPositionError(msg)) {
+          // Manual close / liquidation / race: exchange already flat — settle DB from mark prices.
+          externallyFlat = true;
+          fill = {
+            longFill: {
+              orderId: 'external-flat',
+              price: currentLongPrice,
+              qty: position.long_qty,
+              feeUsd: 0,
+              symbol: position.long_symbol,
+              side: 'sell',
+            },
+            shortFill: {
+              orderId: 'external-flat',
+              price: currentShortPrice,
+              qty: position.short_qty,
+              feeUsd: 0,
+              symbol: position.short_symbol,
+              side: 'buy',
+            },
+            mode,
+            feesUsd: 0,
+          };
+          console.warn(
+            `⚠️ [EXIT EXTERNAL FLAT] ${position.pair_symbol} already flat on exchange — closing in DB (${reason})`
+          );
+        } else {
+          console.error(`❌ [EXIT ABORTED] ${position.pair_symbol} not marked closed: ${msg}`);
+          await this.recordAccountError(account.id, `Failed to close ${position.pair_symbol}: ${msg}`);
+          return;
+        }
       }
+
+      const fundingFeesUsd = await fetchFundingFeesUsd(exchangeClient, account, position);
+      const settledReason: ExitReasonType = externallyFlat ? 'panic_close' : reason;
 
       const { grossPnlUsd, netPnlUsd, pnlPct, exitRatio } = computePositionExit(
         position,
         fill.longFill.price,
         fill.shortFill.price,
         position.entry_fees_usd || 0,
-        fill.feesUsd
+        fill.feesUsd,
+        fundingFeesUsd
       );
 
       const { error } = await supabase
@@ -559,12 +615,15 @@ export class OrderRouter {
           exit_ratio: Number(exitRatio.toFixed(8)),
           long_exit_price: fill.longFill.price,
           short_exit_price: fill.shortFill.price,
+          long_exit_order_id: fill.longFill.orderId,
+          short_exit_order_id: fill.shortFill.orderId,
           gross_pnl_usd: grossPnlUsd,
           exit_fees_usd: fill.feesUsd,
+          funding_fees_usd: fundingFeesUsd,
           realized_pnl_usd: netPnlUsd,
           unrealized_pnl_usd: 0,
           pnl_pct: pnlPct,
-          exit_reason: reason,
+          exit_reason: settledReason,
           closed_at: new Date().toISOString(),
         })
         .eq('id', position.id);
@@ -574,15 +633,29 @@ export class OrderRouter {
       } else {
         await this.clearAccountError(account.id);
         console.log(
-          `🏁 [EXIT CLOSED] ${position.pair_symbol} Gross: $${grossPnlUsd.toFixed(2)} | Net: ${netPnlUsd >= 0 ? '+' : ''}$${netPnlUsd.toFixed(2)} (${pnlPct}%) | Reason: ${reason} | Mode: ${mode}`
+          `🏁 [EXIT CLOSED] ${position.pair_symbol} Gross: $${grossPnlUsd.toFixed(2)} | Net: ${netPnlUsd >= 0 ? '+' : ''}$${netPnlUsd.toFixed(2)} (${pnlPct}%) | Funding: $${fundingFeesUsd.toFixed(4)} | Reason: ${settledReason} | Mode: ${mode}`
         );
+
+        // Reconciliation: one balance fetch after exit so users can compare exchange total with recorded net PnL.
+        if (exchangeClient.fetchBalance) {
+          try {
+            const balance = await exchangeClient.fetchBalance({ type: 'future' });
+            const { total: totalUsdt } = extractUsdtBalance(balance);
+            console.log(
+              `💰 [RECONCILE] ${position.pair_symbol} exit recorded net PnL $${netPnlUsd.toFixed(2)}; exchange USDT total after exit: $${totalUsdt.toFixed(2)}`
+            );
+          } catch (reconcileErr: any) {
+            console.warn(`⚠️ Reconciliation balance fetch failed for ${account.exchange}: ${reconcileErr.message}`);
+          }
+        }
+
         telegramNotifier
           .notifyTradeClosed({
             isMaster: false,
             exchange: account.exchange,
             accountName: account.account_name,
             pairSymbol: position.pair_symbol,
-            exitReason: reason,
+            exitReason: settledReason,
             realizedPnl: netPnlUsd,
             pnlPct,
             allocatedMargin: Number(position.allocated_margin_usd),

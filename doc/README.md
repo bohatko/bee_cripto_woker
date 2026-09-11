@@ -37,10 +37,13 @@ C:\Projects\PET-projects\bee_cripto_woker\doc\
 | [`research/README.md`](../research/README.md) | Индекс исследований, установка, запуск скриптов |
 | [`research/backtest/RESULTS.md`](../research/backtest/RESULTS.md) | Честный 1m-бэктест, Scenario A/C, grid, робастность |
 | [`research/cointegration/RESULTS.md`](../research/cointegration/RESULTS.md) | Коинтеграция, Hurst, EMA10 predictive power, beta |
+| [`research/pair_selection/RESULTS.md`](../research/pair_selection/RESULTS.md) | Систематический скринер пар, воронка, FDR, OOS MR бэктест |
+| [`research/pair_selection/MOMENTUM_VALIDATION_RESULTS.md`](../research/pair_selection/MOMENTUM_VALIDATION_RESULTS.md) | Walk-forward momentum vs static basket (гейт авторотации) |
 
 3. **`03_DATABASE_SCHEMA.sql`**:
    * Полный рабочий SQL-код для консоли Supabase.
-   * 8 оптимизированных таблиц: `users_profile`, `exchange_accounts`, `trading_settings`, `pair_market_data`, `bot_positions`, `invoices`, `system_health_logs`, `audit_logs`.
+   * Таблицы: `users_profile`, `exchange_accounts`, `trading_settings`, `pair_market_data`, `bot_positions`, `invoices`, `system_health_logs`, `audit_logs`, плюс динамическая корзина: `pair_selection_runs`, `strategy_pairs`, `engine_settings`.
+   * Миграция: [`migrations/2026-09-07_dynamic_pair_selection.sql`](migrations/2026-09-07_dynamic_pair_selection.sql).
    * Настроенные политики безопасности Row-Level Security (RLS) для изоляции пользователей.
    * Автоматические триггеры создания профиля при регистрации и публикации в `supabase_realtime`.
 
@@ -48,7 +51,7 @@ C:\Projects\PET-projects\bee_cripto_woker\doc\
    * Архитектура круглосуточного сервиса на Railway со статическим исходящим IP (Static Egress IP) для белых списков на биржах.
    * Код модуля шифрования AES-256-GCM для защиты API-ключей.
    * Фабрика CCXT для Binance, OKX, Bybit.
-   * Алгоритм сканирования EMA 10, распределения объемов и сопровождения TP (+5.0%) / SL (-1.5%).
+   * Алгоритм сканирования EMA 10, `PairRegistry`, momentum pair-selection job, TP (+5.0%) / SL (-1.5%).
    * Heartbeat-мониторинг бирж.
 
 5. **`05_FRONTEND_AND_UI_SPECIFICATION.md`**:
@@ -57,7 +60,7 @@ C:\Projects\PET-projects\bee_cripto_woker\doc\
    * Спецификация публичного лендинга с калькулятором доходности.
    * Дашборд с монитором здоровья системы, балансом и прогресс-барами парных позиций.
    * Обязательные модальные окна подтверждения для всех действий (старт, пауза, удаление ключей, экстренный Panic Close).
-   * Экран оплаты инвойсов с генерацией QR-кода и админ-панель подтверждения платежей.
+   * Экран оплаты инвойсов; админ-панель: инвойсы + вкладка Pairs & Rotation.
 
 6. **`06_IMPLEMENTATION_ROADMAP_AND_AGENTS_GUIDE.md`**:
    * Пошаговая дорожная карта из 6 этапов: от развертывания Supabase до финального smoke-тестирования.

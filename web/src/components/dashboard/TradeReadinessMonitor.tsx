@@ -37,6 +37,8 @@ export interface MarketDataRecord {
 
 export interface TradeReadinessMonitorProps {
   marketData: MarketDataRecord[];
+  /** Active global basket from strategy_pairs (source of truth for card list). */
+  activeBasket?: Array<{ pair_symbol: string; long_coin: string; short_coin: string }>;
   positions: any[];
   isBotActive: boolean;
   hasValidatedAccount: boolean;
@@ -49,43 +51,44 @@ interface PairStrategyMeta {
   pairSymbol: string;
   longCoin: string;
   shortCoin: string;
-  narrativeKey: 'narrativeZecAvax' | 'narrativeEnaSui' | 'narrativeSolAda' | 'narrativeBnbEth';
-  sharePct: string;
 }
 
-const STRATEGY_META: PairStrategyMeta[] = [
-  {
-    pairSymbol: 'ZEC/AVAX',
-    longCoin: 'ZEC',
-    shortCoin: 'AVAX',
-    narrativeKey: 'narrativeZecAvax',
-    sharePct: '50.0',
-  },
-  {
-    pairSymbol: 'ENA/SUI',
-    longCoin: 'ENA',
-    shortCoin: 'SUI',
-    narrativeKey: 'narrativeEnaSui',
-    sharePct: '31.9',
-  },
-  {
-    pairSymbol: 'SOL/ADA',
-    longCoin: 'SOL',
-    shortCoin: 'ADA',
-    narrativeKey: 'narrativeSolAda',
-    sharePct: '11.6',
-  },
-  {
-    pairSymbol: 'BNB/ETH',
-    longCoin: 'BNB',
-    shortCoin: 'ETH',
-    narrativeKey: 'narrativeBnbEth',
-    sharePct: '6.5',
-  },
+const KNOWN_NARRATIVES: Record<string, string> = {
+  'ZEC/AVAX': 'narrativeZecAvax',
+  'ENA/SUI': 'narrativeEnaSui',
+  'SOL/ADA': 'narrativeSolAda',
+  'BNB/ETH': 'narrativeBnbEth',
+};
+
+const FALLBACK_PAIRS: PairStrategyMeta[] = [
+  { pairSymbol: 'ZEC/AVAX', longCoin: 'ZEC', shortCoin: 'AVAX' },
+  { pairSymbol: 'ENA/SUI', longCoin: 'ENA', shortCoin: 'SUI' },
+  { pairSymbol: 'SOL/ADA', longCoin: 'SOL', shortCoin: 'ADA' },
+  { pairSymbol: 'BNB/ETH', longCoin: 'BNB', shortCoin: 'ETH' },
 ];
+
+function buildPairList(
+  activeBasket: Array<{ pair_symbol: string; long_coin: string; short_coin: string }> | undefined,
+  marketData: MarketDataRecord[]
+): PairStrategyMeta[] {
+  if (activeBasket && activeBasket.length > 0) {
+    return activeBasket.map((p) => ({
+      pairSymbol: p.pair_symbol,
+      longCoin: p.long_coin,
+      shortCoin: p.short_coin,
+    }));
+  }
+  if (marketData.length === 0) return FALLBACK_PAIRS;
+  return marketData.map((m) => ({
+    pairSymbol: m.pair_symbol,
+    longCoin: m.long_coin,
+    shortCoin: m.short_coin,
+  }));
+}
 
 export function TradeReadinessMonitor({
   marketData,
+  activeBasket,
   positions,
   isBotActive,
   hasValidatedAccount,
@@ -128,8 +131,10 @@ export function TradeReadinessMonitor({
     marketMap.set(m.pair_symbol, m);
   });
 
-  // Calculate detailed readiness metrics for all 4 pairs
-  const evaluatedPairs = STRATEGY_META.map((meta) => {
+  // Prefer strategy_pairs basket (admin source of truth). Fall back to scanner
+  // rows / defaults only when the basket table is empty.
+  const pairList = buildPairList(activeBasket, marketData);
+  const evaluatedPairs = pairList.map((meta) => {
     const data = marketMap.get(meta.pairSymbol);
     const openPos = positions.find(
       (p) => p.pair_symbol === meta.pairSymbol && p.status === 'open'
@@ -393,8 +398,9 @@ export function TradeReadinessMonitor({
             statusText = t('readiness.consolidating');
           }
 
-          const narrative = t(`readiness.${meta.narrativeKey}`);
-          const shareOfProfit = t('readiness.shareOfAlpha', { pct: meta.sharePct });
+          const narrativeKey = KNOWN_NARRATIVES[meta.pairSymbol] ?? 'narrativeDynamic';
+          const narrative = t(`readiness.${narrativeKey}`);
+          const shareOfProfit = t('readiness.equalSlotShare');
 
           const fillWidth = isOpen ? 100 : readinessPct;
 

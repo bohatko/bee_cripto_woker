@@ -7,7 +7,9 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "tsx test/scanner-test.ts"
+    "test": "tsx test/scanner-test.ts",
+    "backfill:fees": "tsx src/scripts/backfill-fees.ts",
+    "reconcile:flat": "tsx src/scripts/reconcile-flat-positions.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",

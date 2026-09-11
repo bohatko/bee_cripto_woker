@@ -1,6 +1,7 @@
 import ccxt from 'ccxt';
 import { CONFIG, supabase } from '../config.js';
-import { STRATEGY_PAIRS, StrategyPairConfig } from '../exchanges/symbols.js';
+import { StrategyPairConfig } from '../exchanges/symbols.js';
+import { pairRegistry } from '../exchanges/pair-registry.js';
 import { PairMarketData } from '../types/index.js';
 
 export interface MarketSignal {
@@ -41,6 +42,7 @@ export class MarketScanner {
   /** Tracks which closed-candle open timestamp has already been emitted as "new" per pair. */
   private lastEmittedClosedTs: Map<string, number> = new Map();
   private lastEmaRefreshAttemptAt = 0;
+  private lastMarketDataCleanupAt = 0;
   private signalCallbacks: SignalCallback[] = [];
   private timer: NodeJS.Timeout | null = null;
   private intervalMs: number;
@@ -57,9 +59,44 @@ export class MarketScanner {
     this.signalCallbacks.push(callback);
   }
 
+  /**
+   * Pairs the scanner must track: union of the active basket (PairRegistry)
+   * and pairs that still have OPEN positions. Removed-from-basket pairs with
+   * open positions MUST keep producing EMA/trend signals, otherwise the
+   * trend-flip exit in PositionGuard would never fire for them.
+   */
+  private async getScanPairs(): Promise<StrategyPairConfig[]> {
+    const result: StrategyPairConfig[] = [...pairRegistry.getActivePairs()];
+    const seen = new Set(result.map((p) => p.pairSymbol));
+
+    try {
+      const { data, error } = await supabase
+        .from('bot_positions')
+        .select('pair_symbol, long_symbol, short_symbol')
+        .eq('status', 'open');
+
+      if (!error && data) {
+        for (const row of data as { pair_symbol: string; long_symbol: string; short_symbol: string }[]) {
+          if (seen.has(row.pair_symbol)) continue;
+          seen.add(row.pair_symbol);
+          result.push({
+            pairSymbol: row.pair_symbol,
+            longCoin: row.long_symbol.split('/')[0],
+            shortCoin: row.short_symbol.split('/')[0],
+          });
+        }
+      }
+    } catch (err: any) {
+      console.error('❌ Failed to load open-position pairs for scan union:', err.message);
+    }
+
+    return result;
+  }
+
   public async initEmaHistory() {
     console.log('📊 Initializing 4h EMA10 and ATR14 history for strategy pairs...');
-    for (const pair of STRATEGY_PAIRS) {
+    const scanPairs = await this.getScanPairs();
+    for (const pair of scanPairs) {
       try {
         const longSym = `${pair.longCoin}/USDT`;
         const shortSym = `${pair.shortCoin}/USDT`;
@@ -154,30 +191,61 @@ export class MarketScanner {
     return closedRatio < ema;
   }
 
-  private isEmaRefreshDue(now = Date.now()): boolean {
+  private isEmaRefreshDue(scanPairs: StrategyPairConfig[], now = Date.now()): boolean {
     // When ENTRY_ON_4H_CLOSE_ONLY is enabled, refresh closed EMA/ATR more frequently so
     // entries fire soon after the 4h close. This uses 1 OHLCV request per pair per refresh
     // (8 requests total for 4 pairs). Keep the default 60s gate for live-tick mode.
     const minRefreshMs = CONFIG.entryOn4hCloseOnly ? 15_000 : 60_000;
     if (now - this.lastEmaRefreshAttemptAt < minRefreshMs) return false;
-    if (this.lastClosedOpenTs.size < STRATEGY_PAIRS.length) return true;
+    // A pair without cached closed-candle history (e.g. freshly rotated into the
+    // basket) forces a refresh so it gets its EMA10/ATR14 initialized.
+    if (scanPairs.some((p) => !this.lastClosedOpenTs.has(p.pairSymbol))) return true;
     for (const ts of this.lastClosedOpenTs.values()) {
       if (now >= ts + 2 * FOUR_H_MS - 5_000) return true;
     }
     return false;
   }
 
-  private async refreshClosedEmaIfDue() {
-    if (!this.isEmaRefreshDue()) return;
+  private async refreshClosedEmaIfDue(scanPairs: StrategyPairConfig[]) {
+    if (!this.isEmaRefreshDue(scanPairs)) return;
     this.lastEmaRefreshAttemptAt = Date.now();
     await this.initEmaHistory();
   }
 
+  /**
+   * Remove pair_market_data rows for pairs that are neither in the active basket
+   * nor backing any open position. Throttled and skipped while the registry is in
+   * fallback mode to avoid wiping rows on a transient DB outage.
+   */
+  private async cleanupStaleMarketData(scanPairs: StrategyPairConfig[]) {
+    const now = Date.now();
+    if (now - this.lastMarketDataCleanupAt < 60_000) return;
+    if (!pairRegistry.isHealthy()) return;
+    this.lastMarketDataCleanupAt = now;
+
+    try {
+      const { data, error } = await supabase.from('pair_market_data').select('pair_symbol');
+      if (error || !data) return;
+      const tracked = new Set(scanPairs.map((p) => p.pairSymbol));
+      const stale = (data as { pair_symbol: string }[]).map((r) => r.pair_symbol).filter((s) => !tracked.has(s));
+      if (stale.length === 0) return;
+
+      const { error: delError } = await supabase.from('pair_market_data').delete().in('pair_symbol', stale);
+      if (!delError) {
+        console.log(`🧹 [MARKET DATA CLEANUP] Removed stale pair rows: ${stale.join(', ')}`);
+      }
+    } catch (err: any) {
+      console.error('❌ pair_market_data cleanup error:', err.message);
+    }
+  }
+
   public async scanOnce(): Promise<MarketSignal[]> {
     const signals: MarketSignal[] = [];
-    await this.refreshClosedEmaIfDue();
+    const scanPairs = await this.getScanPairs();
+    await this.refreshClosedEmaIfDue(scanPairs);
+    await this.cleanupStaleMarketData(scanPairs);
 
-    for (const pair of STRATEGY_PAIRS) {
+    for (const pair of scanPairs) {
       try {
         const longSym = `${pair.longCoin}/USDT`;
         const shortSym = `${pair.shortCoin}/USDT`;

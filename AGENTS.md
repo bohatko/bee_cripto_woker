@@ -15,7 +15,7 @@
 | [`doc/README.md`](doc/README.md) | **Главный индекс документации** и быстрый путеводитель. |
 | [`doc/01_TECHNICAL_SPECIFICATION.md`](doc/01_TECHNICAL_SPECIFICATION.md) | **Полное техническое задание**: описание SaaS, бизнес-модель, триал 7 дней, $20/нед + 10% HWM, политика неоплаты (Вариант А), архитектура системы. |
 | [`doc/02_STRATEGY_AND_BACKTESTS.md`](doc/02_STRATEGY_AND_BACKTESTS.md) | **Математика стратегии и честные бэктесты**: теория парного трейдинга, состав корзины, Scenario A/C (`research/backtest/`), коинтеграция (`research/cointegration/`), робастность и paper-trading config (раздел 6). |
-| [`doc/03_DATABASE_SCHEMA.sql`](doc/03_DATABASE_SCHEMA.sql) | **SQL-схема Supabase**: 8 таблиц, ENUM-типы, функции, триггеры, политики RLS и настройка публикаций `supabase_realtime`. |
+| [`doc/03_DATABASE_SCHEMA.sql`](doc/03_DATABASE_SCHEMA.sql) | **SQL-схема Supabase**: 11 таблиц (включая `strategy_pairs` / `pair_selection_runs` / `engine_settings`), ENUM-типы, RLS, Realtime. |
 | [`doc/04_WORKER_ENGINE_SPECIFICATION.md`](doc/04_WORKER_ENGINE_SPECIFICATION.md) | **Спецификация воркера на Railway**: 24/7 демон, статический Egress IP, шифрование ключей AES-256-GCM, CCXT-фабрика, логика расчета EMA 10 и риск-гарда (TP +5%, SL -1.5%). |
 | [`doc/05_FRONTEND_AND_UI_SPECIFICATION.md`](doc/05_FRONTEND_AND_UI_SPECIFICATION.md) | **Спецификация Next.js 15 UI/UX**: цветовая палитра Honey Amber, структура маршрутов App Router, модалки подтверждений, логика QR-оплаты. |
 | [`doc/06_IMPLEMENTATION_ROADMAP_AND_AGENTS_GUIDE.md`](doc/06_IMPLEMENTATION_ROADMAP_AND_AGENTS_GUIDE.md) | **Пошаговый план разработки**: задачи по этапам, чек-листы и правила валидации. |
@@ -51,10 +51,10 @@ bee_cripto_woker/
     │   ├── index.ts           # Точка входа воркера
     │   ├── config.ts          # Переменные окружения и Supabase Client
     │   ├── security/          # Шифрование AES-256-GCM
-    │   ├── exchanges/         # Фабрика CCXT для Binance, OKX, Bybit и валидация
-    │   ├── engine/            # Сканер рынка (EMA10), роутер ордеров и риск-гард
-    │   ├── jobs/              # Health Check (пинг 30с) и еженедельный Billing Cron
-    │   └── types/             # TypeScript-интерфейсы
+│   ├── exchanges/         # Фабрика CCXT, PairRegistry, маппинг тикеров
+│   ├── engine/            # Сканер рынка (EMA10), роутер ордеров и риск-гард
+│   ├── jobs/              # Health Check, Billing Cron, PairSelection (momentum)
+│   └── types/             # TypeScript-интерфейсы
     └── tsconfig.json
 ```
 
@@ -77,14 +77,15 @@ bee_cripto_woker/
 
 Стратегия — **Multi-Pair Market-Neutral Alpha Basket** (рыночно-нейтральный спред с $\beta = 0$):
 
-1. **Состав корзины (4 структурные пары)**:
-   * Нога 1: `LONG ZEC` + `SHORT AVAX` (Пара цикла: приватный прорыв vs затухание L1).
-   * Нога 2: `LONG ENA` + `SHORT SUI` (DeFi доходность vs инфляционный альткоин).
-   * Нога 3: `LONG SOL` + `SHORT ADA` (Лидер объема vs стагнирующий мейджор).
-   * Нога 4: `LONG BNB` + `SHORT ETH` (Биржевая утилита vs слабый L1 спред).
+1. **Состав корзины (динамический, всегда 4 слота)**:
+   * Источник истины — таблица `strategy_pairs` (`is_active=true`), кэш в воркере: `PairRegistry` (`worker/src/exchanges/pair-registry.ts`).
+   * Fallback при пустой/недоступной БД: `DEFAULT_STRATEGY_PAIRS` = `ZEC/AVAX`, `ENA/SUI`, `SOL/ADA`, `BNB/ETH`.
+   * Ежедневный momentum-скринер (`worker/src/jobs/pair-selection.ts`) отбирает топ-4 пары по drift t-stat Ratio (не коинтеграция; MR-скринер дал −34.8% OOS).
+   * Авторотация: `engine_settings.auto_rotation_enabled` (в проде по умолчанию **false**, пока walk-forward гейт не пройден — см. `research/pair_selection/MOMENTUM_VALIDATION_RESULTS.md`).
+   * Guardrails: гистерезис 1.25×, ≤2 замены за прогон, убранные пары с открытыми позициями **не закрываются** — сопровождаются до TP/SL/Trend-Flip.
 2. **Правило входа**:
    * Отношение цен $\text{Ratio} = \text{Price}_{\text{Long}} / \text{Price}_{\text{Short}}$.
-   * Вход **ТОЛЬКО** когда $\text{Ratio} > \text{EMA}_{10}$ (на 4-часовом таймфрейме).
+   * Вход **ТОЛЬКО** когда $\text{Ratio} > \text{EMA}_{10}$ (на 4-часовом таймфрейме) и пара в **активной глобальной** корзине (`PairRegistry`). Per-user `trading_settings.active_pairs` больше не фильтрует входы.
 3. **Распределение капитала**:
    * Депозит делится на 4 равных слота: **25% свободной маржи на пару**.
    * Рабочее эффективное плечо: **7.0x**.
@@ -94,8 +95,11 @@ bee_cripto_woker/
    * **Stop-Loss (SL)**: фиксированный **-1.5%** на связку.
    * **Trend-Flip**: 4-часовая свеча закрылась ниже $\text{EMA}_{10}$ — немедленное закрытие.
    * **Panic Close**: пользователь нажал экстренную кнопку в интерфейсе.
+   * Market Scanner сканирует **union(активная корзина ∪ пары с open `bot_positions`)**, чтобы trend-flip работал после ротации.
 
 > **Аудит 2026-09-04:** TP/SL по умолчанию — **% выделенной маржи слота** (`RISK_MODE=margin`). При текущих defaults (7x, TP +5%, SL $-1,5%$) честный 1m-бэктест показал **отрицательное матожидание и ликвидацию**; см. [`doc/02_STRATEGY_AND_BACKTESTS.md`](doc/02_STRATEGY_AND_BACKTESTS.md) разделы 4–6 и [`research/backtest/RESULTS.md`](research/backtest/RESULTS.md).
+
+> **Аудит 2026-09-07:** динамический momentum-отбор walk-forward **хуже** статичной корзины (−806% vs −211% margin PnL) — гейт авторотации **FAIL**; держать `auto_rotation_enabled=false` до улучшения скринера.
 
 ---
 

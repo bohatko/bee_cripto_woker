@@ -1,7 +1,8 @@
 """
 Bee Crypto Worker - Quantitative Backtest & Robustness Engine.
 Evaluates Live Logic (Scenario A), Zero-Cost Baseline (A0), Cooldown Variant (B),
-Proposed Re-parameterization (C, C_maker), Parameter Grid (D), and Robustness Checks 1-7.
+Proposed Re-parameterization (C, C_maker), Parameter Grid (D), Robustness Checks 1-7,
+and TP/SL / Fee-Tier Sensitivity (Scenario Group E).
 """
 
 import os
@@ -21,8 +22,8 @@ PAIRS_CONFIG = [
     {'pair_symbol': 'BNB/ETH',  'long_coin': 'BNB', 'short_coin': 'ETH',  'is_alt': False},
 ]
 
-# Taker Cost Constants
-TAKER_FEE_RATE = 0.00055       # 0.055% per leg per side (Binance VIP0 USDM futures taker fee)
+# Standard Taker Cost Constants
+TAKER_FEE_RATE = 0.00055       # 0.055% per leg per side (Binance/Bybit VIP0 USDM futures taker fee)
 DEFAULT_SLIPPAGE = 0.0003      # 0.03% base slippage per order
 ALT_SLIPPAGE = 0.0005          # 0.05% slippage for altcoins (ZEC, AVAX, ENA, SUI)
 
@@ -214,7 +215,7 @@ class SimulationEngine:
         entry_mode: str = '1m',                   # '1m' or '4h_close'
         slot_margin_mode: str = 'free_margin',     # 'free_margin' or 'total_equity'
         cooldown_mode: str = 'none',              # 'none', 'sl_ratio_rebound', 'scenario_c'
-        cost_mode: str = 'taker',                 # 'taker', 'none', 'maker'
+        cost_mode: str = 'taker',                 # 'taker', 'none', 'maker', 'custom'
         barrier_convention: str = 'pessimistic',   # 'pessimistic', 'close_only', 'tp_first'
         use_alt_slippage: bool = True,
         max_consecutive_sl: int | None = None,
@@ -223,6 +224,10 @@ class SimulationEngine:
         active_pairs: list[str] | None = None,
         start_date: str = '2026-03-07 00:00:00',
         end_date: str = '2026-09-03 23:59:00',
+        custom_entry_fee_rate: float | None = None,
+        custom_exit_fee_rate: float | None = None,
+        custom_entry_slippage_rate: float | None = None,
+        custom_exit_slippage_rate: float | None = None,
     ):
         start_dt = pd.to_datetime(start_date, utc=True)
         end_dt = pd.to_datetime(end_date, utc=True)
@@ -352,8 +357,6 @@ class SimulationEngine:
                         exit_notional = pos['total_volume'] * (1.0 + (tp_barrier / 100.0) / pos['leverage'])
                         exit_ratio = pos['entry_ratio'] * (1.0 + (tp_barrier / 100.0) / pos['leverage'])
                     elif exit_reason == 'trend_flip':
-                        # Look-ahead free: Trend flip triggered at 4h close fills at open of bar at T
-                        # Open prices at 4h close boundary:
                         exit_long_p = p_data['o_l'][i]
                         exit_short_p = p_data['o_s'][i]
                         gross_pnl_usd = (exit_long_p - pos['long_entry_signal']) * pos['long_qty'] + \
@@ -366,19 +369,31 @@ class SimulationEngine:
                         exit_fee = 0.0
                         exit_slippage = 0.0
                         total_funding = 0.0
-                    elif cost_mode == 'taker':
-                        exit_fee = exit_notional * TAKER_FEE_RATE
-                        slip_rate = ALT_SLIPPAGE if (use_alt_slippage and p_data['is_alt']) else DEFAULT_SLIPPAGE
-                        exit_slippage = exit_notional * slip_rate
+                    else:
                         total_funding = pos['cum_funding']
-                    elif cost_mode == 'maker':
-                        if exit_reason == 'sl':
+
+                        # Exit Fee calculation
+                        if custom_exit_fee_rate is not None:
+                            exit_fee = exit_notional * custom_exit_fee_rate
+                        elif cost_mode == 'maker':
+                            if exit_reason == 'sl':
+                                exit_fee = exit_notional * TAKER_FEE_RATE
+                            else:
+                                exit_fee = exit_notional * MAKER_FEE_RATE
+                        else:  # taker
                             exit_fee = exit_notional * TAKER_FEE_RATE
-                            exit_slippage = exit_notional * (ALT_SLIPPAGE if (use_alt_slippage and p_data['is_alt']) else DEFAULT_SLIPPAGE)
+
+                        # Exit Slippage calculation
+                        if custom_exit_slippage_rate is not None:
+                            exit_slippage = exit_notional * custom_exit_slippage_rate
+                        elif cost_mode == 'maker':
+                            if exit_reason == 'sl':
+                                exit_slippage = exit_notional * (ALT_SLIPPAGE if (use_alt_slippage and p_data['is_alt']) else DEFAULT_SLIPPAGE)
+                            else:
+                                exit_slippage = exit_notional * MAKER_SLIPPAGE
                         else:
-                            exit_fee = exit_notional * MAKER_FEE_RATE
-                            exit_slippage = exit_notional * MAKER_SLIPPAGE
-                        total_funding = pos['cum_funding']
+                            slip_rate = ALT_SLIPPAGE if (use_alt_slippage and p_data['is_alt']) else DEFAULT_SLIPPAGE
+                            exit_slippage = exit_notional * slip_rate
 
                     total_trade_fees = pos['entry_fee'] + exit_fee
                     total_trade_slippage = pos['entry_slippage'] + exit_slippage
@@ -491,9 +506,6 @@ class SimulationEngine:
                 tot_vol = slot_margin * leverage
                 leg_vol = tot_vol / 2.0
 
-                # Look-ahead free fill price:
-                # If entering on 4h close boundary, fill price is open of bar at T (o_l[i], o_s[i])
-                # If entering on 1m bar, fill price is close of bar at i (c_l[i], c_s[i])
                 if entry_mode == '4h_close':
                     entry_long_sig = p_data['o_l'][i]
                     entry_short_sig = p_data['o_s'][i]
@@ -507,13 +519,23 @@ class SimulationEngine:
                 if cost_mode == 'none':
                     entry_fee = 0.0
                     entry_slippage = 0.0
-                elif cost_mode == 'taker':
-                    entry_fee = tot_vol * TAKER_FEE_RATE
-                    slip_rate = ALT_SLIPPAGE if (use_alt_slippage and p_data['is_alt']) else DEFAULT_SLIPPAGE
-                    entry_slippage = tot_vol * slip_rate
-                elif cost_mode == 'maker':
-                    entry_fee = tot_vol * MAKER_FEE_RATE
-                    entry_slippage = tot_vol * MAKER_SLIPPAGE
+                else:
+                    # Entry Fee calculation
+                    if custom_entry_fee_rate is not None:
+                        entry_fee = tot_vol * custom_entry_fee_rate
+                    elif cost_mode == 'maker':
+                        entry_fee = tot_vol * MAKER_FEE_RATE
+                    else:  # taker
+                        entry_fee = tot_vol * TAKER_FEE_RATE
+
+                    # Entry Slippage calculation
+                    if custom_entry_slippage_rate is not None:
+                        entry_slippage = tot_vol * custom_entry_slippage_rate
+                    elif cost_mode == 'maker':
+                        entry_slippage = tot_vol * MAKER_SLIPPAGE
+                    else:
+                        slip_rate = ALT_SLIPPAGE if (use_alt_slippage and p_data['is_alt']) else DEFAULT_SLIPPAGE
+                        entry_slippage = tot_vol * slip_rate
 
                 if stop_loss_pct == 'atr':
                     atr_ratio_pct = p_data['atr14'][i] / last_closed_ratio
@@ -625,7 +647,6 @@ class SimulationEngine:
         leak_usd = db_gross_pnl - net_profit_usd
         leak_pct = (leak_usd / db_gross_pnl * 100.0) if db_gross_pnl != 0 else 0.0
 
-        # Hourly returns for Sharpe
         eq_series = equity_df['equity']
         hourly_returns = eq_series.pct_change().dropna()
         if len(hourly_returns) > 1 and hourly_returns.std() > 0:
@@ -633,7 +654,6 @@ class SimulationEngine:
         else:
             sharpe_hourly = 0.0
 
-        # Daily returns for Sharpe
         equity_df_copy = equity_df.copy()
         equity_df_copy['datetime_dt'] = pd.to_datetime(equity_df_copy['datetime'])
         daily_equity = equity_df_copy.set_index('datetime_dt')['equity'].resample('1D').last().dropna()
@@ -799,7 +819,7 @@ def run_all_robustness_checks():
     tr_Cm.to_csv(os.path.join(OUT_DIR, 'trades_C_maker.csv'), index=False)
     eq_Cm.to_csv(os.path.join(OUT_DIR, 'equity_C_maker.csv'), index=False)
 
-    # C Taker Ex-ZEC/AVAX (3 pairs, 25% slot each -> 75% max allocated)
+    # C Taker Ex-ZEC/AVAX
     sum_C_nozec, tr_C_nozec, eq_C_nozec = engine_is.run(
         scenario_name='C_ex_ZEC_AVAX_taker',
         start_equity=20000.0,
@@ -878,7 +898,6 @@ def run_all_robustness_checks():
     ]
 
     for name, cfg in half_configs:
-        # Half 1
         sum_h1, _, _ = engine_is.run(
             scenario_name=f'{name}_Half1',
             start_equity=20000.0,
@@ -895,7 +914,6 @@ def run_all_robustness_checks():
         )
         all_summaries.append(sum_h1)
 
-        # Half 2
         sum_h2, _, _ = engine_is.run(
             scenario_name=f'{name}_Half2',
             start_equity=20000.0,
@@ -939,7 +957,6 @@ def run_all_robustness_checks():
     tr_C_oos.to_csv(os.path.join(OUT_DIR, 'trades_C_OOS.csv'), index=False)
     eq_C_oos.to_csv(os.path.join(OUT_DIR, 'equity_C_OOS.csv'), index=False)
 
-    # C Maker OOS
     sum_Cm_oos, _, _ = engine_oos.run(
         scenario_name='C_reparam_maker_OOS',
         start_equity=20000.0,
@@ -1063,17 +1080,201 @@ def run_grid_d():
     print(current_setting[cols_grid].to_string(index=False))
 
 
+def run_scenario_e():
+    print("\n==================================================================")
+    print("SCENARIO GROUP E: TP/SL and Fee-Tier Sensitivity at 7x Leverage")
+    print("Live Logic Structure with Re-Entry Cooldown Guard (Scenario B Rules)")
+    print("==================================================================")
+    dataset = BacktestDataset(prefix='')
+    engine = SimulationEngine(dataset)
+
+    tp_sl_pairs = [
+        (5.0, 1.5, "TP5.0_SL1.5_baseline"),
+        (6.0, 1.8, "TP6.0_SL1.8"),
+        (8.0, 2.4, "TP8.0_SL2.4"),
+        (10.0, 3.0, "TP10.0_SL3.0"),
+        (15.0, 4.5, "TP15.0_SL4.5"),
+        (20.0, 6.0, "TP20.0_SL6.0"),
+    ]
+
+    fee_tiers = [
+        {
+            'tier_name': 'VIP0_Taker',
+            'desc': 'VIP0 Taker (0.055% fee, 0.03% slip)',
+            'entry_fee': 0.00055, 'exit_fee': 0.00055,
+            'entry_slip': 0.00030, 'exit_slip': 0.00030,
+        },
+        {
+            'tier_name': 'VIP1_Taker',
+            'desc': 'Bybit VIP1 Taker (0.040% fee, 0.03% slip)',
+            'entry_fee': 0.00040, 'exit_fee': 0.00040,
+            'entry_slip': 0.00030, 'exit_slip': 0.00030,
+        },
+        {
+            'tier_name': 'VIP2_Taker',
+            'desc': 'Bybit VIP2 Taker (0.035% fee, 0.03% slip)',
+            'entry_fee': 0.00035, 'exit_fee': 0.00035,
+            'entry_slip': 0.00030, 'exit_slip': 0.00030,
+        },
+        {
+            'tier_name': 'VIP3_Taker',
+            'desc': 'Bybit VIP3 Taker (0.030% fee, 0.03% slip)',
+            'entry_fee': 0.00030, 'exit_fee': 0.00030,
+            'entry_slip': 0.00030, 'exit_slip': 0.00030,
+        },
+        {
+            'tier_name': 'MakerEntry_TakerExit',
+            'desc': 'Maker Entry (0.02% fee, 0.01% slip) + Taker Exit (0.055% fee, 0.03% slip)',
+            'entry_fee': 0.00020, 'exit_fee': 0.00055,
+            'entry_slip': 0.00010, 'exit_slip': 0.00030,
+        },
+    ]
+
+    results_e = []
+    summary_rows_to_add = []
+
+    # E1 & E2: 7x leverage runs
+    for tier in fee_tiers:
+        print(f"\n--- Running Tier: {tier['tier_name']} ({tier['desc']}) ---")
+        for tp, sl, pair_name in tp_sl_pairs:
+            sc_name = f"E_{tier['tier_name']}_L7_{pair_name}"
+            sum_res, _, _ = engine.run(
+                scenario_name=sc_name,
+                start_equity=20000.0,
+                leverage=7.0,
+                take_profit_pct=tp,
+                stop_loss_pct=sl,
+                entry_mode='1m',
+                slot_margin_mode='free_margin',
+                cooldown_mode='sl_ratio_rebound',
+                cost_mode='custom',
+                barrier_convention='pessimistic',
+                use_alt_slippage=False,
+                custom_entry_fee_rate=tier['entry_fee'],
+                custom_exit_fee_rate=tier['exit_fee'],
+                custom_entry_slippage_rate=tier['entry_slip'],
+                custom_exit_slippage_rate=tier['exit_slip'],
+            )
+
+            # Analytical Cost as % of margin: C = L * (entry_fee + entry_slip + exit_fee + exit_slip) * 100
+            round_trip_cost_pct = 7.0 * (tier['entry_fee'] + tier['entry_slip'] + tier['exit_fee'] + tier['exit_slip']) * 100.0
+            p_star_pct = ((sl + round_trip_cost_pct) / (tp + sl)) * 100.0
+            realized_wr_pct = sum_res['winrate_pct']
+            wr_gap_pct = realized_wr_pct - p_star_pct
+
+            e_record = {
+                'scenario': sc_name,
+                'tier': tier['tier_name'],
+                'leverage': 7.0,
+                'tp_pct': tp,
+                'sl_pct': sl,
+                'round_trip_cost_margin_pct': round_trip_cost_pct,
+                'break_even_winrate_pct': p_star_pct,
+                'realized_winrate_pct': realized_wr_pct,
+                'winrate_gap_pct': wr_gap_pct,
+                'net_profit_pct': sum_res['net_profit_pct'],
+                'max_drawdown_pct': sum_res['max_drawdown_pct'],
+                'trades_count': sum_res['trades_count'],
+                'ev_per_trade_usd': sum_res['ev_per_trade_usd'],
+                'total_fees_usd': sum_res['total_fees_usd'],
+                'total_slippage_usd': sum_res['total_slippage_usd'],
+                'daily_sharpe': sum_res['sharpe_daily'],
+                'calmar_ratio': sum_res['calmar_ratio'],
+            }
+            results_e.append(e_record)
+            summary_rows_to_add.append(sum_res)
+
+    # E4: (6, 1.8) and (10, 3.0) at leverage 3x
+    print("\n--- Running E4: Leverage 3.0x Comparison ---")
+    lev3_pairs = [
+        (6.0, 1.8, "TP6.0_SL1.8"),
+        (10.0, 3.0, "TP10.0_SL3.0"),
+    ]
+    vip0 = fee_tiers[0]
+    for tp, sl, pair_name in lev3_pairs:
+        sc_name = f"E_VIP0_Taker_L3_{pair_name}"
+        sum_res, _, _ = engine.run(
+            scenario_name=sc_name,
+            start_equity=20000.0,
+            leverage=3.0,
+            take_profit_pct=tp,
+            stop_loss_pct=sl,
+            entry_mode='1m',
+            slot_margin_mode='free_margin',
+            cooldown_mode='sl_ratio_rebound',
+            cost_mode='custom',
+            barrier_convention='pessimistic',
+            use_alt_slippage=False,
+            custom_entry_fee_rate=vip0['entry_fee'],
+            custom_exit_fee_rate=vip0['exit_fee'],
+            custom_entry_slippage_rate=vip0['entry_slip'],
+            custom_exit_slippage_rate=vip0['exit_slip'],
+        )
+        round_trip_cost_pct = 3.0 * (vip0['entry_fee'] + vip0['entry_slip'] + vip0['exit_fee'] + vip0['exit_slip']) * 100.0
+        p_star_pct = ((sl + round_trip_cost_pct) / (tp + sl)) * 100.0
+        realized_wr_pct = sum_res['winrate_pct']
+        wr_gap_pct = realized_wr_pct - p_star_pct
+
+        e_record = {
+            'scenario': sc_name,
+            'tier': 'VIP0_Taker',
+            'leverage': 3.0,
+            'tp_pct': tp,
+            'sl_pct': sl,
+            'round_trip_cost_margin_pct': round_trip_cost_pct,
+            'break_even_winrate_pct': p_star_pct,
+            'realized_winrate_pct': realized_wr_pct,
+            'winrate_gap_pct': wr_gap_pct,
+            'net_profit_pct': sum_res['net_profit_pct'],
+            'max_drawdown_pct': sum_res['max_drawdown_pct'],
+            'trades_count': sum_res['trades_count'],
+            'ev_per_trade_usd': sum_res['ev_per_trade_usd'],
+            'total_fees_usd': sum_res['total_fees_usd'],
+            'total_slippage_usd': sum_res['total_slippage_usd'],
+            'daily_sharpe': sum_res['sharpe_daily'],
+            'calmar_ratio': sum_res['calmar_ratio'],
+        }
+        results_e.append(e_record)
+        summary_rows_to_add.append(sum_res)
+
+    results_e_df = pd.DataFrame(results_e)
+    results_e_df.to_csv(os.path.join(OUT_DIR, 'scenario_E_results.csv'), index=False)
+
+    # Merge into summary.csv
+    summary_path = os.path.join(OUT_DIR, 'summary.csv')
+    if os.path.exists(summary_path):
+        old_summary_df = pd.read_csv(summary_path)
+        old_summary_df = old_summary_df[~old_summary_df['scenario'].str.startswith('E_')]
+        new_summary_df = pd.concat([old_summary_df, pd.DataFrame(summary_rows_to_add)], ignore_index=True)
+    else:
+        new_summary_df = pd.DataFrame(summary_rows_to_add)
+    new_summary_df.to_csv(summary_path, index=False)
+
+    print("\n================ SCENARIO GROUP E SUMMARY ================")
+    cols_display = [
+        'scenario', 'tier', 'leverage', 'tp_pct', 'sl_pct', 'round_trip_cost_margin_pct',
+        'break_even_winrate_pct', 'realized_winrate_pct', 'winrate_gap_pct',
+        'net_profit_pct', 'max_drawdown_pct', 'trades_count', 'ev_per_trade_usd', 'total_fees_usd', 'daily_sharpe'
+    ]
+    print(results_e_df[cols_display].to_string(index=False))
+    print("==========================================================\n")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Bee Crypto Worker Quantitative Backtest & Robustness Suite")
-    parser.add_argument('--scenario', type=str, default='all', choices=['all', 'main', 'robustness', 'D'], help="Execution mode")
+    parser.add_argument('--scenario', type=str, default='all', choices=['all', 'main', 'robustness', 'D', 'E'], help="Execution mode")
     args = parser.parse_args()
 
     if args.scenario in ['all', 'robustness', 'main']:
         run_all_robustness_checks()
         if args.scenario in ['all', 'D']:
             run_grid_d()
+        if args.scenario in ['all', 'E']:
+            run_scenario_e()
     elif args.scenario == 'D':
         run_grid_d()
+    elif args.scenario == 'E':
+        run_scenario_e()
 
 
 if __name__ == '__main__':

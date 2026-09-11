@@ -34,6 +34,7 @@ export default function DashboardPage() {
   const [settings, setSettings] = useState<any>(null);
   const [accounts, setAccounts] = useState<any[]>([]);
   const [marketData, setMarketData] = useState<any[]>([]);
+  const [activeBasket, setActiveBasket] = useState<any[]>([]);
   const [isShowingMaster, setIsShowingMaster] = useState(false);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -104,12 +105,17 @@ export default function DashboardPage() {
       setIsShowingMaster(true);
     }
 
-    // 4. Fetch live market scanner data for trade readiness
-    const { data: mData } = await supabase
-      .from('pair_market_data')
-      .select('*')
-      .order('pair_symbol', { ascending: true });
+    // 4. Active basket (source of truth) + live scanner cache for ratios/prices
+    const [{ data: basket }, { data: mData }] = await Promise.all([
+      supabase
+        .from('strategy_pairs')
+        .select('pair_symbol, long_coin, short_coin, score')
+        .eq('is_active', true)
+        .order('activated_at', { ascending: true }),
+      supabase.from('pair_market_data').select('*').order('pair_symbol', { ascending: true }),
+    ]);
 
+    if (basket) setActiveBasket(basket);
     if (mData) setMarketData(mData);
 
     setLoading(false);
@@ -234,12 +240,17 @@ export default function DashboardPage() {
   useEffect(() => {
     loadDashboardData();
 
-    // Auto-refresh market data every 10 seconds for real-time trade readiness tracking
+    // Auto-refresh market data + active basket every 10 seconds
     const marketInterval = setInterval(async () => {
-      const { data: mData } = await supabase
-        .from('pair_market_data')
-        .select('*')
-        .order('pair_symbol', { ascending: true });
+      const [{ data: basket }, { data: mData }] = await Promise.all([
+        supabase
+          .from('strategy_pairs')
+          .select('pair_symbol, long_coin, short_coin, score')
+          .eq('is_active', true)
+          .order('activated_at', { ascending: true }),
+        supabase.from('pair_market_data').select('*').order('pair_symbol', { ascending: true }),
+      ]);
+      if (basket) setActiveBasket(basket);
       if (mData) setMarketData(mData);
     }, 10000);
 
@@ -271,6 +282,20 @@ export default function DashboardPage() {
             .order('pair_symbol', { ascending: true })
             .then(({ data }) => {
               if (data) setMarketData(data);
+            });
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'strategy_pairs' },
+        () => {
+          supabase
+            .from('strategy_pairs')
+            .select('pair_symbol, long_coin, short_coin, score')
+            .eq('is_active', true)
+            .order('activated_at', { ascending: true })
+            .then(({ data }) => {
+              if (data) setActiveBasket(data);
             });
         }
       )
@@ -785,6 +810,7 @@ export default function DashboardPage() {
       {/* Trade Readiness & Signal Proximity Monitor (100% Scale) */}
       <TradeReadinessMonitor
         marketData={marketData}
+        activeBasket={activeBasket}
         positions={positions}
         isBotActive={isBotActive}
         hasValidatedAccount={hasValidatedAccount}

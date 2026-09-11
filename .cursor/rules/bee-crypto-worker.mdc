@@ -20,8 +20,10 @@ Always consult the documentation in `doc/` before modifying architectural, datab
 - All code interface text, labels, buttons, console logs, and errors must be in **English only**.
 
 ## Strategy & Risk Constraints
-- Basket consists of 4 pairs: `ZEC/AVAX`, `ENA/SUI`, `SOL/ADA`, `BNB/ETH`.
-- Entry condition: `Ratio > EMA10` on 4h timeframe.
+- Basket is **dynamic** (always 4 slots): source of truth is `strategy_pairs` via `PairRegistry`; fallback `DEFAULT_STRATEGY_PAIRS` = `ZEC/AVAX`, `ENA/SUI`, `SOL/ADA`, `BNB/ETH`.
+- Daily momentum screener job (`pair-selection.ts`); auto-rotation gated by `engine_settings.auto_rotation_enabled` (keep `false` in prod until validation gate passes).
+- Removed pairs with open positions are managed to TP/SL/Trend-Flip; scanner unions active basket + open-position pairs.
+- Entry condition: `Ratio > EMA10` on 4h timeframe, and pair is in the active global basket.
 - Margin split: 25% of available free margin per pair.
 - Leverage: 7.0x.
 - Take Profit: +5.0% on net pair.

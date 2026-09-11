@@ -7,11 +7,12 @@
 
 Торговое ядро (**Worker Engine**) — это автономный сервис (Daemon), развернутый на платформе **Railway** со **статическим исходящим IP-адресом (Static Egress IP)**. 
 
-Движок работает непрерывно 24/7 и решает 4 критические задачи:
-1. **Мастер-анализ рынка (Market Scanner)**: непрерывный расчет индикаторов (EMA 10) по 4 структурным парам (`ZEC/AVAX`, `ENA/SUI`, `SOL/ADA`, `BNB/ETH`).
-2. **Диспетчер сигналов (Master-Follower Dispatcher)**: при появлении сигнала на вход или выход — мгновенное зеркалирование ордеров на биржевых аккаунтах всех активных пользователей с масштабированием объемов под депозит каждого.
+Движок работает непрерывно 24/7 и решает 5 критические задачи:
+1. **Мастер-анализ рынка (Market Scanner)**: непрерывный расчет EMA 10 по **динамической** корзине из `strategy_pairs` (через `PairRegistry`) плюс пары с открытыми `bot_positions` (union), чтобы trend-flip работал после ротации.
+2. **Диспетчер сигналов (Master-Follower Dispatcher)**: при появлении сигнала на вход или выход — мгновенное зеркалирование ордеров на биржевых аккаунтах всех активных пользователей с масштабированием объемов под депозит каждого. Новые входы — только по активной глобальной корзине.
 3. **Мониторинг позиций и риска (Position Risk Guard)**: отслеживание плавающего PnL связок в режиме реального времени, исполнение тейк-профитов (+5.0%), стоп-лоссов (-1.5%) и аварийных выходов.
-4. **Мониторинг здоровья (Health Ping)**: проверка доступности API бирж и отправка heartbeats в таблицу `system_health_logs` в Supabase.
+4. **Динамический подбор пар (Pair Selection Job)**: ежедневный momentum-скринер + опциональная авторотация корзины (см. §8).
+5. **Мониторинг здоровья (Health Ping)**: проверка доступности API бирж и отправка heartbeats в таблицу `system_health_logs` в Supabase.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -223,18 +224,21 @@ bee_crypto_worker_engine/
 │   ├── exchanges/
 │   │   ├── exchange-factory.ts # Фабрика CCXT для 3 бирж
 │   │   ├── validator.ts        # Валидатор ключей (проверка прав и withdraw)
-│   │   └── symbols.ts          # Маппинг тикеров бирж
+│   │   ├── symbols.ts          # DEFAULT_STRATEGY_PAIRS + маппинг тикеров
+│   │   └── pair-registry.ts    # Кэш активной корзины из strategy_pairs
 │   ├── engine/
-│   │   ├── market-scanner.ts   # Расчет Ratio и EMA10 по 4 парам
+│   │   ├── market-scanner.ts   # Ratio/EMA10: union(корзина ∪ open positions)
 │   │   ├── position-guard.ts   # Мониторинг TP (+5%), SL (-1.5%)
-│   │   └── order-router.ts     # Выставление и закрытие ордеров
+│   │   └── order-router.ts     # Входы только по PairRegistry.isActivePair
 │   ├── jobs/
 │   │   ├── health-check.ts     # Пинг бирж каждые 30 сек
-│   │   └── billing-cron.ts     # Расчет недельного PnL и генерация инвойсов
+│   │   ├── billing-cron.ts     # Расчет недельного PnL и генерация инвойсов
+│   │   └── pair-selection.ts   # Momentum-скринер + авторотация
 │   └── types/
 │       └── index.ts            # TypeScript интерфейсы
 ```
 
+---
 
 ## 7. Execution & Risk Configuration (added 2026-09-04)
 
@@ -261,5 +265,42 @@ All new execution and risk parameters are configurable via environment variables
 | `TP_DISABLED` | `false` | Boolean | When `true`, the fixed take-profit is disabled; exits are triggered only by SL, trend flip or panic close. |
 | `ENTRY_ON_4H_CLOSE_ONLY` | `false` | Boolean | When `true`, entry signals are evaluated only once per new closed 4-hour candle and use the closed candle's ratio against EMA10 (matching the validated backtest). When `false` (default), live-tick entries are allowed whenever `currentRatio > EMA10`. |
 | `ENTRY_4H_CLOSE_GRACE_MS` | `600000` (10 min) | Milliseconds | Cold-start grace window for `ENTRY_ON_4H_CLOSE_ONLY`. On initial EMA load, if the last closed 4h candle is older than this grace window, it is seeded as already emitted so a redeploy does not open positions mid-candle. Candles within the grace window remain eligible as new signals. |
+| `RISK_ON_NET_PNL` | `false` | Boolean | When `false` (default), TP/SL/ATR exit triggers use gross PnL% to match the validated backtest barriers. Dashboard `unrealized_pnl_usd`/`pnl_pct` are always stored net of known fees and funding. When `true`, triggers are also tested against net PnL%. |
 
 When `ENTRY_ON_4H_CLOSE_ONLY=true`, the scanner refreshes the closed 4h EMA/ATR every 15 seconds (instead of 60 seconds) so entries fire shortly after the 4h close. This consumes one `fetchOHLCV` request per pair per refresh (4 pairs → ~16 requests per minute) and should be enabled only when the backtest-aligned entry behavior is required. The re-entry guard continues to work unchanged; `REENTRY_REQUIRE_NEW_4H_CLOSE` is naturally satisfied because each entry is already gated by a new closed candle.
+
+---
+
+## 8. Dynamic Pair Selection (added 2026-09-07)
+
+### 8.1. PairRegistry
+- Source of truth: `strategy_pairs` where `is_active = true`.
+- In-memory cache refreshed every 60s; on empty table / DB error → fallback to `DEFAULT_STRATEGY_PAIRS` + warning log.
+- OrderRouter allows entries only when `pairRegistry.isActivePair(pairSymbol)`.
+
+### 8.2. Momentum screener algorithm (`PairSelectionJob`)
+1. Universe: top `UNIVERSE_SIZE` (default 60) Binance USDT-M perps by 24h quote volume; exclude stables; require listing on Binance/OKX/Bybit; require ≥540 closed 4h bars.
+2. For each ordered pair (A long, B short): drift t-stat of ratio log-returns (>2.0), positive drift in both 45d halves, leg correlation ≥0.5, `|β_A − β_B|` vs BTC ≤0.15, 24h volume ≥ `MIN_LEG_VOLUME_USD`, funding cost ≤0.05%/8h, last closed Ratio > EMA10.
+3. Score = t-stat − funding penalty; greedy top-4 with each coin used at most once.
+4. Guardrails before apply: hysteresis `ROTATION_HYSTERESIS` (1.25), max `ROTATION_MAX_REPLACEMENTS` (2), and `engine_settings.auto_rotation_enabled`. When disabled, candidates are saved on the run row but the basket is not changed.
+5. Apply writes deactivate old rows, insert new active rows, and insert `audit_logs.action = pair_rotation_applied`. Open positions on removed pairs are **not** force-closed.
+
+### 8.3. Scheduling
+- Job ticks every 60s.
+- Priority: process `pair_selection_runs` with `status=pending` (admin trigger).
+- Else create a cron run after UTC `PAIR_SELECTION_UTC_HOUR`:`PAIR_SELECTION_UTC_MINUTE` (default 00:10) if none exists for the UTC day.
+- Failures set run `status=failed` and never crash the daemon.
+
+### 8.4. Pair selection env vars
+
+| Environment Variable | Default | Meaning |
+|---|---|---|
+| `PAIR_SELECTION_ENABLED` | `true` | Master switch for the job loop. |
+| `PAIR_SELECTION_UTC_HOUR` | `0` | UTC hour after which a daily cron run may start. |
+| `PAIR_SELECTION_UTC_MINUTE` | `10` | UTC minute companion to the hour (default 00:10). |
+| `ROTATION_MAX_REPLACEMENTS` | `2` | Max pairs swapped in one apply. |
+| `ROTATION_HYSTERESIS` | `1.25` | Challenger score must be ≥ this × incumbent score. |
+| `UNIVERSE_SIZE` | `60` | Top-N USDT-M perps by 24h volume. |
+| `MIN_LEG_VOLUME_USD` | `50000000` | Min 24h quote volume per leg. |
+
+> **Validation gate (2026-09-07):** walk-forward in `research/pair_selection/MOMENTUM_VALIDATION_RESULTS.md` failed (dynamic worse than static). Keep `engine_settings.auto_rotation_enabled = false` in production until the screener improves. Manual admin runs still store candidates for inspection.

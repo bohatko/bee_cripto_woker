@@ -65,10 +65,18 @@ export class PositionGuard {
       const currentShortPrice = Number(market.short_price);
       const currentRatio = Number(market.current_ratio);
 
-      // Calculate current unrealized PnL
+      // Calculate current unrealized PnL (gross mark-to-market)
       const longPnl = (currentLongPrice - position.long_entry_price) * position.long_qty;
       const shortPnl = (position.short_entry_price - currentShortPrice) * position.short_qty;
-      const netPnlUsd = longPnl + shortPnl;
+      const grossPnlUsd = longPnl + shortPnl;
+      const grossPnlPct = (grossPnlUsd / position.allocated_margin_usd) * 100;
+
+      // Displayed unrealized PnL and pnl_pct are stored net of known costs (entry fees + any funding
+      // already accrued) so dashboard matches final realized PnL. Exit triggers, by default, use gross
+      // PnL% to match the validated backtest barriers; set RISK_ON_NET_PNL=true to use net instead.
+      const entryFeesUsd = Number(position.entry_fees_usd || 0);
+      const fundingFeesUsd = Number(position.funding_fees_usd || 0);
+      const netPnlUsd = grossPnlUsd - entryFeesUsd - fundingFeesUsd;
       const netPnlPct = (netPnlUsd / position.allocated_margin_usd) * 100;
       const effectiveLeverage =
         position.allocated_margin_usd > 0
@@ -108,13 +116,15 @@ export class PositionGuard {
       }
       slMarginPct = Math.min(slMarginPct, CONFIG.slMaxMarginPct);
 
-      // Check exit conditions:
+      // Check exit conditions against gross PnL% by default (validated backtest barriers).
+      // With RISK_ON_NET_PNL=true, thresholds are tested against net PnL% instead.
+      const triggerPnlPct = CONFIG.riskOnNetPnl ? netPnlPct : grossPnlPct;
       let exitReason: 'tp' | 'sl' | 'trend_flip' | null = null;
-      if (!CONFIG.tpDisabled && netPnlPct >= tpMarginPct) {
-        console.log(`🎯 [TP TRIGGERED] ${position.pair_symbol} PnL: +${netPnlPct.toFixed(2)}% >= ${tpMarginPct.toFixed(2)}%`);
+      if (!CONFIG.tpDisabled && triggerPnlPct >= tpMarginPct) {
+        console.log(`🎯 [TP TRIGGERED] ${position.pair_symbol} PnL: +${triggerPnlPct.toFixed(2)}% >= ${tpMarginPct.toFixed(2)}%`);
         exitReason = 'tp';
-      } else if (netPnlPct <= -slMarginPct) {
-        console.log(`🛡️ [SL TRIGGERED] ${position.pair_symbol} PnL: ${netPnlPct.toFixed(2)}% <= -${slMarginPct.toFixed(2)}%`);
+      } else if (triggerPnlPct <= -slMarginPct) {
+        console.log(`🛡️ [SL TRIGGERED] ${position.pair_symbol} PnL: ${triggerPnlPct.toFixed(2)}% <= -${slMarginPct.toFixed(2)}%`);
         exitReason = 'sl';
       } else if (this.scanner.isClosedFourHourBelowEma(position.pair_symbol)) {
         console.log(`🔄 [TREND FLIP TRIGGERED] ${position.pair_symbol} last closed 4h ratio dropped below EMA10`);

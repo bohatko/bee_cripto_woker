@@ -1,6 +1,7 @@
 import { CONFIG } from '../config.js';
-import { ExchangeAccount, ExecutionMode, LegFillResult, PairFillResult } from '../types/index.js';
+import { BotPosition, ExchangeAccount, ExecutionMode, LegFillResult, PairFillResult } from '../types/index.js';
 import { StrategyPairConfig, getExchangeSymbol } from '../exchanges/symbols.js';
+import { extractUsdtBalance } from '../exchanges/balance.js';
 
 export type { PairFillResult } from '../types/index.js';
 
@@ -37,6 +38,8 @@ export interface ExchangeClient {
   setLeverage?: (leverage: number, symbol: string) => Promise<any>;
   fetchPositions?: (symbols?: string[]) => Promise<any[]>;
   fetchPosition?: (symbol: string) => Promise<any>;
+  fetchBalance?: (params?: Record<string, any>) => Promise<any>;
+  fetchFundingHistory?: (symbol?: string, since?: number, limit?: number, params?: Record<string, any>) => Promise<any[]>;
 }
 
 const loadedMarkets = new WeakMap<object, Promise<void>>();
@@ -890,12 +893,13 @@ export function computePositionExit(
   longExitPrice: number,
   shortExitPrice: number,
   entryFeesUsd: number,
-  exitFeesUsd: number
+  exitFeesUsd: number,
+  fundingFeesUsd: number = 0
 ): { grossPnlUsd: number; netPnlUsd: number; pnlPct: number; exitRatio: number } {
   const longGross = (longExitPrice - position.long_entry_price) * position.long_qty;
   const shortGross = (position.short_entry_price - shortExitPrice) * position.short_qty;
   const grossPnlUsd = longGross + shortGross;
-  const netPnlUsd = grossPnlUsd - entryFeesUsd - exitFeesUsd;
+  const netPnlUsd = grossPnlUsd - entryFeesUsd - exitFeesUsd - fundingFeesUsd;
   const pnlPct = (netPnlUsd / position.allocated_margin_usd) * 100;
   return {
     grossPnlUsd: Number(grossPnlUsd.toFixed(4)),
@@ -903,6 +907,53 @@ export function computePositionExit(
     pnlPct: Number(pnlPct.toFixed(2)),
     exitRatio: longExitPrice / shortExitPrice,
   };
+}
+
+/**
+ * Fetch funding-fee history for both legs of a closed position and return the
+ * net cost in USD. Positive = cost to user, negative = rebate received.
+ * CCXT convention: negative amount = paid by user. We negate the sum so the
+ * column matches the accounting sign (positive = cost).
+ */
+export async function fetchFundingFeesUsd(
+  client: ExchangeClient,
+  account: ExchangeAccount,
+  position: BotPosition
+): Promise<number> {
+  if (!client.fetchFundingHistory || position.is_master || !position.opened_at) {
+    return 0;
+  }
+
+  try {
+    const since = new Date(position.opened_at).getTime();
+    const now = Date.now();
+    let totalAmount = 0;
+
+    for (const symbol of [position.long_symbol, position.short_symbol]) {
+      if (!symbol) continue;
+      // Bybit unified API requires the category in params; defaultType alone is not enough.
+      const params = account.exchange === 'bybit' ? { category: 'linear' } : {};
+      const history = await client.fetchFundingHistory(symbol, since, undefined, params);
+      if (!Array.isArray(history)) continue;
+      for (const item of history) {
+        const ts = Number(item.timestamp || item.info?.execTime || item.info?.fundingTime || 0);
+        if (Number.isFinite(ts) && ts > 0 && ts >= since && ts <= now) {
+          totalAmount += Number(item.amount || 0);
+        }
+      }
+    }
+
+    const fundingFeesUsd = Number((-totalAmount).toFixed(4));
+    if (fundingFeesUsd !== 0) {
+      console.log(
+        `💸 [FUNDING] ${position.pair_symbol} funding cost: $${fundingFeesUsd.toFixed(4)} (raw amount sum: ${totalAmount.toFixed(4)})`
+      );
+    }
+    return fundingFeesUsd;
+  } catch (err: any) {
+    console.warn(`⚠️ Failed to fetch funding history for ${position.pair_symbol}: ${err.message}`);
+    return 0;
+  }
 }
 
 export async function verifyLeverage(

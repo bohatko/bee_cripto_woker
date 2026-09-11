@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
-import { resolveRealizedPnl } from '@/lib/positions';
+import { resolveRealizedPnl, getTotalFeesUsd, getGrossPnlUsd } from '@/lib/positions';
 import { EquityGrowthChart } from '@/components/charts/EquityGrowthChart';
 
 export default function BotHistoryPage() {
@@ -38,6 +38,11 @@ export default function BotHistoryPage() {
     loadMasterHistory();
   }, []);
 
+  const pairFilterOptions = [
+    'ALL',
+    ...Array.from(new Set(masterPositions.map((p) => p.pair_symbol as string).filter(Boolean))).sort(),
+  ];
+
   const filteredPositions =
     selectedPair === 'ALL'
       ? masterPositions
@@ -52,6 +57,8 @@ export default function BotHistoryPage() {
     (acc, p) => acc + (Number(p.total_position_volume_usd) || 0),
     0
   );
+
+  const totalFeesPaid = filteredPositions.reduce((acc, p) => acc + getTotalFeesUsd(p), 0);
 
   const winningTrades = filteredPositions.filter((p) => resolveRealizedPnl(p).pnlUsd > 0);
   const winrate =
@@ -193,6 +200,9 @@ export default function BotHistoryPage() {
           </p>
           <span className="text-[11px] text-slate-500 font-mono">
             {t('history.roiOnBase', { pct: ((totalRealizedPnl / BOT_STARTING_BALANCE) * 100).toFixed(1) })}
+            {totalFeesPaid > 0 && (
+              <> • {t('history.totalFeesPaid')}: -${totalFeesPaid.toFixed(2)}</>
+            )}
           </span>
         </div>
 
@@ -212,7 +222,7 @@ export default function BotHistoryPage() {
       {/* Pair Filter Pills */}
       <div className="flex flex-wrap items-center gap-2 pt-1 font-mono text-xs">
         <span className="text-slate-500 text-[11px] uppercase mr-1">{t('history.filterPair')}</span>
-        {['ALL', 'ZEC/AVAX', 'ENA/SUI', 'SOL/ADA', 'BNB/ETH'].map((pair) => (
+        {pairFilterOptions.map((pair) => (
           <button
             key={pair}
             onClick={() => setSelectedPair(pair)}
@@ -248,12 +258,15 @@ export default function BotHistoryPage() {
                   <th className="px-5 py-3.5">{t('history.colExit')}</th>
                   <th className="px-5 py-3.5">{t('history.colRatio')}</th>
                   <th className="px-5 py-3.5">{t('history.colDates')}</th>
+                  <th className="px-5 py-3.5 text-right">{t('history.colFees')}</th>
                   <th className="px-5 py-3.5 text-right">{t('history.colPnl')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-dark-800 font-mono text-xs">
                 {filteredPositions.map((pos) => {
                   const { pnlUsd: pnl, pnlPct } = resolveRealizedPnl(pos);
+                  const fees = getTotalFeesUsd(pos);
+                  const gross = getGrossPnlUsd(pos);
                   const marginUsd = Number(pos.allocated_margin_usd || 12500);
                   const volumeUsd = Number(pos.total_position_volume_usd || marginUsd * 7);
                   const legVolume = volumeUsd / 2;
@@ -270,6 +283,13 @@ export default function BotHistoryPage() {
                           <div className="text-[10px] text-slate-500 mt-1 font-mono">
                             {t('history.baseCapital')}
                           </div>
+                          {pos.execution_mode && (
+                            <span className="inline-block mt-1 px-1.5 py-0.5 rounded text-[9px] uppercase font-bold bg-dark-800 text-slate-400 border border-dark-700">
+                              {pos.execution_mode === 'maker_hedge'
+                                ? t('history.executionMaker')
+                                : t('history.executionMarket')}
+                            </span>
+                          )}
                         </div>
                       </td>
 
@@ -342,12 +362,25 @@ export default function BotHistoryPage() {
                         )}
                       </td>
 
-                      {/* Column 7: Realized PnL */}
+                      {/* Column 7: Exchange Fees */}
+                      <td className="px-5 py-4 text-right">
+                        <span className="font-mono text-slate-500">
+                          {fees > 0
+                            ? `-$${fees.toLocaleString(dateLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                            : '$0.00'}
+                        </span>
+                      </td>
+
+                      {/* Column 8: Net Realized PnL */}
                       <td className="px-5 py-4 text-right">
                         <div
                           className={`font-black text-sm ${
                             pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'
                           }`}
+                          title={t('history.pnlBreakdown', {
+                            gross: `$${gross.toFixed(2)}`,
+                            fees: `$${fees.toFixed(2)}`,
+                          })}
                         >
                           {pnl >= 0
                             ? `+$${pnl.toLocaleString(dateLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -360,6 +393,14 @@ export default function BotHistoryPage() {
                         >
                           {pnl >= 0 ? `+${pnlPct.toFixed(2)}%` : `${pnlPct.toFixed(2)}%`}
                         </div>
+                        {fees > 0 && (
+                          <div className="text-[10px] text-slate-500 mt-0.5">
+                            {t('history.pnlBreakdown', {
+                              gross: `$${gross.toFixed(2)}`,
+                              fees: `$${fees.toFixed(2)}`,
+                            })}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );

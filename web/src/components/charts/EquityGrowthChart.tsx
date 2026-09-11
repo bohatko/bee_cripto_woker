@@ -291,6 +291,9 @@ export function EquityGrowthChart({
                 : isPnlMode
                 ? t('history.userPnlSubtitle')
                 : t('history.userEquitySubtitle'))}
+            <span className="block text-[10px] text-slate-500 mt-0.5 font-mono">
+              {t('history.chartNetOfFees')}
+            </span>
           </p>
         </div>
 

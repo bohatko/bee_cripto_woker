@@ -85,11 +85,13 @@ export interface BotPosition {
   long_order_id: string | null;
   long_entry_price: number;
   long_exit_price: number | null;
+  long_exit_order_id: string | null;
   long_qty: number;
   short_symbol: string;
   short_order_id: string | null;
   short_entry_price: number;
   short_exit_price: number | null;
+  short_exit_order_id: string | null;
   short_qty: number;
   allocated_margin_usd: number;
   total_position_volume_usd: number;
@@ -98,11 +100,57 @@ export interface BotPosition {
   gross_pnl_usd: number | null;
   entry_fees_usd: number;
   exit_fees_usd: number;
+  funding_fees_usd: number;
   execution_mode: ExecutionMode | null;
   pnl_pct: number | null;
   exit_reason: ExitReasonType | null;
   opened_at: string;
   closed_at: string | null;
+}
+
+export type PairSelectionRunStatus = 'pending' | 'running' | 'completed' | 'failed';
+export type PairSelectionTrigger = 'cron' | 'admin';
+
+export interface StrategyPairRow {
+  id: string;
+  pair_symbol: string;
+  long_coin: string;
+  short_coin: string;
+  score: number | null;
+  metrics: Record<string, unknown> | null;
+  activated_at: string;
+  deactivated_at: string | null;
+  run_id: string | null;
+  is_active: boolean;
+}
+
+export interface PairSelectionProgressStep {
+  at: string;
+  stage: string;
+  message: string;
+  detail?: Record<string, unknown>;
+}
+
+export interface PairSelectionRun {
+  id: string;
+  status: PairSelectionRunStatus;
+  trigger_source: PairSelectionTrigger;
+  requested_by: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  universe_size: number | null;
+  candidates: unknown | null;
+  applied: boolean;
+  replacements: unknown | null;
+  progress_log: PairSelectionProgressStep[] | null;
+  error: string | null;
+  created_at: string;
+}
+
+export interface EngineSettings {
+  id: number;
+  auto_rotation_enabled: boolean;
+  updated_at: string;
 }
 
 /** Normalized fill result from exchange execution (market or maker-hedge). */

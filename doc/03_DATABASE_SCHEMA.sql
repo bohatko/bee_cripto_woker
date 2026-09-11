@@ -122,6 +122,7 @@ CREATE TABLE IF NOT EXISTS public.bot_positions (
     long_order_id TEXT,
     long_entry_price NUMERIC(18, 8) NOT NULL,
     long_exit_price NUMERIC(18, 8),
+    long_exit_order_id TEXT,
     long_qty NUMERIC(18, 8) NOT NULL,
     
     -- Нога SHORT
@@ -129,6 +130,7 @@ CREATE TABLE IF NOT EXISTS public.bot_positions (
     short_order_id TEXT,
     short_entry_price NUMERIC(18, 8) NOT NULL,
     short_exit_price NUMERIC(18, 8),
+    short_exit_order_id TEXT,
     short_qty NUMERIC(18, 8) NOT NULL,
     
     -- Финансовые показатели
@@ -139,6 +141,7 @@ CREATE TABLE IF NOT EXISTS public.bot_positions (
     gross_pnl_usd NUMERIC(18, 4),
     entry_fees_usd NUMERIC(18, 4) DEFAULT 0.0000,
     exit_fees_usd NUMERIC(18, 4) DEFAULT 0.0000,
+    funding_fees_usd NUMERIC(18, 4) DEFAULT 0.0000,
     execution_mode TEXT,
     pnl_pct NUMERIC(8, 4),
 
@@ -197,16 +200,79 @@ CREATE TABLE IF NOT EXISTS public.system_health_logs (
 
 -- ==============================================================================
 -- ТАБЛИЦА 8: audit_logs (Логирование критических модалок подтверждения)
+-- user_id NULLABLE: системные записи воркера (например, pair_rotation_applied)
+-- создаются без пользователя.
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.audit_logs (
     id BIGSERIAL PRIMARY KEY,
-    user_id UUID NOT NULL REFERENCES public.users_profile(id) ON DELETE CASCADE,
-    action TEXT NOT NULL, -- 'start_bot', 'stop_bot', 'panic_close', 'delete_keys', 'logout'
+    user_id UUID REFERENCES public.users_profile(id) ON DELETE CASCADE,
+    action TEXT NOT NULL, -- 'start_bot', 'stop_bot', 'panic_close', 'delete_keys', 'logout', 'pair_rotation_applied', 'pair_selection_triggered', 'auto_rotation_toggled'
     ip_address TEXT,
     user_agent TEXT,
     details JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
+
+-- ==============================================================================
+-- ТАБЛИЦА 9: pair_selection_runs (Прогоны momentum-скринера: cron + админ-триггер)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.pair_selection_runs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','running','completed','failed')),
+    trigger_source TEXT NOT NULL CHECK (trigger_source IN ('cron','admin')),
+    requested_by UUID REFERENCES public.users_profile(id) ON DELETE SET NULL, -- только для admin-триггера
+    started_at TIMESTAMPTZ,
+    finished_at TIMESTAMPTZ,
+    universe_size INTEGER,
+    candidates JSONB,           -- полный ранжированный список кандидатов с метриками
+    applied BOOLEAN NOT NULL DEFAULT FALSE,
+    replacements JSONB,         -- [{ removed, added, old_score, new_score }]
+    progress_log JSONB NOT NULL DEFAULT '[]'::jsonb, -- live trace: [{at, stage, message, detail?}]
+    error TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ==============================================================================
+-- ТАБЛИЦА 10: strategy_pairs (Глобальная актуальная корзина, замена хардкода)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.strategy_pairs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    pair_symbol TEXT NOT NULL,  -- 'ZEC/AVAX'
+    long_coin TEXT NOT NULL,
+    short_coin TEXT NOT NULL,
+    score NUMERIC(18, 6),       -- финальный скор скринера (drift t-stat - funding-штраф)
+    metrics JSONB,              -- t_stat, corr, beta_diff, funding, volumes и пр.
+    activated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deactivated_at TIMESTAMPTZ,
+    run_id UUID REFERENCES public.pair_selection_runs(id) ON DELETE SET NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+-- Seed: 4 текущие пары (только если таблица пуста)
+INSERT INTO public.strategy_pairs (pair_symbol, long_coin, short_coin, is_active)
+SELECT v.pair_symbol, v.long_coin, v.short_coin, TRUE
+FROM (VALUES
+    ('ZEC/AVAX', 'ZEC', 'AVAX'),
+    ('ENA/SUI',  'ENA', 'SUI'),
+    ('SOL/ADA',  'SOL', 'ADA'),
+    ('BNB/ETH',  'BNB', 'ETH')
+) AS v(pair_symbol, long_coin, short_coin)
+WHERE NOT EXISTS (SELECT 1 FROM public.strategy_pairs);
+
+-- ==============================================================================
+-- ТАБЛИЦА 11: engine_settings (Синглтон глобальных настроек движка)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.engine_settings (
+    id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    auto_rotation_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Seed синглтона: авторотация ВЫКЛЮЧЕНА до прохождения валидации скринера
+-- (research/pair_selection/momentum_screener_validation.py), включается в админке.
+INSERT INTO public.engine_settings (id, auto_rotation_enabled)
+VALUES (1, FALSE)
+ON CONFLICT (id) DO NOTHING;
 
 -- ==============================================================================
 -- ИНДЕКСЫ ДЛЯ СКОРОСТИ ЗАПРОСОВ
@@ -216,6 +282,10 @@ CREATE INDEX IF NOT EXISTS idx_bot_positions_pair_status ON public.bot_positions
 CREATE INDEX IF NOT EXISTS idx_invoices_user_status ON public.invoices(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_exchange_accounts_user ON public.exchange_accounts(user_id);
 CREATE INDEX IF NOT EXISTS idx_health_component_time ON public.system_health_logs(component, pinged_at DESC);
+CREATE INDEX IF NOT EXISTS idx_strategy_pairs_active ON public.strategy_pairs(is_active) WHERE is_active;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_strategy_pairs_active_symbol ON public.strategy_pairs(pair_symbol) WHERE is_active;
+CREATE INDEX IF NOT EXISTS idx_pair_selection_runs_status ON public.pair_selection_runs(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_pair_selection_runs_created ON public.pair_selection_runs(created_at DESC);
 
 -- ==============================================================================
 -- ТРИГГЕРЫ: Автоматическое обновление updated_at
@@ -238,6 +308,7 @@ BEGIN
     CREATE TRIGGER trg_trading_settings_upd BEFORE UPDATE ON public.trading_settings FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
     CREATE TRIGGER trg_bot_positions_upd BEFORE UPDATE ON public.bot_positions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
     CREATE TRIGGER trg_invoices_upd BEFORE UPDATE ON public.invoices FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    CREATE TRIGGER trg_engine_settings_upd BEFORE UPDATE ON public.engine_settings FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
 
@@ -308,6 +379,9 @@ ALTER TABLE public.invoices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pair_market_data ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.system_health_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.strategy_pairs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.pair_selection_runs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.engine_settings ENABLE ROW LEVEL SECURITY;
 
 -- 1. users_profile
 CREATE OR REPLACE FUNCTION public.is_admin()
@@ -384,6 +458,27 @@ CREATE POLICY "Authenticated users can read market data" ON public.pair_market_d
 CREATE POLICY "Authenticated users can read health status" ON public.system_health_logs
     FOR SELECT TO authenticated USING (true);
 
+-- 8. Динамическая корзина и прогоны скринера
+-- Воркер работает через service role (обходит RLS). Пользователи читают корзину
+-- и прогоны; админ запускает прогоны и переключает авторотацию.
+CREATE POLICY "Authenticated users can read strategy pairs" ON public.strategy_pairs
+    FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Admins have full access to strategy pairs" ON public.strategy_pairs
+    FOR ALL USING (public.is_admin());
+
+CREATE POLICY "Authenticated users can read selection runs" ON public.pair_selection_runs
+    FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Admins can trigger selection runs" ON public.pair_selection_runs
+    FOR INSERT TO authenticated
+    WITH CHECK (public.is_admin() AND trigger_source = 'admin' AND status = 'pending');
+CREATE POLICY "Admins have full access to selection runs" ON public.pair_selection_runs
+    FOR ALL USING (public.is_admin());
+
+CREATE POLICY "Authenticated users can read engine settings" ON public.engine_settings
+    FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Admins can update engine settings" ON public.engine_settings
+    FOR UPDATE TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
+
 -- ==============================================================================
 -- ВКЛЮЧЕНИЕ SUPABASE REALTIME ДЛЯ ДАШБОРДА
 -- ==============================================================================
@@ -394,5 +489,7 @@ BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.pair_market_data;
     ALTER PUBLICATION supabase_realtime ADD TABLE public.invoices;
     ALTER PUBLICATION supabase_realtime ADD TABLE public.system_health_logs;
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.strategy_pairs;
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.pair_selection_runs;
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;

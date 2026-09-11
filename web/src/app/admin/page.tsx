@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -19,18 +19,29 @@ import {
   RefreshCw,
   Wallet,
   AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+  Play,
+  Repeat,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
+import { PairSelectionTraceDrawer } from '@/components/admin/PairSelectionTraceDrawer';
+import {
+  ReplacePairModal,
+  type BasketPairRow,
+  type CandidateRow,
+} from '@/components/admin/ReplacePairModal';
 import { toast } from '@/components/ui/sonner';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { LanguageSwitcher } from '@/lib/i18n/LanguageSwitcher';
-import { isUnfilledSimulation } from '@/lib/positions';
+import { isUnfilledSimulation, getDisplayPnlUsd } from '@/lib/positions';
 
 export default function AdminDashboardPage() {
   const router = useRouter();
   const { t, dateLocale, formatDate, formatDateTime } = useLanguage();
-  const [activeTab, setActiveTab] = useState<'users' | 'invoices' | 'positions' | 'health'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'invoices' | 'positions' | 'pairs' | 'health'>('users');
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
 
@@ -46,6 +57,52 @@ export default function AdminDashboardPage() {
   const [actionType, setActionType] = useState<'approve' | 'reject' | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+
+  // Pairs & rotation state
+  const [activePairs, setActivePairs] = useState<any[]>([]);
+  const [pairRuns, setPairRuns] = useState<any[]>([]);
+  const [engineSettings, setEngineSettings] = useState<any>(null);
+  const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
+  const [pairsAction, setPairsAction] = useState<'toggleRotation' | 'runSelection' | null>(null);
+  const [isPairsConfirmOpen, setIsPairsConfirmOpen] = useState(false);
+  const [traceRunId, setTraceRunId] = useState<string | null>(null);
+  const [replaceOutgoing, setReplaceOutgoing] = useState<BasketPairRow | null>(null);
+  const [isReplacePickerOpen, setIsReplacePickerOpen] = useState(false);
+  const [pendingReplacement, setPendingReplacement] = useState<{
+    outgoing: BasketPairRow;
+    incoming: CandidateRow;
+  } | null>(null);
+  const [isReplaceConfirmOpen, setIsReplaceConfirmOpen] = useState(false);
+  const [isReplacing, setIsReplacing] = useState(false);
+
+  async function loadPairsData() {
+    // Load current active basket pairs
+    const { data: pairs } = await supabase
+      .from('strategy_pairs')
+      .select('*')
+      .eq('is_active', true)
+      .order('score', { ascending: false });
+
+    if (pairs) setActivePairs(pairs);
+
+    // Load last 10 pair selection runs
+    const { data: runs } = await supabase
+      .from('pair_selection_runs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (runs) setPairRuns(runs);
+
+    // Load engine settings (single row, id = 1)
+    const { data: settings } = await supabase
+      .from('engine_settings')
+      .select('*')
+      .eq('id', 1)
+      .maybeSingle();
+
+    if (settings) setEngineSettings(settings);
+  }
 
   async function checkAdminAndLoadData() {
     setLoading(true);
@@ -85,14 +142,19 @@ export default function AdminDashboardPage() {
 
     if (allInvoices) setInvoices(allInvoices);
 
-    // Load all open and recently closed positions across all users
-    const { data: allPositions } = await supabase
+    // Load recent positions across all users (incl. master rows with null user_id)
+    const { data: allPositions, error: positionsError } = await supabase
       .from('bot_positions')
       .select('*, users_profile:users_profile!user_id(email)')
       .order('opened_at', { ascending: false })
-      .limit(50);
+      .limit(100);
 
-    if (allPositions) setPositions(allPositions.filter((p) => !isUnfilledSimulation(p)));
+    if (positionsError) {
+      console.error('Failed to load admin positions:', positionsError.message);
+      setPositions([]);
+    } else if (allPositions) {
+      setPositions(allPositions.filter((p) => !isUnfilledSimulation(p)));
+    }
 
     // Load system health logs
     const { data: health } = await supabase
@@ -102,6 +164,9 @@ export default function AdminDashboardPage() {
       .limit(10);
 
     if (health) setHealthLogs(health);
+
+    // Load pairs, selection runs and engine settings
+    await loadPairsData();
 
     setLoading(false);
   }
@@ -117,6 +182,12 @@ export default function AdminDashboardPage() {
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'users_profile' }, () => {
         checkAdminAndLoadData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'strategy_pairs' }, () => {
+        loadPairsData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pair_selection_runs' }, () => {
+        loadPairsData();
       })
       .subscribe();
 
@@ -186,6 +257,244 @@ export default function AdminDashboardPage() {
     } catch (err: any) {
       const errorText = err.message || 'Action failed';
       toast.error(errorText);
+    }
+  };
+
+  const handleToggleRotation = () => {
+    setPairsAction('toggleRotation');
+    setIsPairsConfirmOpen(true);
+  };
+
+  const handleRunSelection = () => {
+    setPairsAction('runSelection');
+    setIsPairsConfirmOpen(true);
+  };
+
+  const confirmPairsAction = async () => {
+    if (!pairsAction) return;
+    setIsPairsConfirmOpen(false);
+
+    try {
+      const { data: { user: adminUser } } = await supabase.auth.getUser();
+      if (!adminUser) return;
+
+      if (pairsAction === 'toggleRotation') {
+        const nextEnabled = !engineSettings?.auto_rotation_enabled;
+        await supabase
+          .from('engine_settings')
+          .update({
+            auto_rotation_enabled: nextEnabled,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', 1);
+
+        await supabase.from('audit_logs').insert({
+          user_id: adminUser.id,
+          action: 'auto_rotation_toggled',
+          details: { enabled: nextEnabled },
+        });
+
+        toast.success(
+          nextEnabled ? t('admin.rotationEnabledToast') : t('admin.rotationDisabledToast')
+        );
+      } else if (pairsAction === 'runSelection') {
+        await supabase.from('pair_selection_runs').insert({
+          status: 'pending',
+          trigger_source: 'admin',
+          requested_by: adminUser.id,
+          progress_log: [
+            {
+              at: new Date().toISOString(),
+              stage: 'queued',
+              message: 'Admin queued a manual pair selection run. Waiting for the worker daemon to pick it up.',
+              detail: { requested_by: adminUser.id },
+            },
+          ],
+        });
+
+        await supabase.from('audit_logs').insert({
+          user_id: adminUser.id,
+          action: 'pair_selection_triggered',
+          details: {},
+        });
+
+        toast.success(t('admin.selectionTriggeredToast'));
+        // Open the live trace drawer for the newest pending run after reload
+        const { data: newest } = await supabase
+          .from('pair_selection_runs')
+          .select('id')
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (newest?.id) setTraceRunId(newest.id);
+      }
+
+      loadPairsData();
+    } catch (err: any) {
+      const errorText = err.message || 'Action failed';
+      toast.error(errorText);
+    }
+  };
+
+  const formatScore = (value: any) =>
+    value === null || value === undefined ? '—' : Number(value).toFixed(3);
+
+  const formatMetric = (value: any, digits = 2) =>
+    value === null || value === undefined ? '—' : Number(value).toFixed(digits);
+
+  const latestRun = pairRuns[0];
+  const isRunInProgress =
+    latestRun && (latestRun.status === 'pending' || latestRun.status === 'running');
+  const tracedRun =
+    (traceRunId ? pairRuns.find((r) => r.id === traceRunId) : null) ||
+    (isRunInProgress ? latestRun : null);
+
+  const latestCandidates: CandidateRow[] = useMemo(() => {
+    const completedWithCandidates = pairRuns.find(
+      (r) => r.status === 'completed' && Array.isArray(r.candidates) && r.candidates.length > 0
+    );
+    return Array.isArray(completedWithCandidates?.candidates)
+      ? (completedWithCandidates.candidates as CandidateRow[])
+      : [];
+  }, [pairRuns]);
+
+  const candidateScoreBySymbol = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const c of latestCandidates) {
+      if (c?.pair_symbol != null && c.score != null) map.set(c.pair_symbol, Number(c.score));
+    }
+    return map;
+  }, [latestCandidates]);
+
+  const displayBasket: BasketPairRow[] = useMemo(() => {
+    return activePairs.map((p) => ({
+      ...p,
+      score:
+        p.score !== null && p.score !== undefined
+          ? Number(p.score)
+          : candidateScoreBySymbol.get(p.pair_symbol) ?? null,
+    }));
+  }, [activePairs, candidateScoreBySymbol]);
+
+  const openReplacePicker = (pair: BasketPairRow) => {
+    setReplaceOutgoing(pair);
+    setIsReplacePickerOpen(true);
+  };
+
+  const handleCandidatePicked = (incoming: CandidateRow) => {
+    if (!replaceOutgoing) return;
+    setIsReplacePickerOpen(false);
+    setPendingReplacement({ outgoing: replaceOutgoing, incoming });
+    setIsReplaceConfirmOpen(true);
+  };
+
+  const confirmManualReplace = async () => {
+    if (!pendingReplacement || isReplacing) return;
+    setIsReplacing(true);
+    setIsReplaceConfirmOpen(false);
+
+    const { outgoing, incoming } = pendingReplacement;
+    const nowIso = new Date().toISOString();
+
+    try {
+      const { data: { user: adminUser } } = await supabase.auth.getUser();
+      if (!adminUser) throw new Error('Not authenticated');
+
+      // Coin uniqueness vs remaining active slots
+      const reserved = new Set<string>();
+      for (const p of activePairs) {
+        if (p.id === outgoing.id) continue;
+        reserved.add(String(p.long_coin).toUpperCase());
+        reserved.add(String(p.short_coin).toUpperCase());
+      }
+      if (
+        reserved.has(incoming.long_coin.toUpperCase()) ||
+        reserved.has(incoming.short_coin.toUpperCase())
+      ) {
+        throw new Error('Replacement shares a coin with another active pair');
+      }
+
+      const { error: deactivateError } = await supabase
+        .from('strategy_pairs')
+        .update({ is_active: false, deactivated_at: nowIso })
+        .eq('id', outgoing.id)
+        .eq('is_active', true);
+
+      if (deactivateError) throw deactivateError;
+
+      const { error: insertError } = await supabase.from('strategy_pairs').insert({
+        pair_symbol: incoming.pair_symbol,
+        long_coin: incoming.long_coin,
+        short_coin: incoming.short_coin,
+        score: incoming.score,
+        metrics: incoming.metrics ?? null,
+        activated_at: nowIso,
+        is_active: true,
+        run_id: pairRuns.find((r) => Array.isArray(r.candidates))?.id ?? null,
+      });
+
+      if (insertError) {
+        // Best-effort rollback
+        await supabase
+          .from('strategy_pairs')
+          .update({ is_active: true, deactivated_at: null })
+          .eq('id', outgoing.id);
+        throw insertError;
+      }
+
+      await supabase.from('audit_logs').insert({
+        user_id: adminUser.id,
+        action: 'pair_manual_replace',
+        details: {
+          removed: outgoing.pair_symbol,
+          added: incoming.pair_symbol,
+          old_score: outgoing.score,
+          new_score: incoming.score,
+        },
+      });
+
+      // Keep dashboard/scanner in sync with the new basket pair.
+      // NEVER delete pair_market_data for the outgoing pair while open positions
+      // still exist — PositionGuard needs those prices for TP/SL/Trend-Flip.
+      await supabase.from('pair_market_data').upsert(
+        {
+          pair_symbol: incoming.pair_symbol,
+          long_coin: incoming.long_coin,
+          short_coin: incoming.short_coin,
+          current_ratio: 0,
+          ema_10: 0,
+          is_in_trend: false,
+          long_price: 0,
+          short_price: 0,
+          updated_at: nowIso,
+        },
+        { onConflict: 'pair_symbol' }
+      );
+
+      const { count: openOnOutgoing } = await supabase
+        .from('bot_positions')
+        .select('id', { count: 'exact', head: true })
+        .eq('pair_symbol', outgoing.pair_symbol)
+        .eq('status', 'open');
+
+      if (!openOnOutgoing || openOnOutgoing === 0) {
+        await supabase.from('pair_market_data').delete().eq('pair_symbol', outgoing.pair_symbol);
+      }
+
+      toast.success(
+        t('admin.replaceSuccessToast', {
+          old: outgoing.pair_symbol,
+          next: incoming.pair_symbol,
+        })
+      );
+      setPendingReplacement(null);
+      setReplaceOutgoing(null);
+      await loadPairsData();
+    } catch (err: any) {
+      toast.error(err.message || t('admin.replaceFailedToast'));
+    } finally {
+      setIsReplacing(false);
     }
   };
 
@@ -343,6 +652,16 @@ export default function AdminDashboardPage() {
             }`}
           >
             {t('admin.livePositions')}
+          </button>
+          <button
+            onClick={() => setActiveTab('pairs')}
+            className={`pb-3 px-4 border-b-2 transition-colors ${
+              activeTab === 'pairs'
+                ? 'border-honey-500 text-honey-400 font-bold'
+                : 'border-transparent text-slate-400 hover:text-white'
+            }`}
+          >
+            {t('admin.pairsTab')}
           </button>
           <button
             onClick={() => setActiveTab('health')}
@@ -630,11 +949,17 @@ export default function AdminDashboardPage() {
                   </thead>
                   <tbody className="divide-y divide-dark-800 font-mono text-xs">
                     {positions.map((p) => {
-                      const pnl = Number(p.realized_pnl_usd ?? p.unrealized_pnl_usd ?? 0);
+                      const pnl = getDisplayPnlUsd(p);
+                      const traderLabel =
+                        p.users_profile?.email?.split('@')[0] ||
+                        (p.is_master ? 'MASTER' : null) ||
+                        (typeof p.user_id === 'string' ? p.user_id.slice(0, 8) : '—');
                       return (
                         <tr key={p.id} className="hover:bg-dark-850/50 transition-colors">
                           <td className="px-5 py-4 text-slate-300">
-                            {p.users_profile?.email?.split('@')[0] || p.user_id.substring(0, 8)}
+                            <span className={p.is_master ? 'text-honey-400 font-bold' : undefined}>
+                              {traderLabel}
+                            </span>
                           </td>
                           <td className="px-5 py-4 font-bold text-white">{p.pair_symbol}</td>
                           <td className="px-5 py-4">
@@ -649,10 +974,10 @@ export default function AdminDashboardPage() {
                             </span>
                           </td>
                           <td className="px-5 py-4 text-slate-400">
-                            {Number(p.entry_ratio).toFixed(4)}
+                            {Number(p.entry_ratio || 0).toFixed(4)}
                           </td>
                           <td className="px-5 py-4 text-slate-300">
-                            ${Number(p.allocated_margin_usd).toFixed(2)}
+                            ${Number(p.allocated_margin_usd || 0).toFixed(2)}
                           </td>
                           <td className="px-5 py-4 text-right">
                             <span
@@ -673,7 +998,314 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
-        {/* TAB 4: SYSTEM HEALTH PINGS */}
+        {/* TAB 4: PAIRS & ROTATION */}
+        {activeTab === 'pairs' && (
+          <div className="space-y-6">
+            {/* Block A: Current Active Basket */}
+            <div className="bg-dark-900 border border-dark-800 rounded-2xl shadow-xl overflow-hidden">
+              <div className="p-5 border-b border-dark-800 flex justify-between items-center">
+                <h2 className="text-base font-bold text-white">{t('admin.currentBasket')}</h2>
+                <span className="text-xs font-mono text-slate-400">
+                  {t('admin.activePairsCount', { count: activePairs.length })}
+                </span>
+              </div>
+
+              {activePairs.length === 0 ? (
+                <div className="p-12 text-center text-slate-500 font-mono text-sm">
+                  {t('admin.noPairs')}
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-dark-950/60 text-[11px] uppercase tracking-wider text-slate-400 font-mono border-b border-dark-800">
+                      <tr>
+                        <th className="px-5 py-3">{t('admin.colPair')}</th>
+                        <th className="px-5 py-3">{t('admin.colLongShort')}</th>
+                        <th className="px-5 py-3">{t('admin.colScore')}</th>
+                        <th className="px-5 py-3">{t('admin.colMetrics')}</th>
+                        <th className="px-5 py-3 text-right">{t('admin.colActivated')}</th>
+                        <th className="px-5 py-3 text-right">{t('admin.basketActions')}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-dark-800 font-mono text-xs">
+                      {displayBasket.map((pair) => (
+                        <tr key={pair.id} className="hover:bg-dark-850/50 transition-colors">
+                          <td className="px-5 py-4 font-bold text-white">{pair.pair_symbol}</td>
+                          <td className="px-5 py-4">
+                            <span className="text-emerald-400 font-bold">L:{pair.long_coin}</span>
+                            <span className="text-slate-500 mx-1.5">/</span>
+                            <span className="text-rose-400 font-bold">S:{pair.short_coin}</span>
+                          </td>
+                          <td className="px-5 py-4 text-honey-400 font-bold">
+                            {formatScore(pair.score)}
+                          </td>
+                          <td className="px-5 py-4 text-slate-400 text-[11px]">
+                            {pair.metrics ? (
+                              <span>
+                                t: {formatMetric(pair.metrics.t_stat)} • corr:{' '}
+                                {formatMetric(pair.metrics.corr)} • β: {formatMetric(pair.metrics.beta_diff, 3)}{' '}
+                                • fund: {formatMetric(pair.metrics.funding_cost_pct_8h, 4)}%
+                              </span>
+                            ) : (
+                              <span className="text-slate-600">—</span>
+                            )}
+                          </td>
+                          <td className="px-5 py-4 text-right text-slate-400 text-[11px]">
+                            {formatDateTime(pair.activated_at)}
+                          </td>
+                          <td className="px-5 py-4 text-right">
+                            <button
+                              type="button"
+                              onClick={() => openReplacePicker(pair)}
+                              disabled={latestCandidates.length === 0 || isReplacing}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase bg-dark-800 border border-dark-700 text-honey-400 hover:bg-honey-500/15 hover:border-honey-500/40 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                              title={
+                                latestCandidates.length === 0
+                                  ? t('admin.replaceNeedRun')
+                                  : t('admin.replacePairTitle')
+                              }
+                            >
+                              <ArrowRightLeft className="w-3 h-3" />
+                              {t('admin.replace')}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Blocks B + C: Auto-Rotation Toggle & Manual Run */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="bg-dark-900 border border-dark-800 p-5 rounded-2xl shadow-xl flex items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 text-sm font-bold text-white">
+                    <Repeat className="w-4 h-4 text-honey-400" />
+                    {t('admin.autoRotation')}
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1.5">{t('admin.autoRotationDesc')}</p>
+                </div>
+                <button
+                  onClick={handleToggleRotation}
+                  className={`px-4 py-2 rounded-xl text-xs font-mono font-bold uppercase border transition-all ${
+                    engineSettings?.auto_rotation_enabled
+                      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25'
+                      : 'bg-rose-500/15 text-rose-400 border-rose-500/30 hover:bg-rose-500/25'
+                  }`}
+                >
+                  {engineSettings?.auto_rotation_enabled
+                    ? t('admin.rotationOn')
+                    : t('admin.rotationOff')}
+                </button>
+              </div>
+
+              <div className="bg-dark-900 border border-dark-800 p-5 rounded-2xl shadow-xl flex items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 text-sm font-bold text-white">
+                    <Play className="w-4 h-4 text-honey-400" />
+                    {t('admin.runSelection')}
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1.5">{t('admin.runSelectionHint')}</p>
+                </div>
+                {isRunInProgress ? (
+                  <button
+                    type="button"
+                    onClick={() => setTraceRunId(latestRun.id)}
+                    className="px-4 py-2 rounded-xl text-xs font-mono font-bold uppercase bg-amber-500/20 text-amber-400 border border-amber-500/40 animate-pulse hover:bg-amber-500/30 transition-colors"
+                    title={t('admin.traceOpenHint')}
+                  >
+                    {t('admin.runInProgress')}
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleRunSelection}
+                    className="px-4 py-2 rounded-xl text-xs font-bold bg-honey-500 hover:bg-honey-400 text-dark-950 shadow-lg shadow-honey-500/20 transition-all"
+                  >
+                    {t('admin.runNow')}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Block D: Run History */}
+            <div className="bg-dark-900 border border-dark-800 rounded-2xl shadow-xl overflow-hidden">
+              <div className="p-5 border-b border-dark-800 flex justify-between items-center">
+                <h2 className="text-base font-bold text-white">{t('admin.runHistory')}</h2>
+                <span className="text-xs font-mono text-slate-400">
+                  {t('admin.lastRuns', { count: pairRuns.length })}
+                </span>
+              </div>
+
+              {pairRuns.length === 0 ? (
+                <div className="p-12 text-center text-slate-500 font-mono text-sm">
+                  {t('admin.noRuns')}
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-dark-950/60 text-[11px] uppercase tracking-wider text-slate-400 font-mono border-b border-dark-800">
+                      <tr>
+                        <th className="px-5 py-3 w-8" />
+                        <th className="px-5 py-3">{t('admin.colCreated')}</th>
+                        <th className="px-5 py-3">{t('admin.colTrigger')}</th>
+                        <th className="px-5 py-3">{t('common.status')}</th>
+                        <th className="px-5 py-3">{t('admin.colUniverse')}</th>
+                        <th className="px-5 py-3">{t('admin.colApplied')}</th>
+                        <th className="px-5 py-3">{t('admin.colReplacements')}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-dark-800 font-mono text-xs">
+                      {pairRuns.map((run) => {
+                        const isExpanded = expandedRunId === run.id;
+                        const candidates = Array.isArray(run.candidates)
+                          ? run.candidates.slice(0, 15)
+                          : [];
+                        const replacements = Array.isArray(run.replacements)
+                          ? run.replacements
+                          : [];
+
+                        return (
+                          <React.Fragment key={run.id}>
+                            <tr className="hover:bg-dark-850/50 transition-colors">
+                              <td className="px-5 py-4">
+                                <button
+                                  onClick={() =>
+                                    setExpandedRunId(isExpanded ? null : run.id)
+                                  }
+                                  className="p-1 rounded bg-dark-800 hover:bg-dark-700 text-slate-400 hover:text-white transition-colors"
+                                >
+                                  {isExpanded ? (
+                                    <ChevronDown className="w-3.5 h-3.5" />
+                                  ) : (
+                                    <ChevronRight className="w-3.5 h-3.5" />
+                                  )}
+                                </button>
+                              </td>
+                              <td className="px-5 py-4 text-slate-400 text-[11px]">
+                                {formatDateTime(run.created_at)}
+                              </td>
+                              <td className="px-5 py-4">
+                                <span
+                                  className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold ${
+                                    run.trigger_source === 'admin'
+                                      ? 'bg-honey-500/15 text-honey-400 border border-honey-500/30'
+                                      : 'bg-dark-800 text-slate-400'
+                                  }`}
+                                >
+                                  {run.trigger_source}
+                                </span>
+                              </td>
+                              <td className="px-5 py-4">
+                                <button
+                                  type="button"
+                                  onClick={() => setTraceRunId(run.id)}
+                                  className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold border transition-colors hover:brightness-125 ${
+                                    run.status === 'completed'
+                                      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                                      : run.status === 'failed'
+                                      ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                                      : 'bg-amber-500/20 text-amber-400 border-amber-500/40 animate-pulse'
+                                  }`}
+                                  title={t('admin.traceOpenHint')}
+                                >
+                                  {run.status}
+                                </button>
+                              </td>
+                              <td className="px-5 py-4 text-slate-300">
+                                {run.universe_size ?? '—'}
+                              </td>
+                              <td className="px-5 py-4">
+                                <span
+                                  className={`font-bold ${
+                                    run.applied ? 'text-emerald-400' : 'text-slate-500'
+                                  }`}
+                                >
+                                  {run.applied ? t('admin.appliedYes') : t('admin.appliedNo')}
+                                </span>
+                              </td>
+                              <td className="px-5 py-4 text-[11px]">
+                                {run.status === 'failed' && run.error ? (
+                                  <span className="text-rose-400 block max-w-xs truncate" title={run.error}>
+                                    {run.error}
+                                  </span>
+                                ) : replacements.length > 0 ? (
+                                  <span className="text-slate-300">
+                                    {replacements
+                                      .map((r: any) => `${r.removed} → ${r.added}`)
+                                      .join(', ')}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-600">—</span>
+                                )}
+                              </td>
+                            </tr>
+                            {isExpanded && (
+                              <tr className="bg-dark-950/40">
+                                <td colSpan={7} className="px-5 py-4">
+                                  {candidates.length === 0 ? (
+                                    <div className="text-slate-500 text-[11px]">
+                                      {t('admin.noCandidates')}
+                                    </div>
+                                  ) : (
+                                    <div>
+                                      <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-2">
+                                        {t('admin.topCandidates', { count: candidates.length })}
+                                      </div>
+                                      <table className="w-full text-left font-mono text-[11px]">
+                                        <thead className="text-[10px] uppercase tracking-wider text-slate-500 border-b border-dark-800">
+                                          <tr>
+                                            <th className="px-3 py-2">{t('admin.candColPair')}</th>
+                                            <th className="px-3 py-2 text-right">{t('admin.candColScore')}</th>
+                                            <th className="px-3 py-2 text-right">{t('admin.candColTstat')}</th>
+                                            <th className="px-3 py-2 text-right">{t('admin.candColCorr')}</th>
+                                            <th className="px-3 py-2 text-right">{t('admin.candColBeta')}</th>
+                                            <th className="px-3 py-2 text-right">{t('admin.candColFunding')}</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-dark-800/60">
+                                          {candidates.map((c: any, idx: number) => (
+                                            <tr key={`${run.id}-${c.pair_symbol || idx}`}>
+                                              <td className="px-3 py-1.5 text-white font-bold">
+                                                {c.pair_symbol || `${c.long_coin}/${c.short_coin}`}
+                                              </td>
+                                              <td className="px-3 py-1.5 text-right text-honey-400 font-bold">
+                                                {formatScore(c.score)}
+                                              </td>
+                                              <td className="px-3 py-1.5 text-right text-slate-300">
+                                                {formatMetric(c.metrics?.t_stat)}
+                                              </td>
+                                              <td className="px-3 py-1.5 text-right text-slate-300">
+                                                {formatMetric(c.metrics?.corr)}
+                                              </td>
+                                              <td className="px-3 py-1.5 text-right text-slate-300">
+                                                {formatMetric(c.metrics?.beta_diff, 3)}
+                                              </td>
+                                              <td className="px-3 py-1.5 text-right text-slate-300">
+                                                {formatMetric(c.metrics?.funding_cost_pct_8h, 4)}%
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 5: SYSTEM HEALTH PINGS */}
         {activeTab === 'health' && (
           <div className="bg-dark-900 border border-dark-800 rounded-2xl shadow-xl overflow-hidden">
             <div className="p-5 border-b border-dark-800 flex justify-between items-center">
@@ -735,6 +1367,77 @@ export default function AdminDashboardPage() {
         isDestructive={actionType === 'reject'}
         onConfirm={confirmInvoiceAction}
         onCancel={() => setIsConfirmModalOpen(false)}
+      />
+
+      {/* Confirmation Modal for Pairs & Rotation */}
+      <ConfirmModal
+        isOpen={isPairsConfirmOpen}
+        title={
+          pairsAction === 'toggleRotation'
+            ? t('admin.toggleRotationTitle')
+            : t('admin.runSelectionTitle')
+        }
+        description={
+          pairsAction === 'toggleRotation'
+            ? engineSettings?.auto_rotation_enabled
+              ? t('admin.disableRotationDesc')
+              : t('admin.enableRotationDesc')
+            : t('admin.runSelectionDesc')
+        }
+        confirmText={
+          pairsAction === 'toggleRotation'
+            ? engineSettings?.auto_rotation_enabled
+              ? t('admin.disableRotation')
+              : t('admin.enableRotation')
+            : t('admin.runSelectionConfirm')
+        }
+        isDestructive={pairsAction === 'toggleRotation' && !!engineSettings?.auto_rotation_enabled}
+        onConfirm={confirmPairsAction}
+        onCancel={() => setIsPairsConfirmOpen(false)}
+      />
+
+      <PairSelectionTraceDrawer
+        isOpen={!!traceRunId}
+        run={tracedRun}
+        onClose={() => setTraceRunId(null)}
+      />
+
+      <ReplacePairModal
+        isOpen={isReplacePickerOpen}
+        outgoing={replaceOutgoing}
+        activePairs={displayBasket}
+        candidates={latestCandidates}
+        onClose={() => {
+          setIsReplacePickerOpen(false);
+          setReplaceOutgoing(null);
+        }}
+        onSelect={handleCandidatePicked}
+      />
+
+      <ConfirmModal
+        isOpen={isReplaceConfirmOpen}
+        title={t('admin.replaceConfirmTitle')}
+        description={
+          pendingReplacement
+            ? t('admin.replaceConfirmDesc', {
+                old: pendingReplacement.outgoing.pair_symbol,
+                next: pendingReplacement.incoming.pair_symbol,
+                oldScore:
+                  pendingReplacement.outgoing.score === null ||
+                  pendingReplacement.outgoing.score === undefined
+                    ? '—'
+                    : Number(pendingReplacement.outgoing.score).toFixed(3),
+                nextScore: Number(pendingReplacement.incoming.score).toFixed(3),
+              })
+            : ''
+        }
+        confirmText={t('admin.replaceConfirmButton')}
+        isDestructive
+        onConfirm={confirmManualReplace}
+        onCancel={() => {
+          setIsReplaceConfirmOpen(false);
+          setPendingReplacement(null);
+        }}
       />
     </div>
   );
