@@ -455,6 +455,9 @@ CREATE POLICY "Admins have full access to audit logs" ON public.audit_logs
 -- 7. Публичные данные рынка и здоровье (чтение доступно всем авторизованным)
 CREATE POLICY "Authenticated users can read market data" ON public.pair_market_data
     FOR SELECT TO authenticated USING (true);
+-- Worker writes via service_role (bypasses RLS). Admins may upsert/delete from the admin UI.
+CREATE POLICY "Admins have full access to market data" ON public.pair_market_data
+    FOR ALL USING (public.is_admin()) WITH CHECK (public.is_admin());
 CREATE POLICY "Authenticated users can read health status" ON public.system_health_logs
     FOR SELECT TO authenticated USING (true);
 

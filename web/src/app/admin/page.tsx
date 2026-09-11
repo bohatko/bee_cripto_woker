@@ -457,20 +457,37 @@ export default function AdminDashboardPage() {
       // Keep dashboard/scanner in sync with the new basket pair.
       // NEVER delete pair_market_data for the outgoing pair while open positions
       // still exist — PositionGuard needs those prices for TP/SL/Trend-Flip.
-      await supabase.from('pair_market_data').upsert(
-        {
-          pair_symbol: incoming.pair_symbol,
-          long_coin: incoming.long_coin,
-          short_coin: incoming.short_coin,
-          current_ratio: 0,
-          ema_10: 0,
-          is_in_trend: false,
-          long_price: 0,
-          short_price: 0,
-          updated_at: nowIso,
-        },
-        { onConflict: 'pair_symbol' }
-      );
+      // Writes go through service-role API (table RLS is SELECT-only for browsers).
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const authHeaders: HeadersInit = {
+        'Content-Type': 'application/json',
+        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+      };
+
+      const upsertRes = await fetch('/api/admin/pair-market-data', {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({
+          action: 'upsert',
+          row: {
+            pair_symbol: incoming.pair_symbol,
+            long_coin: incoming.long_coin,
+            short_coin: incoming.short_coin,
+            current_ratio: 0,
+            ema_10: 0,
+            is_in_trend: false,
+            long_price: 0,
+            short_price: 0,
+            updated_at: nowIso,
+          },
+        }),
+      });
+      if (!upsertRes.ok) {
+        const payload = await upsertRes.json().catch(() => ({}));
+        console.warn('[Admin] pair_market_data upsert failed:', payload?.error || upsertRes.status);
+      }
 
       const { count: openOnOutgoing } = await supabase
         .from('bot_positions')
@@ -479,7 +496,15 @@ export default function AdminDashboardPage() {
         .eq('status', 'open');
 
       if (!openOnOutgoing || openOnOutgoing === 0) {
-        await supabase.from('pair_market_data').delete().eq('pair_symbol', outgoing.pair_symbol);
+        const deleteRes = await fetch('/api/admin/pair-market-data', {
+          method: 'POST',
+          headers: authHeaders,
+          body: JSON.stringify({ action: 'delete', pair_symbol: outgoing.pair_symbol }),
+        });
+        if (!deleteRes.ok) {
+          const payload = await deleteRes.json().catch(() => ({}));
+          console.warn('[Admin] pair_market_data delete failed:', payload?.error || deleteRes.status);
+        }
       }
 
       toast.success(
