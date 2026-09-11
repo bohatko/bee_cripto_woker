@@ -6,6 +6,10 @@ import { LanguageProvider } from "@/lib/i18n/LanguageContext";
 export const metadata: Metadata = {
   title: "Bee Crypto Worker | Market-Neutral Alpha Trading Platform",
   description: "Automated multi-pair long-short algorithmic trading basket for Binance, OKX, and Bybit with zero market beta.",
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({
