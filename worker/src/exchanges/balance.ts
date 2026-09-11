@@ -22,6 +22,15 @@ export function extractUsdtBalance(balance: any): { free: number; total: number 
           total = Number(usdt.walletBalance || usdt.marginBalance || free);
         }
       }
+      // Binance USD-M account root fields (fapiPrivateV2GetAccount)
+      if (free === 0 && total === 0) {
+        const rootFree = Number(balance.info.availableBalance);
+        const rootTotal = Number(
+          balance.info.totalMarginBalance ?? balance.info.totalWalletBalance
+        );
+        if (Number.isFinite(rootFree) && rootFree > 0) free = rootFree;
+        if (Number.isFinite(rootTotal) && rootTotal > 0) total = rootTotal;
+      }
       if (Array.isArray(balance.info.data?.[0]?.details)) {
         const usdt = balance.info.data[0].details.find((d: any) => d.ccy === 'USDT');
         if (usdt) {
@@ -32,7 +41,13 @@ export function extractUsdtBalance(balance: any): { free: number; total: number 
       if (Array.isArray(balance.info.result?.list?.[0]?.coin)) {
         const usdt = balance.info.result.list[0].coin.find((c: any) => c.coin === 'USDT');
         if (usdt) {
-          free = Number(usdt.availableToWithdraw || usdt.walletBalance || 0);
+          free = Number(
+            usdt.availableToTrade ||
+              usdt.availableBalance ||
+              usdt.availableToWithdraw ||
+              usdt.walletBalance ||
+              0
+          );
           total = Number(usdt.equity || usdt.walletBalance || free);
         }
       }

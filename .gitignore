@@ -45,3 +45,9 @@ Thumbs.db
 
 # Research data cache (re-downloadable via research/*/download_data.py)
 research/data/
+
+# Vercel env pulls (may contain secrets)
+.env.vercel*
+web/.env.vercel*
+
+.vercel

@@ -219,6 +219,8 @@ bee_crypto_worker_engine/
 ├── src/
 │   ├── index.ts                # Точка входа, запуск daemon
 │   ├── config.ts               # Загрузка env, Supabase client
+│   ├── api/
+│   │   └── internal-server.ts  # HTTP: validate/sync via static egress (for Next.js)
 │   ├── security/
 │   │   └── encryption.ts       # AES-256-GCM шифрование/дешифрование
 │   ├── exchanges/
@@ -304,3 +306,20 @@ When `ENTRY_ON_4H_CLOSE_ONLY=true`, the scanner refreshes the closed 4h EMA/ATR 
 | `MIN_LEG_VOLUME_USD` | `50000000` | Min 24h quote volume per leg. |
 
 > **Validation gate (2026-09-07):** walk-forward in `research/pair_selection/MOMENTUM_VALIDATION_RESULTS.md` failed (dynamic worse than static). Keep `engine_settings.auto_rotation_enabled = false` in production until the screener improves. Manual admin runs still store candidates for inspection.
+
+### 8.5. Internal HTTP API (Next.js → worker proxy)
+
+Vercel serverless egress IPs are blocked by Binance (`sapi`) and Bybit (CloudFront). Exchange validate/sync must run on the worker static egress IP.
+
+| Environment Variable | Default | Meaning |
+|---|---|---|
+| `INTERNAL_API_ENABLED` | `true` | Start the HTTP API alongside the trading daemon. |
+| `PORT` / `INTERNAL_API_PORT` | `8080` | Listen port (`PORT` preferred on Railway/DO). |
+| `INTERNAL_API_SECRET` | _(empty)_ | Bearer secret; must match `WORKER_INTERNAL_SECRET` on the web app. |
+
+Web env: `WORKER_INTERNAL_URL` (public HTTPS base of the worker) + `WORKER_INTERNAL_SECRET`.
+
+Endpoints (auth required except `/health`):
+- `GET /health`
+- `POST /internal/exchange/validate` — live key check + futures balance
+- `POST /internal/exchange/fetch-balance` — balance sync for encrypted credentials

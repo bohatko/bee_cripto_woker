@@ -59,6 +59,10 @@ export const CONFIG = {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean),
+  // Internal HTTP API for Next.js → worker exchange validate/sync (static egress IP)
+  internalApiEnabled: parseBool(process.env.INTERNAL_API_ENABLED, true),
+  internalApiPort: Number(process.env.PORT || process.env.INTERNAL_API_PORT || 8080),
+  internalApiSecret: process.env.INTERNAL_API_SECRET || '',
 };
 
 if (!CONFIG.supabaseKey) {

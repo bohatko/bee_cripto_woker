@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuthenticatedUser } from '@/lib/supabase/server';
-import { fetchLiveBalanceFromDecryptedAccount } from '@/lib/exchange-service';
+import { fetchBalanceViaWorker, WorkerConfigError } from '@/lib/worker-client';
+import type { SupportedExchange } from '@/lib/worker-client';
 
 export async function POST(request: Request) {
   try {
@@ -12,7 +13,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Fetch all active connected exchange accounts for this user
     const { data: accounts, error } = await supabase
       .from('exchange_accounts')
       .select('*')
@@ -42,11 +42,20 @@ export async function POST(request: Request) {
     let totalFreeMargin = 0;
 
     for (const acc of accounts) {
-      const balanceResult = await fetchLiveBalanceFromDecryptedAccount(acc);
+      const balanceResult = await fetchBalanceViaWorker({
+        exchange: acc.exchange as SupportedExchange,
+        encrypted_api_key: acc.encrypted_api_key,
+        encrypted_secret: acc.encrypted_secret,
+        encrypted_passphrase: acc.encrypted_passphrase,
+        iv_nonce: acc.iv_nonce,
+        tag: acc.tag,
+      });
 
-      if (balanceResult.error) {
-        console.warn(`[SyncBalances] Balance sync warning for account ${acc.id} (${acc.exchange}):`, balanceResult.error);
-        // Record sync error without zeroing out previous known balance
+      if (!balanceResult.ok) {
+        console.warn(
+          `[SyncBalances] Balance sync warning for account ${acc.id} (${acc.exchange}):`,
+          balanceResult.error
+        );
         await supabase
           .from('exchange_accounts')
           .update({
@@ -67,8 +76,8 @@ export async function POST(request: Request) {
           syncStatus: 'error',
         });
       } else {
-        const liveTotal = balanceResult.total;
-        const liveFree = balanceResult.free;
+        const liveTotal = balanceResult.data.total;
+        const liveFree = balanceResult.data.free;
 
         await supabase
           .from('exchange_accounts')
@@ -103,6 +112,9 @@ export async function POST(request: Request) {
     });
   } catch (err: any) {
     console.error('[SyncBalances] Unhandled error during sync:', err);
+    if (err instanceof WorkerConfigError) {
+      return NextResponse.json({ error: err.message }, { status: 503 });
+    }
     return NextResponse.json(
       { error: err.message || 'Internal server error while syncing balances' },
       { status: 500 }
