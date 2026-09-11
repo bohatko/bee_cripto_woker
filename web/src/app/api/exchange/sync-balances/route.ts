@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAuthenticatedUser } from '@/lib/supabase/server';
-import { fetchBalanceViaWorker } from '@/lib/worker-client';
+import { fetchBalanceViaWorker, WorkerConfigError } from '@/lib/worker-client';
 import type { SupportedExchange } from '@/lib/worker-client';
 
 export async function POST(request: Request) {
@@ -112,6 +112,9 @@ export async function POST(request: Request) {
     });
   } catch (err: any) {
     console.error('[SyncBalances] Unhandled error during sync:', err);
+    if (err instanceof WorkerConfigError) {
+      return NextResponse.json({ error: err.message }, { status: 503 });
+    }
     return NextResponse.json(
       { error: err.message || 'Internal server error while syncing balances' },
       { status: 500 }

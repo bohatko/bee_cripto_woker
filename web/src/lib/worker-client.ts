@@ -16,16 +16,32 @@ export interface WorkerBalanceResult {
   total: number;
 }
 
+export class WorkerConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'WorkerConfigError';
+  }
+}
+
 function getWorkerConfig(): { baseUrl: string; secret: string } {
-  const baseUrl = (process.env.WORKER_INTERNAL_URL || '').replace(/\/$/, '');
-  const secret = process.env.WORKER_INTERNAL_SECRET || process.env.INTERNAL_API_SECRET || '';
+  const baseUrl = (process.env.WORKER_INTERNAL_URL || '')
+    .trim()
+    .replace(/[\r\n]+/g, '')
+    .replace(/\/$/, '');
+  const secret = (
+    process.env.WORKER_INTERNAL_SECRET ||
+    process.env.INTERNAL_API_SECRET ||
+    ''
+  )
+    .trim()
+    .replace(/[\r\n]+/g, '');
   if (!baseUrl) {
-    throw new Error(
+    throw new WorkerConfigError(
       'WORKER_INTERNAL_URL is not configured. Exchange validation must run on the worker static egress IP.'
     );
   }
   if (!secret) {
-    throw new Error('WORKER_INTERNAL_SECRET is not configured.');
+    throw new WorkerConfigError('WORKER_INTERNAL_SECRET is not configured.');
   }
   return { baseUrl, secret };
 }

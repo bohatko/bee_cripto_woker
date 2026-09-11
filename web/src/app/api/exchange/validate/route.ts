@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAuthenticatedUser } from '@/lib/supabase/server';
-import { validateExchangeViaWorker } from '@/lib/worker-client';
+import { validateExchangeViaWorker, WorkerConfigError } from '@/lib/worker-client';
 import { encryptPayload, encryptString } from '@/lib/encryption';
 
 export async function POST(request: Request) {
@@ -128,6 +128,9 @@ export async function POST(request: Request) {
       )} USDT`,
     });
   } catch (err: any) {
+    if (err instanceof WorkerConfigError) {
+      return NextResponse.json({ error: err.message }, { status: 503 });
+    }
     return NextResponse.json(
       { error: err.message || 'Internal server error while validating exchange keys' },
       { status: 500 }

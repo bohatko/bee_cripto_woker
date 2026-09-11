@@ -1,1 +1,5 @@
-.vercel
+﻿.vercel
+.env*.local
+.env.vercel*
+.env.vercel.check
+.env.vercel.verify
