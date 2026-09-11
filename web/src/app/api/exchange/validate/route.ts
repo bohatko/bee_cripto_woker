@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAuthenticatedUser } from '@/lib/supabase/server';
-import {
-  validateAndFetchExchangeBalance,
-  SupportedExchange,
-} from '@/lib/exchange-service';
+import { validateExchangeViaWorker } from '@/lib/worker-client';
 import { encryptPayload, encryptString } from '@/lib/encryption';
 
 export async function POST(request: Request) {
@@ -40,25 +37,24 @@ export async function POST(request: Request) {
       );
     }
 
-    // 1. Live CCXT connection, permission audit, and balance query
-    const validation = await validateAndFetchExchangeBalance(
-      exchange as SupportedExchange,
+    // Live CCXT calls must run on the worker (static egress IP), not on Vercel.
+    const validation = await validateExchangeViaWorker(
+      exchange,
       apiKey.trim(),
       apiSecret.trim(),
       passphrase?.trim()
     );
 
-    if (!validation.isValid) {
+    if (!validation.ok) {
       return NextResponse.json(
         {
-          error: validation.errorMessage || 'Failed to authenticate with exchange API',
+          error: validation.error,
           canWithdraw: validation.canWithdraw,
         },
-        { status: 400 }
+        { status: validation.status >= 400 && validation.status < 600 ? validation.status : 400 }
       );
     }
 
-    // 2. High-grade AES-256-GCM encryption with fresh IV & Tag per field
     const encKey = encryptString(apiKey.trim());
     const record = {
       user_id: user.id,
@@ -72,8 +68,8 @@ export async function POST(request: Request) {
       is_validated: true,
       can_withdraw: false,
       can_trade_futures: true,
-      last_balance_usd: validation.totalBalanceUsd,
-      free_balance_usd: validation.freeBalanceUsd,
+      last_balance_usd: validation.data.totalBalanceUsd,
+      free_balance_usd: validation.data.freeBalanceUsd,
       last_sync_at: new Date().toISOString(),
       last_error_msg: null,
       is_active: true,
@@ -92,7 +88,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Link account to trading_settings if currently empty or explicitly requested as primary
     const { data: settings } = await supabase
       .from('trading_settings')
       .select('id, exchange_account_id')
@@ -125,10 +120,10 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       exchange,
-      balanceUsd: validation.totalBalanceUsd,
-      freeBalanceUsd: validation.freeBalanceUsd,
+      balanceUsd: validation.data.totalBalanceUsd,
+      freeBalanceUsd: validation.data.freeBalanceUsd,
       account: savedAccount,
-      message: `Successfully connected to ${exchange.toUpperCase()}! Verified live balance: $${validation.totalBalanceUsd.toFixed(
+      message: `Successfully connected to ${exchange.toUpperCase()}! Verified live balance: $${validation.data.totalBalanceUsd.toFixed(
         2
       )} USDT`,
     });

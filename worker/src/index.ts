@@ -1,4 +1,6 @@
+import type http from 'node:http';
 import { CONFIG } from './config.js';
+import { startInternalApiServer } from './api/internal-server.js';
 import { MarketScanner } from './engine/market-scanner.js';
 import { OrderRouter } from './engine/order-router.js';
 import { PositionGuard } from './engine/position-guard.js';
@@ -14,6 +16,14 @@ async function main() {
   console.log('   Strategy: Multi-Pair Market-Neutral Alpha Basket');
   console.log('   Supabase Project: uxsbjkymrqrmlcshizns');
   console.log('====================================================');
+
+  let apiServer: http.Server | null = null;
+  try {
+    apiServer = startInternalApiServer();
+  } catch (err: any) {
+    console.error('💥 Failed to start internal API server:', err.message);
+    process.exit(1);
+  }
 
   const scanner = new MarketScanner(CONFIG.scannerIntervalMs);
   const orderRouter = new OrderRouter(scanner);
@@ -56,6 +66,11 @@ async function main() {
       billingCron.stop();
       pairSelection.stop();
       pairRegistry.stop();
+      if (apiServer) {
+        apiServer.close(() => process.exit(0));
+        setTimeout(() => process.exit(0), 3000).unref();
+        return;
+      }
       process.exit(0);
     };
 
