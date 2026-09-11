@@ -27,16 +27,75 @@ function createClient(
     options: {
       defaultType: 'future',
       adjustForTimeDifference: true,
+      // Avoid CCXT loadMarkets → fetchCurrencies (Bybit query-info / Binance sapi).
+      fetchCurrencies: false,
     },
   };
 
+  let client: any;
   switch (exchange) {
     case 'binance':
-      return new ccxt.binanceusdm(options);
+      client = new ccxt.binanceusdm(options);
+      break;
     case 'okx':
-      return new ccxt.okx(options);
+      client = new ccxt.okx(options);
+      break;
     case 'bybit':
-      return new ccxt.bybit(options);
+      client = new ccxt.bybit(options);
+      break;
+    default: {
+      const _exhaustive: never = exchange;
+      throw new Error(`Unsupported exchange: ${_exhaustive}`);
+    }
+  }
+
+  // Hard-disable currency metadata calls that hit wallet/asset endpoints blocked on many IPs.
+  if (client.has && typeof client.has === 'object') {
+    client.has['fetchCurrencies'] = false;
+  }
+
+  return client;
+}
+
+function fromBalancePayload(balance: any): { free: number; total: number } {
+  const { free, total } = extractUsdtBalance(balance);
+  return { free, total: total > 0 ? total : free };
+}
+
+/**
+ * Futures USDT balance via exchange-native account endpoints.
+ * Never calls fetchBalance/loadMarkets (those pull Bybit query-info / Binance sapi).
+ */
+async function fetchFuturesBalanceNative(
+  exchange: ExchangeType,
+  client: any
+): Promise<{ free: number; total: number }> {
+  switch (exchange) {
+    case 'binance': {
+      const info =
+        typeof client.fapiPrivateV2GetAccount === 'function'
+          ? await client.fapiPrivateV2GetAccount()
+          : await client.fapiPrivateGetAccount();
+      return fromBalancePayload({ info, USDT: undefined });
+    }
+    case 'bybit': {
+      // Prefer UNIFIED; fall back to CONTRACT for classic accounts.
+      let info: any;
+      try {
+        info = await client.privateGetV5AccountWalletBalance({ accountType: 'UNIFIED' });
+      } catch (unifiedErr: any) {
+        try {
+          info = await client.privateGetV5AccountWalletBalance({ accountType: 'CONTRACT' });
+        } catch {
+          throw unifiedErr;
+        }
+      }
+      return fromBalancePayload({ info });
+    }
+    case 'okx': {
+      const info = await client.privateGetAccountBalance();
+      return fromBalancePayload({ info });
+    }
     default: {
       const _exhaustive: never = exchange;
       throw new Error(`Unsupported exchange: ${_exhaustive}`);
@@ -45,53 +104,41 @@ function createClient(
 }
 
 /**
- * Withdrawal permission probe.
- * Binance sapi / Bybit asset endpoints are often blocked from cloud IPs and are
- * optional — failure must not abort futures balance validation.
+ * Soft withdraw-permission probe without wallet/asset endpoints.
+ * Binance sapi and Bybit query-info are intentionally never called.
  */
-async function probeWithdrawPermission(client: any, exchange: ExchangeType): Promise<{
-  canWithdraw: boolean;
-  canTradeFutures: boolean;
-  probed: boolean;
-}> {
-  let canWithdraw = false;
-  let canTradeFutures = false;
-  let probed = false;
-
-  if (!client.has?.['fetchPermissions']) {
-    return { canWithdraw, canTradeFutures, probed };
-  }
-
-  // Prefer futures-native checks; skip cloud-hostile wallet endpoints when possible.
-  if (exchange === 'binance' || exchange === 'bybit') {
-    try {
-      if (exchange === 'binance' && typeof client.fapiPrivateGetAccount === 'function') {
-        await client.fapiPrivateGetAccount();
-        canTradeFutures = true;
-        probed = true;
-        return { canWithdraw: false, canTradeFutures, probed };
-      }
-    } catch {
-      // Fall through to optional fetchPermissions / balance.
-    }
-  }
-
+async function probeWithdrawPermission(
+  client: any,
+  exchange: ExchangeType
+): Promise<{ canWithdraw: boolean }> {
   try {
-    const perms = await client.fetchPermissions();
-    probed = true;
-    if (perms && typeof perms === 'object') {
-      canWithdraw = Boolean((perms as any).withdraw || (perms as any).canWithdraw);
-      canTradeFutures = Boolean((perms as any).trading || (perms as any).future);
+    if (exchange === 'bybit' && typeof client.privateGetV5UserQueryApi === 'function') {
+      const res = await client.privateGetV5UserQueryApi();
+      const wallet = res?.result?.permissions?.Wallet;
+      if (Array.isArray(wallet) && wallet.some((p: string) => /withdraw/i.test(String(p)))) {
+        return { canWithdraw: true };
+      }
+      return { canWithdraw: false };
     }
+
+    if (exchange === 'okx' && typeof client.privateGetAccountConfig === 'function') {
+      const res = await client.privateGetAccountConfig();
+      const perm = String(res?.data?.[0]?.perm || '');
+      if (/withdraw/i.test(perm)) {
+        return { canWithdraw: true };
+      }
+      return { canWithdraw: false };
+    }
+
+    // Binance: no reliable futures-only withdraw probe without sapi — assume safe.
+    return { canWithdraw: false };
   } catch (err: any) {
     const msg = String(err?.message || err || '');
-    // CloudFront / sapi blocks are expected from shared PaaS IPs; ignore.
-    if (!/403|cloudfront|forbidden|sapi\/v1\/capital|query-info/i.test(msg)) {
-      console.warn(`[Validator] fetchPermissions soft-fail (${exchange}):`, msg.slice(0, 200));
+    if (!/403|cloudfront|forbidden|sapi\/v1\/capital|query-info|451/i.test(msg)) {
+      console.warn(`[Validator] withdraw probe soft-fail (${exchange}):`, msg.slice(0, 200));
     }
+    return { canWithdraw: false };
   }
-
-  return { canWithdraw, canTradeFutures, probed };
 }
 
 export async function validateExchangeCredentials(
@@ -117,7 +164,6 @@ export async function validateExchangeCredentials(
 
   try {
     const perm = await probeWithdrawPermission(client, exchange);
-
     if (perm.canWithdraw) {
       return {
         isValid: false,
@@ -131,22 +177,22 @@ export async function validateExchangeCredentials(
       };
     }
 
-    const balance = await client.fetchBalance({ type: 'future' });
-    const { free, total } = extractUsdtBalance(balance);
-    const totalBalanceUsd = total > 0 ? total : free;
-
+    const { free, total } = await fetchFuturesBalanceNative(exchange, client);
     return {
       isValid: true,
       canWithdraw: false,
       canTradeFutures: true,
       freeBalanceUsd: free,
-      totalBalanceUsd,
-      balanceUsd: totalBalanceUsd,
+      totalBalanceUsd: total,
+      balanceUsd: total,
     };
   } catch (err: any) {
     const raw = err.message || 'Failed to authenticate with exchange API';
     let errorMessage = raw;
-    if (/403|cloudfront|forbidden/i.test(raw)) {
+    if (/451|restricted location|eligibility/i.test(raw)) {
+      errorMessage =
+        `${raw} — Binance blocks this worker region. Move the Railway service to an EU region (or use Bybit/OKX for market data).`;
+    } else if (/403|cloudfront|forbidden/i.test(raw)) {
       errorMessage =
         `${raw} — Exchange blocked this IP. Ensure the worker static egress IP is allowlisted on the API key.`;
     }
@@ -170,9 +216,8 @@ export async function fetchFuturesBalance(
 ): Promise<{ free: number; total: number; error?: string }> {
   try {
     const client = createClient(exchange, apiKey, secret, passphrase);
-    const balance = await client.fetchBalance({ type: 'future' });
-    const { free, total } = extractUsdtBalance(balance);
-    return { free, total: total > 0 ? total : free };
+    const { free, total } = await fetchFuturesBalanceNative(exchange, client);
+    return { free, total };
   } catch (err: any) {
     return { free: 0, total: 0, error: err.message || 'Failed to fetch live balance' };
   }
