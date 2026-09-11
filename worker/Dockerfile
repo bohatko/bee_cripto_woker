@@ -1,19 +1,23 @@
 # Production Dockerfile for Railway Worker Daemon
+# Build context is expected to be the monorepo root.
 FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Copy dependency definitions
-COPY package*.json tsconfig.json ./
+# Copy monorepo root manifest for npm workspaces lookup
+COPY package*.json ./
 
-# Install dependencies
-RUN npm ci
+# Copy worker workspace dependency definitions
+COPY worker/package*.json worker/tsconfig.json ./worker/
 
-# Copy source files
-COPY src/ ./src/
+# Install dependencies for the worker workspace
+RUN npm ci --workspace=worker
 
-# Compile TypeScript
-RUN npm run build
+# Copy worker source files
+COPY worker/src/ ./worker/src/
+
+# Compile TypeScript for the worker workspace
+RUN npm run build --workspace=worker
 
 # Production runtime stage
 FROM node:22-alpine AS runner
@@ -22,11 +26,12 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Copy built artifacts and production dependencies
+# Copy monorepo root manifest and worker workspace manifest
 COPY package*.json ./
-RUN npm ci --omit=dev
+COPY worker/package*.json ./worker/
+RUN npm ci --workspace=worker --omit=dev
 
-COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/worker/dist ./worker/dist
 
 # Start the autonomous daemon
-CMD ["node", "dist/index.js"]
+CMD ["node", "worker/dist/index.js"]
