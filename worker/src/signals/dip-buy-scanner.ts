@@ -28,6 +28,13 @@ export class DipBuyScanner {
   private symbol: string;
   private ccxtSymbol: string;
   private strategyId: string;
+  private strategyConfig: {
+    drop_pct: number;
+    window_minutes: number;
+    tp_pct: number;
+    sl_pct: number;
+    reference_margin_usd: number;
+  };
 
   constructor(strategyId = 'xrp_dip_buy_v1', symbol = 'XRP') {
     this.strategyId = strategyId;
@@ -35,6 +42,14 @@ export class DipBuyScanner {
     this.ccxtSymbol = `${this.symbol}/USDT:USDT`;
     this.buffer = new CandleBuffer(2000);
     this.alerter = new ReadinessAlerter(this.strategyId, this.symbol);
+
+    this.strategyConfig = {
+      drop_pct: CONFIG.dipDropPct,
+      window_minutes: CONFIG.dipWindowMinutes,
+      tp_pct: CONFIG.dipTpPct,
+      sl_pct: CONFIG.dipSlPct,
+      reference_margin_usd: CONFIG.dipReferenceMarginUsd,
+    };
 
     this.client = new ccxt.binanceusdm({
       enableRateLimit: true,
@@ -54,7 +69,30 @@ export class DipBuyScanner {
     return this.alerter;
   }
 
+  public async loadConfigFromDb(): Promise<void> {
+    try {
+      const { data, error } = await supabase
+        .from('signal_strategies')
+        .select('config')
+        .eq('id', this.strategyId)
+        .maybeSingle();
+
+      if (!error && data?.config) {
+        this.strategyConfig = {
+          ...this.strategyConfig,
+          ...(data.config as any),
+        };
+        console.log(
+          `⚙️ [DipBuyScanner] Loaded config for ${this.strategyId}: Drop ${this.strategyConfig.drop_pct}%, Window ${this.strategyConfig.window_minutes}m, TP ${this.strategyConfig.tp_pct}%, SL ${this.strategyConfig.sl_pct}%`
+        );
+      }
+    } catch (err: any) {
+      console.warn(`⚠️ [DipBuyScanner] Failed to load strategy config for ${this.strategyId}:`, err?.message || err);
+    }
+  }
+
   public async initHistory(): Promise<void> {
+    await this.loadConfigFromDb();
     console.log(`📊 [DipBuyScanner] Pre-loading historical 1m candles for ${this.symbol}...`);
     try {
       // Binance limit per request is up to 1500
@@ -151,16 +189,18 @@ export class DipBuyScanner {
 
       const isMasterInPosition = !masterErr && Boolean(openMasterPos);
 
-      // Rolling max of last 1440 closed bars (excluding forming bar)
-      const rollingMax = this.buffer.getRollingMaxHigh(CONFIG.dipWindowMinutes, true);
+      // Rolling max of last N closed bars (excluding forming bar)
+      const windowMinutes = this.strategyConfig.window_minutes || CONFIG.dipWindowMinutes;
+      const rollingMax = this.buffer.getRollingMaxHigh(windowMinutes, true);
       if (!rollingMax) {
         return;
       }
 
       const dropPct = this.buffer.calculateDropPct(currentPrice, rollingMax);
+      const targetDrop = this.strategyConfig.drop_pct || CONFIG.dipDropPct;
       const readinessPct = isMasterInPosition
         ? 0
-        : Math.min(100, Math.max(0, (dropPct / CONFIG.dipDropPct) * 100));
+        : Math.min(100, Math.max(0, (dropPct / targetDrop) * 100));
 
       const liveState: SignalStrategyLiveState = {
         price: Number(currentPrice.toFixed(4)),
@@ -207,12 +247,12 @@ export class DipBuyScanner {
 
       const closedDropPct = this.buffer.calculateDropPct(closedBar.close, rollingMax);
 
-      if (closedDropPct >= CONFIG.dipDropPct) {
+      if (closedDropPct >= targetDrop) {
         this.lastProcessedBarTs = closedBar.timestamp;
         const referenceEntryPrice = currentPrice; // immediate market entry at open of t+1
 
         console.log(
-          `🔥 [DipBuyScanner] SIGNAL FIRED! Drop = ${closedDropPct.toFixed(2)}% >= ${CONFIG.dipDropPct}% at bar ${new Date(closedBar.timestamp).toISOString()}! Ref entry = $${referenceEntryPrice}`
+          `🔥 [DipBuyScanner] SIGNAL FIRED for ${this.symbol}! Drop = ${closedDropPct.toFixed(2)}% >= ${targetDrop}% at bar ${new Date(closedBar.timestamp).toISOString()}! Ref entry = $${referenceEntryPrice}`
         );
 
         // 6. Record signal_event in database

@@ -19,6 +19,9 @@ import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 export interface SignalSettingsCardProps {
   userId: string;
+  strategyId?: string;
+  strategySymbol?: string;
+  leverage?: number;
   initialSettings: any;
   primaryAccount: any;
   freeMargin: number;
@@ -28,6 +31,9 @@ export interface SignalSettingsCardProps {
 
 export function SignalSettingsCard({
   userId,
+  strategyId = 'xrp_dip_buy_v1',
+  strategySymbol = 'XRP',
+  leverage = 3.0,
   initialSettings,
   primaryAccount,
   freeMargin,
@@ -49,7 +55,7 @@ export function SignalSettingsCard({
   const [isPanicOpen, setIsPanicOpen] = useState(false);
 
   const estimatedMargin = ((freeMargin * balancePct) / 100).toFixed(2);
-  const estimatedNotional = (Number(estimatedMargin) * 3).toFixed(2);
+  const estimatedNotional = (Number(estimatedMargin) * leverage).toFixed(2);
 
   const handleToggleClick = () => {
     if (!primaryAccount || !primaryAccount.is_validated) {
@@ -82,7 +88,7 @@ export function SignalSettingsCard({
     try {
       const payload = {
         user_id: userId,
-        strategy_id: 'xrp_dip_buy_v1',
+        strategy_id: strategyId,
         is_enabled: isEnabled,
         balance_pct: balancePct,
         alert_readiness_enabled: alertReadiness,
@@ -115,7 +121,7 @@ export function SignalSettingsCard({
         .upsert(
           {
             user_id: userId,
-            strategy_id: 'xrp_dip_buy_v1',
+            strategy_id: strategyId,
             panic_close_requested_at: new Date().toISOString(),
             is_enabled: false,
           },
@@ -294,11 +300,11 @@ export function SignalSettingsCard({
         isOpen={isConfirmToggleOpen}
         onClose={() => setIsConfirmToggleOpen(false)}
         onConfirm={handleConfirmToggle}
-        title={isEnabled ? 'Disable XRP Dip-Buy Trading?' : 'Enable XRP Dip-Buy Trading?'}
+        title={isEnabled ? `Disable ${strategySymbol} Dip-Buy Trading?` : `Enable ${strategySymbol} Dip-Buy Trading?`}
         description={
           isEnabled
-            ? 'When disabled, incoming dip signals will not open new trades on your exchange account. Open positions remain managed until exit.'
-            : 'When enabled, the worker will automatically replicate XRP dip-buy entries with 3x leverage using the configured % of free margin.'
+            ? `When disabled, incoming ${strategySymbol} dip signals will not open new trades on your exchange account. Open positions remain managed until exit.`
+            : `When enabled, the worker will automatically replicate ${strategySymbol} dip-buy entries with ${leverage}x leverage using the configured % of free margin.`
         }
         confirmText={isEnabled ? 'Disable' : 'Enable Trading'}
         variant={isEnabled ? 'warning' : 'primary'}

@@ -9,9 +9,10 @@ import { playWarningSound } from '@/lib/sound';
 
 export interface SignalReadinessCardProps {
   userId?: string;
+  strategyId?: string;
 }
 
-export function SignalReadinessCard({ userId }: SignalReadinessCardProps) {
+export function SignalReadinessCard({ userId, strategyId = 'xrp_dip_buy_v1' }: SignalReadinessCardProps) {
   const { t } = useLanguage();
   const [strategy, setStrategy] = useState<any>(null);
   const [userSettings, setUserSettings] = useState<any>(null);
@@ -23,7 +24,7 @@ export function SignalReadinessCard({ userId }: SignalReadinessCardProps) {
       const { data: strat } = await supabase
         .from('signal_strategies')
         .select('*')
-        .eq('id', 'xrp_dip_buy_v1')
+        .eq('id', strategyId)
         .maybeSingle();
 
       if (strat) {
@@ -36,7 +37,7 @@ export function SignalReadinessCard({ userId }: SignalReadinessCardProps) {
           .from('user_signal_settings')
           .select('*')
           .eq('user_id', userId)
-          .eq('strategy_id', 'xrp_dip_buy_v1')
+          .eq('strategy_id', strategyId)
           .maybeSingle();
 
         if (uSettings) {
@@ -49,14 +50,14 @@ export function SignalReadinessCard({ userId }: SignalReadinessCardProps) {
 
     // Subscribe to realtime updates for signal_strategies
     const stratChannel = supabase
-      .channel('realtime_signal_strategy_card')
+      .channel(`realtime_signal_strategy_card_${strategyId}`)
       .on(
         'postgres_changes',
         {
           event: 'UPDATE',
           schema: 'public',
           table: 'signal_strategies',
-          filter: 'id=eq.xrp_dip_buy_v1',
+          filter: `id=eq.${strategyId}`,
         },
         (payload: any) => {
           if (payload.new) {
@@ -69,7 +70,7 @@ export function SignalReadinessCard({ userId }: SignalReadinessCardProps) {
     return () => {
       supabase.removeChannel(stratChannel);
     };
-  }, [userId]);
+  }, [userId, strategyId]);
 
   const liveState = strategy?.live_state || {
     price: 0,
@@ -138,11 +139,14 @@ export function SignalReadinessCard({ userId }: SignalReadinessCardProps) {
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-bold text-white tracking-wide">
-                XRP / USDT <span className="text-[11px] font-mono text-honey-400 font-normal">3.0x Isolated</span>
+                {strategy?.symbol || 'XRP'} / USDT{' '}
+                <span className="text-[11px] font-mono text-honey-400 font-normal">
+                  {strategy?.leverage || 3.0}x Isolated
+                </span>
               </h3>
             </div>
             <p className="text-[11px] text-slate-400 font-mono">
-              {t('signals.readinessCardTitle')}
+              {strategy?.name || t('signals.readinessCardTitle')}
             </p>
           </div>
         </div>
@@ -150,7 +154,7 @@ export function SignalReadinessCard({ userId }: SignalReadinessCardProps) {
         <div className="flex items-center gap-2">
           {getStatusBadge()}
           <Link
-            href="/signals"
+            href={`/signals?tab=${strategy?.symbol?.toLowerCase() || 'xrp'}`}
             className="text-xs text-honey-400 hover:text-honey-300 font-mono font-semibold flex items-center gap-0.5 bg-honey-500/10 hover:bg-honey-500/20 px-2.5 py-1 rounded-lg border border-honey-500/25 transition-all"
           >
             {t('signals.viewDetails')}
@@ -166,25 +170,28 @@ export function SignalReadinessCard({ userId }: SignalReadinessCardProps) {
             {t('signals.currentPrice')}
           </span>
           <span className="text-sm font-bold font-mono text-white">
-            ${liveState.price > 0 ? liveState.price.toFixed(4) : '---'}
+            ${liveState.price > 0 ? liveState.price.toFixed(strategy?.symbol === 'ETH' ? 2 : 4) : '---'}
           </span>
         </div>
 
         <div className="bg-dark-950/70 border border-dark-800/80 rounded-xl p-2.5">
           <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-mono">
-            {t('signals.rollingMax')}
+            {strategy?.config?.window_minutes === 60 ? '1h High (Max)' : t('signals.rollingMax')}
           </span>
           <span className="text-sm font-bold font-mono text-slate-300">
-            ${liveState.rolling_max > 0 ? liveState.rolling_max.toFixed(4) : '---'}
+            ${liveState.rolling_max > 0 ? liveState.rolling_max.toFixed(strategy?.symbol === 'ETH' ? 2 : 4) : '---'}
           </span>
         </div>
 
         <div className="bg-dark-950/70 border border-dark-800/80 rounded-xl p-2.5">
           <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-mono">
-            {t('signals.currentDrop')}
+            {strategy?.config?.window_minutes === 60 ? 'Current 1h Drop' : t('signals.currentDrop')}
           </span>
-          <span className={`text-sm font-bold font-mono ${dropPct >= 10 ? 'text-rose-400' : 'text-slate-200'}`}>
-            -{dropPct.toFixed(2)}% <span className="text-[10px] text-slate-500 font-normal">/ 15%</span>
+          <span className={`text-sm font-bold font-mono ${dropPct >= (strategy?.config?.drop_pct || 15) * 0.7 ? 'text-rose-400' : 'text-slate-200'}`}>
+            -{dropPct.toFixed(2)}%{' '}
+            <span className="text-[10px] text-slate-500 font-normal">
+              / {strategy?.config?.drop_pct || 15}%
+            </span>
           </span>
         </div>
 

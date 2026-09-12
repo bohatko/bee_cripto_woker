@@ -810,8 +810,11 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Trade Readiness & Signal Proximity Monitor (100% Scale) */}
-      <SignalReadinessCard userId={currentUser?.id} />
+      {/* Dip-Buy Signal Readiness Cards (XRP & ETH) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <SignalReadinessCard userId={currentUser?.id} strategyId="xrp_dip_buy_v1" />
+        <SignalReadinessCard userId={currentUser?.id} strategyId="eth_dip_buy_v1" />
+      </div>
 
       <TradeReadinessMonitor
         marketData={marketData}

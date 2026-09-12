@@ -54,7 +54,7 @@ export default function AdminDashboardPage() {
   const [searchQuery, setSearchQuery] = useState('');
 
   // Signals state
-  const [signalStrategy, setSignalStrategy] = useState<any>(null);
+  const [signalStrategies, setSignalStrategies] = useState<any[]>([]);
   const [signalEvents, setSignalEvents] = useState<any[]>([]);
   const [isUpdatingSignalStrategy, setIsUpdatingSignalStrategy] = useState(false);
 
@@ -194,40 +194,40 @@ export default function AdminDashboardPage() {
     // Load pairs, selection runs and engine settings
     await loadPairsData();
 
-    // Load signal strategy & events
-    const { data: strat } = await supabase
+    // Load signal strategies & events
+    const { data: strats } = await supabase
       .from('signal_strategies')
       .select('*')
-      .eq('id', 'xrp_dip_buy_v1')
-      .maybeSingle();
-    if (strat) setSignalStrategy(strat);
+      .order('id', { ascending: false });
+    if (strats) setSignalStrategies(strats);
 
     const { data: sEvs } = await supabase
       .from('signal_events')
       .select('*')
-      .eq('strategy_id', 'xrp_dip_buy_v1')
       .order('created_at', { ascending: false })
-      .limit(10);
+      .limit(20);
     if (sEvs) setSignalEvents(sEvs);
 
     setLoading(false);
   }
 
-  const handleToggleSignalStrategy = async () => {
-    if (!signalStrategy) return;
+  const handleToggleSignalStrategy = async (strategy: any) => {
+    if (!strategy) return;
     setIsUpdatingSignalStrategy(true);
-    const nextVal = !signalStrategy.is_enabled;
+    const nextVal = !strategy.is_enabled;
     try {
       const { error } = await supabase
         .from('signal_strategies')
         .update({ is_enabled: nextVal })
-        .eq('id', signalStrategy.id);
+        .eq('id', strategy.id);
 
       if (error) {
         toast.error('Failed to toggle signal strategy: ' + error.message);
       } else {
-        setSignalStrategy((prev: any) => ({ ...prev, is_enabled: nextVal }));
-        toast.success(`Signal strategy globally ${nextVal ? 'enabled' : 'disabled'}.`);
+        setSignalStrategies((prev) =>
+          prev.map((s) => (s.id === strategy.id ? { ...s, is_enabled: nextVal } : s))
+        );
+        toast.success(`Signal strategy ${strategy.symbol} globally ${nextVal ? 'enabled' : 'disabled'}.`);
       }
     } finally {
       setIsUpdatingSignalStrategy(false);
@@ -1461,43 +1461,57 @@ export default function AdminDashboardPage() {
         {/* TAB 5: SIGNALS STRATEGY ADMIN */}
         {activeTab === 'signals' && (
           <div className="space-y-6">
-            <div className="bg-dark-900 border border-dark-800 rounded-2xl p-6 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-bold text-white">
-                    {signalStrategy?.name || 'XRP Dip-Buy 24h'}
-                  </h3>
-                  <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-honey-500/15 text-honey-400 border border-honey-500/30">
-                    ID: {signalStrategy?.id || 'xrp_dip_buy_v1'}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-400 mt-1">
-                  Global master switch. When disabled, scanner pauses and no trades will be opened for any users.
-                </p>
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {signalStrategies.map((strat) => (
+                <div
+                  key={strat.id}
+                  className="bg-dark-900 border border-dark-800 rounded-2xl p-5 shadow-xl flex flex-col justify-between gap-4"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-base font-bold text-white">
+                          {strat.name || strat.symbol}
+                        </h3>
+                        <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-honey-500/15 text-honey-400 border border-honey-500/30">
+                          {strat.leverage}x
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-mono text-slate-500">{strat.id}</span>
+                    </div>
 
-              <button
-                onClick={handleToggleSignalStrategy}
-                disabled={isUpdatingSignalStrategy}
-                className={`px-4 py-2 rounded-xl text-xs font-mono font-bold flex items-center gap-2 transition-all ${
-                  signalStrategy?.is_enabled
-                    ? 'bg-emerald-500 hover:bg-emerald-400 text-dark-950 shadow-md shadow-emerald-500/20'
-                    : 'bg-dark-800 hover:bg-dark-700 text-slate-300 border border-dark-700'
-                }`}
-              >
-                <span
-                  className={`w-2 h-2 rounded-full ${
-                    signalStrategy?.is_enabled ? 'bg-dark-950' : 'bg-rose-400'
-                  }`}
-                />
-                {signalStrategy?.is_enabled ? 'GLOBAL: ENABLED' : 'GLOBAL: DISABLED'}
-              </button>
+                    <p className="text-xs text-slate-400 mt-2 font-mono">
+                      Drop ≥ {strat.config?.drop_pct}% / {strat.config?.window_minutes === 60 ? '1h' : '24h'} | TP +{strat.config?.tp_pct}% | SL -{strat.config?.sl_pct}%
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-3 border-t border-dark-800/80">
+                    <span className="text-xs font-mono text-slate-400">Master Switch</span>
+                    <button
+                      onClick={() => handleToggleSignalStrategy(strat)}
+                      disabled={isUpdatingSignalStrategy}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-2 transition-all ${
+                        strat.is_enabled
+                          ? 'bg-emerald-500 hover:bg-emerald-400 text-dark-950 shadow-md shadow-emerald-500/20'
+                          : 'bg-dark-800 hover:bg-dark-700 text-slate-300 border border-dark-700'
+                      }`}
+                    >
+                      <span
+                        className={`w-2 h-2 rounded-full ${
+                          strat.is_enabled ? 'bg-dark-950' : 'bg-rose-400'
+                        }`}
+                      />
+                      {strat.is_enabled ? 'ENABLED' : 'DISABLED'}
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
 
             {/* Recent Signal Events Table */}
             <div className="bg-dark-900 border border-dark-800 rounded-2xl p-5 shadow-xl space-y-4">
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                Last 10 Signal Fired Events
+                Recent Signal Fired Events (All Strategies)
               </h4>
 
               {signalEvents.length === 0 ? (
@@ -1530,10 +1544,10 @@ export default function AdminDashboardPage() {
                             -{Number(ev.drop_pct || 0).toFixed(2)}%
                           </td>
                           <td className="py-2.5 px-3 text-slate-300">
-                            ${Number(ev.signal_close || 0).toFixed(4)}
+                            ${Number(ev.signal_close || 0).toFixed(ev.symbol === 'ETH' ? 2 : 4)}
                           </td>
                           <td className="py-2.5 px-3 text-slate-300">
-                            ${Number(ev.reference_entry_price || 0).toFixed(4)}
+                            ${Number(ev.reference_entry_price || 0).toFixed(ev.symbol === 'ETH' ? 2 : 4)}
                           </td>
                           <td className="py-2.5 px-3">
                             <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">

@@ -91,10 +91,10 @@ export class ReadinessAlerter {
         }
 
         console.log(
-          `🔔 [ReadinessAlerter] Threshold ${threshold}% reached (readiness=${readiness_pct.toFixed(1)}%). Alerting admins and ${targetUserIds.length} users.`
+          `🔔 [ReadinessAlerter] Threshold ${threshold}% reached for ${this.symbol} (readiness=${readiness_pct.toFixed(1)}%). Alerting admins and ${targetUserIds.length} users.`
         );
 
-        await telegramNotifier.notifySignalReadiness(threshold, state, targetUserIds);
+        await telegramNotifier.notifySignalReadiness(threshold, state, targetUserIds, this.symbol);
       }
     }
   }

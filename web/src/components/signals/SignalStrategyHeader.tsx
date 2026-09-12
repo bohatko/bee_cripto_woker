@@ -43,11 +43,13 @@ export function SignalStrategyHeader({ strategy }: SignalStrategyHeaderProps) {
                   {strategy?.name || 'XRP Dip-Buy 24h'}
                 </h1>
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-honey-500/15 text-honey-400 border border-honey-500/30">
-                  3.0x Isolated
+                  {strategy?.leverage || 3.0}x Isolated
                 </span>
               </div>
               <p className="text-xs text-slate-400 max-w-xl">
-                {t('signals.subtitle')}
+                {strategy?.symbol === 'ETH'
+                  ? 'Autonomous Dip-Buy engine on ETH with isolated 1.75x leverage, +2% Take Profit and -15% Stop Loss (1h window).'
+                  : t('signals.subtitle')}
               </p>
             </div>
           </div>
@@ -62,7 +64,9 @@ export function SignalStrategyHeader({ strategy }: SignalStrategyHeaderProps) {
 
           <div className="bg-dark-950/80 border border-dark-800 p-2.5 rounded-xl">
             <span className="text-[10px] text-slate-500 uppercase font-mono block">Window</span>
-            <span className="text-xs font-bold font-mono text-slate-300">24 Hours (1440m)</span>
+            <span className="text-xs font-bold font-mono text-slate-300">
+              {config.window_minutes === 60 ? '1 Hour (60m)' : '24 Hours (1440m)'}
+            </span>
           </div>
 
           <div className="bg-dark-950/80 border border-dark-800 p-2.5 rounded-xl">

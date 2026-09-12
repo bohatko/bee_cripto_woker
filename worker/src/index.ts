@@ -35,12 +35,18 @@ async function main() {
   const billingCron = new BillingCronJob(CONFIG.billingCronIntervalMs);
   const pairSelection = new PairSelectionJob(60_000);
 
-  // Dip-Buy XRP Signals Engine
-  const dipScanner = new DipBuyScanner('xrp_dip_buy_v1', CONFIG.dipSymbol);
+  // Dip-Buy Signals Engines (XRP 24h & ETH 1h)
+  const xrpScanner = new DipBuyScanner('xrp_dip_buy_v1', 'XRP');
+  const ethScanner = new DipBuyScanner('eth_dip_buy_v1', 'ETH');
   const dipRouter = new DipBuyRouter();
-  const dipGuard = new DipBuyGuard(dipScanner.getBuffer(), 'xrp_dip_buy_v1', CONFIG.dipSymbol, CONFIG.dipGuardIntervalMs);
+  const xrpGuard = new DipBuyGuard(xrpScanner.getBuffer(), 'xrp_dip_buy_v1', 'XRP', CONFIG.dipGuardIntervalMs);
+  const ethGuard = new DipBuyGuard(ethScanner.getBuffer(), 'eth_dip_buy_v1', 'ETH', CONFIG.dipGuardIntervalMs);
 
-  dipScanner.onSignal(async (signalPayload) => {
+  xrpScanner.onSignal(async (signalPayload) => {
+    await dipRouter.handleSignal(signalPayload);
+  });
+
+  ethScanner.onSignal(async (signalPayload) => {
     await dipRouter.handleSignal(signalPayload);
   });
 
@@ -56,9 +62,10 @@ async function main() {
     // 2. Initialize EMA 10 history from past klines
     await scanner.initEmaHistory();
 
-    // 3. Pre-load 1m history for Dip-Buy Signals engine
+    // 3. Pre-load 1m history for Dip-Buy Signals engines
     if (CONFIG.dipBuyEnabled) {
-      await dipScanner.initHistory();
+      await xrpScanner.initHistory();
+      await ethScanner.initHistory();
     }
 
     // 4. Perform initial scan
@@ -73,9 +80,11 @@ async function main() {
     pairSelection.start();
 
     if (CONFIG.dipBuyEnabled) {
-      dipScanner.start();
-      dipGuard.start();
-      console.log('📡 Dip-Buy XRP Signals Engine started (Scanner & Guard active).');
+      xrpScanner.start();
+      ethScanner.start();
+      xrpGuard.start();
+      ethGuard.start();
+      console.log('📡 Dip-Buy Signals Engines started (XRP & ETH Scanners & Guards active).');
     }
 
     console.log('🚀 All worker modules initialized and running successfully.');
@@ -90,8 +99,10 @@ async function main() {
       pairSelection.stop();
       pairRegistry.stop();
       if (CONFIG.dipBuyEnabled) {
-        dipScanner.stop();
-        dipGuard.stop();
+        xrpScanner.stop();
+        ethScanner.stop();
+        xrpGuard.stop();
+        ethGuard.stop();
       }
       if (apiServer) {
         apiServer.close(() => process.exit(0));

@@ -102,9 +102,9 @@ bee_cripto_woker/
 
 > **Аудит 2026-09-07:** динамический momentum-отбор walk-forward **хуже** статичной корзины (−806% vs −211% margin PnL) — гейт авторотации **FAIL**; держать `auto_rotation_enabled=false` до улучшения скринера.
 
-5. **Модуль сигналов Dip-Buy XRP 24h (`doc/07_SIGNALS_DIP_BUY_XRP.md`)**:
-   * Независимый торговый движок: пара `XRP/USDT`, 3.0x Isolated, вход при падении $\ge 15.0\%$ за 1440 1m закрытых баров от 24h максимума.
-   * Выходы: биржевые reduce-only ордера Take-Profit (+4.0%) и Stop-Loss (-30.0%).
+5. **Модуль сигналов Dip-Buy (`doc/07_SIGNALS_DIP_BUY_XRP.md`)**:
+   * Независимый торговый движок сигналов (XRP 24h: drop $\ge 15\%$, 3.0x, TP +4%, SL -30%; ETH 1h: drop $\ge 5\%$, 1.75x, TP +2%, SL -15%).
+   * Выходы: биржевые reduce-only ордера Take-Profit и Stop-Loss.
    * Master Paper Benchmark позиция открывается на каждый подтвержденный сигнал ($20k reference margin).
    * Fan-out исполнение сделок пользователям с включенным тумблером в `/signals`.
    * Live readiness статус и приближение в Telegram (пороги 80%, 90%).

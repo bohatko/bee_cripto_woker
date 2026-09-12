@@ -320,6 +320,14 @@ VALUES (
     3.0,
     '{"drop_pct": 15, "window_minutes": 1440, "tp_pct": 4, "sl_pct": 30, "reference_margin_usd": 20000}'::jsonb,
     true
+), (
+    'eth_dip_buy_v1',
+    'ETH Dip-Buy 1h',
+    'ETH',
+    'long',
+    1.75,
+    '{"drop_pct": 5, "window_minutes": 60, "tp_pct": 2, "sl_pct": 15, "reference_margin_usd": 20000}'::jsonb,
+    true
 )
 ON CONFLICT (id) DO NOTHING;
 

@@ -77,16 +77,27 @@ export class DipBuyRouter {
       return;
     }
 
+    // Load strategy config & leverage
+    const { data: strat } = await supabase
+      .from('signal_strategies')
+      .select('leverage, config')
+      .eq('id', event.strategyId)
+      .maybeSingle();
+
+    const stratConfig = (strat?.config as any) || {};
+    const leverage = Number(strat?.leverage || CONFIG.dipLeverage);
+    const tpPct = Number(stratConfig.tp_pct || CONFIG.dipTpPct);
+    const slPct = Number(stratConfig.sl_pct || CONFIG.dipSlPct);
+
     // Master Paper math:
     // Entry price with 0.05% slippage
     const paperEntryPrice = Number((event.referenceEntryPrice * (1 + CONFIG.dipPaperSlippagePct / 100)).toFixed(4));
-    const allocatedMargin = CONFIG.dipReferenceMarginUsd; // $20,000 reference
-    const leverage = CONFIG.dipLeverage; // 3.0x
-    const notional = allocatedMargin * leverage; // $60,000
-    const qty = Number((notional / paperEntryPrice).toFixed(2));
+    const allocatedMargin = Number(stratConfig.reference_margin_usd || CONFIG.dipReferenceMarginUsd); // $20,000 reference
+    const notional = allocatedMargin * leverage;
+    const qty = Number((notional / paperEntryPrice).toFixed(4));
 
-    const tpPrice = Number((paperEntryPrice * (1 + CONFIG.dipTpPct / 100)).toFixed(4));
-    const slPrice = Number((paperEntryPrice * (1 - CONFIG.dipSlPct / 100)).toFixed(4));
+    const tpPrice = Number((paperEntryPrice * (1 + tpPct / 100)).toFixed(4));
+    const slPrice = Number((paperEntryPrice * (1 - slPct / 100)).toFixed(4));
 
     const entryFee = Number(((notional * (CONFIG.dipPaperFeePct / 100))).toFixed(4));
 
@@ -215,7 +226,7 @@ export class DipBuyRouter {
       return;
     }
 
-    // 3. One-way position mode guard: check if user has open bot_positions with XRP leg
+    // 3. One-Way position mode guard: check if user has open bot_positions with the same coin leg
     const { data: openBotPositions } = await supabase
       .from('bot_positions')
       .select('id, long_symbol, short_symbol')
@@ -223,14 +234,15 @@ export class DipBuyRouter {
       .eq('status', 'open');
 
     if (openBotPositions && openBotPositions.length > 0) {
-      const hasXrpLeg = (openBotPositions as any[]).some((bp) => {
+      const symUpper = event.symbol.toUpperCase();
+      const hasConflictingLeg = (openBotPositions as any[]).some((bp) => {
         const l = (bp.long_symbol || '').toUpperCase();
         const s = (bp.short_symbol || '').toUpperCase();
-        return l.includes('XRP') || s.includes('XRP');
+        return l.includes(symUpper) || s.includes(symUpper);
       });
 
-      if (hasXrpLeg) {
-        console.warn(`⚠️ [DipBuyRouter] User ${user.email} has open pair position containing XRP leg. Skipping to avoid one-way hedge conflict.`);
+      if (hasConflictingLeg) {
+        console.warn(`⚠️ [DipBuyRouter] User ${user.email} has open pair position containing ${symUpper} leg. Skipping to avoid one-way hedge conflict.`);
         return;
       }
     }
@@ -252,7 +264,18 @@ export class DipBuyRouter {
       return;
     }
 
-    const leverage = CONFIG.dipLeverage;
+    // Load strategy config & leverage
+    const { data: strat } = await supabase
+      .from('signal_strategies')
+      .select('leverage, config')
+      .eq('id', event.strategyId)
+      .maybeSingle();
+
+    const stratConfig = (strat?.config as any) || {};
+    const leverage = Number(strat?.leverage || CONFIG.dipLeverage);
+    const tpPct = Number(stratConfig.tp_pct || CONFIG.dipTpPct);
+    const slPct = Number(stratConfig.sl_pct || CONFIG.dipSlPct);
+
     const notional = allocatedMargin * leverage;
     const approxQty = notional / event.referenceEntryPrice;
 
@@ -260,7 +283,7 @@ export class DipBuyRouter {
     await DipBuyExecution.prepareMarket(client, ccxtSymbol, leverage);
 
     // 6. Execute market buy
-    console.log(`⚡ [DipBuyRouter] Executing LIVE entry for ${user.email}: ${approxQty.toFixed(1)} ${event.symbol} (~$${notional})`);
+    console.log(`⚡ [DipBuyRouter] Executing LIVE entry for ${user.email}: ${approxQty.toFixed(4)} ${event.symbol} (~$${notional})`);
     let fillResult: any;
     try {
       fillResult = await DipBuyExecution.marketBuy(client, ccxtSymbol, approxQty, event.referenceEntryPrice);
@@ -275,8 +298,8 @@ export class DipBuyRouter {
     const actualMargin = Number((actualNotional / leverage).toFixed(4));
     const entryFee = fillResult.feeUsd;
 
-    const tpPrice = Number((actualEntryPrice * (1 + CONFIG.dipTpPct / 100)).toFixed(4));
-    const slPrice = Number((actualEntryPrice * (1 - CONFIG.dipSlPct / 100)).toFixed(4));
+    const tpPrice = Number((actualEntryPrice * (1 + tpPct / 100)).toFixed(4));
+    const slPrice = Number((actualEntryPrice * (1 - slPct / 100)).toFixed(4));
 
     // 7. Place native reduce-only TP/SL conditional orders
     let tpOrderId: string | null = null;

@@ -302,17 +302,19 @@ class TelegramNotifier {
   public async notifySignalReadiness(
     threshold: number,
     liveState: { price: number; rolling_max: number; drop_pct: number; readiness_pct: number },
-    targetUserIds?: string[]
+    targetUserIds?: string[],
+    symbol = 'XRP'
   ): Promise<void> {
+    const sym = symbol.toUpperCase();
     const message = [
-      `👀 <b>СИГНАЛ БЛИЗОК: XRP DIP-BUY (${threshold}%)</b>`,
+      `👀 <b>СИГНАЛ БЛИЗОК: ${sym} DIP-BUY (${threshold}%)</b>`,
       `━━━━━━━━━━━━━━━━━━`,
       `⚡ <b>Readiness:</b> <code>${liveState.readiness_pct.toFixed(1)}%</code> (порог ${threshold}%)`,
-      `📉 <b>Падение за 24h:</b> <code>-${liveState.drop_pct.toFixed(2)}%</code> (цель для входа: -15.0%)`,
+      `📉 <b>Падение за период:</b> <code>-${liveState.drop_pct.toFixed(2)}%</code>`,
       `💰 <b>Текущая цена:</b> <code>$${liveState.price.toFixed(4)}</code>`,
-      `🔝 <b>24h максимум:</b> <code>$${liveState.rolling_max.toFixed(4)}</code>`,
+      `🔝 <b>Локальный максимум:</b> <code>$${liveState.rolling_max.toFixed(4)}</code>`,
       `━━━━━━━━━━━━━━━━━━`,
-      `ℹ️ <i>При достижении -15% сработает автоматический вход LONG 3x для активных аккаунтов.</i>`,
+      `ℹ️ <i>При достижении цели сработает автоматический вход LONG для активных аккаунтов.</i>`,
     ].join('\n');
 
     await this.sendToAdmins(message);
@@ -427,9 +429,9 @@ class TelegramNotifier {
     let reasonBadge = 'Закрытие позиции';
     const reasonLower = (data.exitReason || '').toLowerCase();
     if (reasonLower === 'tp') {
-      reasonBadge = '🎯 <b>TAKE PROFIT (+4.0%)</b>';
+      reasonBadge = '🎯 <b>TAKE PROFIT</b>';
     } else if (reasonLower === 'sl') {
-      reasonBadge = '🛡️ <b>STOP LOSS (-30.0%)</b>';
+      reasonBadge = '🛡️ <b>STOP LOSS</b>';
     } else if (reasonLower === 'panic' || reasonLower === 'panic_close') {
       reasonBadge = '🚨 <b>PANIC CLOSE (Экстренно)</b>';
     } else if (reasonLower === 'admin_close') {
