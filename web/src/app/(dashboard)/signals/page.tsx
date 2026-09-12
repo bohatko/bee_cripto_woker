@@ -3,12 +3,11 @@
 import React, { Suspense, useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
-import { SignalStrategyHeader } from '@/components/signals/SignalStrategyHeader';
 import { SignalSettingsCard } from '@/components/signals/SignalSettingsCard';
 import { SignalStatsCards } from '@/components/signals/SignalStatsCards';
 import { SignalEventsTable } from '@/components/signals/SignalEventsTable';
 import { SignalPositionsTable } from '@/components/signals/SignalPositionsTable';
-import { SignalReadinessCard } from '@/components/dashboard/SignalReadinessCard';
+import { StrategyCombinedCard } from '@/components/signals/StrategyCombinedCard';
 import { EquityGrowthChart } from '@/components/charts/EquityGrowthChart';
 import { Compass, Sparkles, Filter } from 'lucide-react';
 
@@ -155,7 +154,7 @@ function SignalsContent() {
   }
 
   return (
-    <div className="p-4 sm:p-8 max-w-5xl space-y-8">
+    <div className="p-4 sm:p-8 space-y-6 w-full">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -211,7 +210,7 @@ function SignalsContent() {
       {/* Active Open Positions across all signal strategies */}
       <SignalPositionsTable positions={positions} />
 
-      {/* Live Strategies Proximity & Readiness (Both XRP & ETH visible side by side) */}
+      {/* Live Strategies Proximity & Readiness (Both XRP & ETH visible side by side in unified card) */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <Compass className="w-4 h-4 text-honey-400" />
@@ -220,18 +219,21 @@ function SignalsContent() {
           </h2>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {strategies.map((strat) => (
-            <div key={strat.id} className="space-y-3">
-              <SignalStrategyHeader strategy={strat} />
-              <SignalReadinessCard
-                userId={user?.id}
-                strategyId={strat.id}
-                strategyData={strat}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {strategies.map((strat) => {
+            const uSettings = userSettingsMap[strat.id];
+            const isTradingOn = Boolean(uSettings?.is_enabled);
+
+            return (
+              <StrategyCombinedCard
+                key={strat.id}
+                strategy={strat}
+                liveState={strat.live_state}
+                isTradingOn={isTradingOn}
                 hideDetailsLink={true}
               />
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

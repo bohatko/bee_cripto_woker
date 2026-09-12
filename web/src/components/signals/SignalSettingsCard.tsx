@@ -150,29 +150,31 @@ export function SignalSettingsCard({
   };
 
   return (
-    <div className="bg-dark-900 border border-dark-800 rounded-2xl p-6 shadow-xl space-y-6">
+    <div className="bg-dark-900 border border-dark-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-5">
       {/* Risk Warning Header */}
-      <div className="bg-rose-500/10 border border-rose-500/25 rounded-xl p-4 flex items-start gap-3">
+      <div className="bg-rose-500/10 border border-rose-500/25 rounded-xl p-3.5 sm:p-4 flex items-start gap-3">
         <ShieldAlert className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
         <div className="space-y-1">
           <h4 className="text-xs font-bold text-rose-300 tracking-wide uppercase">
             {t('signals.riskWarningTitle')}
           </h4>
           <p className="text-xs text-rose-200/80 leading-relaxed">
-            {t('signals.riskWarningText')}
+            {strategySymbol === 'ETH'
+              ? `При плече ${leverage}x падение цены на -15% означает убыток около -${Math.round(15 * leverage)}% маржи. Ликвидация в isolated наступает около -${(100 / leverage).toFixed(0)}%. Управляйте объемом позиции консервативно.`
+              : t('signals.riskWarningText')}
           </p>
         </div>
       </div>
 
       {/* Main Settings Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-5">
         {/* Left: Trading Toggle & Margin Sizing */}
-        <div className="space-y-5">
+        <div className="space-y-4">
           {/* Toggle Block */}
-          <div className="bg-dark-950 border border-dark-800 rounded-xl p-4 flex items-center justify-between">
-            <div>
-              <span className="text-sm font-bold text-white block">{t('signals.toggleTrading')}</span>
-              <span className="text-xs text-slate-400 max-w-sm block mt-0.5">
+          <div className="bg-dark-950 border border-dark-800 rounded-xl p-4 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <span className="text-sm font-bold text-white block truncate">{t('signals.toggleTrading')}</span>
+              <span className="text-xs text-slate-400 block mt-0.5 line-clamp-2">
                 {t('signals.toggleDesc')}
               </span>
             </div>
@@ -180,14 +182,14 @@ export function SignalSettingsCard({
             <button
               onClick={handleToggleClick}
               disabled={saving}
-              className={`px-4 py-2 rounded-xl font-mono text-xs font-bold flex items-center gap-2 transition-all shadow-md ${
+              className={`px-3.5 py-2 rounded-xl font-mono text-xs font-bold flex items-center gap-2 transition-all shadow-md shrink-0 ${
                 isEnabled
                   ? 'bg-emerald-500 hover:bg-emerald-400 text-dark-950 shadow-emerald-500/20'
                   : 'bg-dark-800 hover:bg-dark-700 text-slate-300 border border-dark-700'
               }`}
             >
               <Power className="w-3.5 h-3.5" />
-              {isEnabled ? t('signals.on') : t('signals.off')}
+              <span>{isEnabled ? t('signals.on') : t('signals.off')}</span>
             </button>
           </div>
 
@@ -226,7 +228,7 @@ export function SignalSettingsCard({
         </div>
 
         {/* Right: Telegram Approaching Alerts & Panic Close */}
-        <div className="space-y-5">
+        <div className="space-y-4">
           {/* Telegram Alerts Block */}
           <div className="bg-dark-950 border border-dark-800 rounded-xl p-4 space-y-3">
             <div className="flex items-center justify-between">
@@ -263,7 +265,7 @@ export function SignalSettingsCard({
                     <button
                       key={th}
                       onClick={() => handleThresholdToggle(th)}
-                      className={`px-3 py-1 rounded-lg text-xs font-mono font-bold transition-colors ${
+                      className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-colors ${
                         active
                           ? 'bg-honey-500/20 text-honey-400 border border-honey-500/40'
                           : 'bg-dark-800 text-slate-400 border border-dark-700 hover:text-slate-200'
@@ -278,27 +280,29 @@ export function SignalSettingsCard({
           </div>
 
           {/* Panic Close Button */}
-          <div className="bg-dark-950 border border-dark-800 rounded-xl p-4 flex items-center justify-between">
-            <div>
-              <span className="text-xs font-bold text-rose-400 block">
+          <div className="bg-dark-950 border border-dark-800 rounded-xl p-4 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <span className="text-xs font-bold text-rose-400 block truncate">
                 {t('signals.panicCloseButton')}
               </span>
-              <span className="text-[11px] text-slate-400 block mt-0.5">
-                {t('signals.panicCloseDesc')}
+              <span className="text-[11px] text-slate-400 block mt-0.5 line-clamp-2">
+                {strategySymbol === 'ETH'
+                  ? 'Немедленно закрывает активную позицию ETH по рынку и выключает авто-торговлю.'
+                  : t('signals.panicCloseDesc')}
               </span>
             </div>
 
             <button
               onClick={() => setIsPanicOpen(true)}
               disabled={!hasOpenPosition}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold font-mono transition-all flex items-center gap-1.5 ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold font-mono transition-all flex items-center gap-1.5 shrink-0 ${
                 hasOpenPosition
                   ? 'bg-rose-500 hover:bg-rose-400 text-white shadow-lg shadow-rose-500/20 cursor-pointer'
                   : 'bg-dark-800 text-slate-600 border border-dark-700 cursor-not-allowed'
               }`}
             >
               <AlertTriangle className="w-3.5 h-3.5" />
-              Panic Close
+              <span>Panic Close</span>
             </button>
           </div>
         </div>
