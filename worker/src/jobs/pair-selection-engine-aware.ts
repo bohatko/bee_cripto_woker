@@ -204,22 +204,37 @@ export class PairSelectionJob {
     if (coins.length < 4) throw new Error('Insufficient coins after history filter');
 
     const allCandidates: Candidate[] = [];
-    const simReady: Candidate[] = [];
     for (const a of coins) {
       for (const b of coins) {
         if (a.coin === b.coin) continue;
         const c = this.evaluatePairStructure(a, b);
         if (!c) continue;
         allCandidates.push(c);
-        if (c.reject_reasons.length === 0) simReady.push(c);
       }
     }
+    const structurePass = allCandidates.filter((c) => c.reject_reasons.length === 0);
+    const nearMiss = allCandidates
+      .filter((c) => c.reject_reasons.length > 0)
+      .sort((x, y) => y.metrics.hurst - x.metrics.hurst)
+      .slice(0, Math.max(0, CONFIG.simNearMissTopN));
+    const simReady = [...structurePass, ...nearMiss.filter((c) => !structurePass.includes(c))];
     simReady.sort((x, y) => y.metrics.hurst - x.metrics.hurst);
-    for (let i = 0; i < Math.min(simReady.length, CONFIG.simMaxCandidates); i++) {
-      this.evaluatePairSimulation(simReady[i]);
-      if ((i + 1) % 50 === 0) await this.appendProgress(run.id, 'sim_progress', `Simulated ${i + 1} candidates`);
+    const toSim = simReady.slice(0, CONFIG.simMaxCandidates);
+    await this.appendProgress(
+      run.id,
+      'structure_summary',
+      `Structure pass=${structurePass.length}, nearMissSim=${Math.min(nearMiss.length, CONFIG.simNearMissTopN)}, toSim=${toSim.length}`,
+    );
+    for (let i = 0; i < toSim.length; i++) {
+      this.evaluatePairSimulation(toSim[i]);
+      if ((i + 1) % 50 === 0) await this.appendProgress(run.id, 'sim_progress', `Simulated ${i + 1}/${toSim.length} candidates`);
     }
-    allCandidates.sort((x, y) => y.score - x.score);
+    allCandidates.sort((x, y) => {
+      const sx = Number.isFinite(x.score) ? x.score : Number.NEGATIVE_INFINITY;
+      const sy = Number.isFinite(y.score) ? y.score : Number.NEGATIVE_INFINITY;
+      if (sy !== sx) return sy - sx;
+      return (y.metrics.hurst ?? 0) - (x.metrics.hurst ?? 0);
+    });
     const validCandidates = allCandidates.filter((c) => c.valid);
 
     const { data: currentRows } = await supabase.from('strategy_pairs').select('*').eq('is_active', true);
@@ -395,13 +410,14 @@ export class PairSelectionJob {
     const hurst = hurstRS(ratioRets);
     const acSum = autocorr(ratioRets, 1) + autocorr(ratioRets, 2) + autocorr(ratioRets, 3);
 
+    const positiveWindows = [driftW1, driftW2, driftW3].filter((d) => d > 0).length;
     const reasons: string[] = [];
-    if (driftW1 <= 0 || driftW2 <= 0 || driftW3 <= 0) reasons.push('stability_3w');
-    if (corr < MIN_LEG_CORRELATION) reasons.push('correlation');
-    if (!(betaDiff <= MAX_BETA_DIFF)) reasons.push('beta');
-    if (!inTrend) reasons.push('not_in_trend');
+    if (positiveWindows < CONFIG.minStabilityWindows) reasons.push('stability_3w');
+    if (corr < CONFIG.minLegCorrelation) reasons.push('correlation');
+    if (!(betaDiff <= CONFIG.maxBetaDiff)) reasons.push('beta');
+    if (CONFIG.requireInTrend && !inTrend) reasons.push('not_in_trend');
     if (hurst <= CONFIG.minHurst) reasons.push('hurst');
-    if (acSum <= 0) reasons.push('autocorr');
+    if (CONFIG.requireAutocorr && acSum <= 0) reasons.push('autocorr');
 
     const metrics: CandidateMetrics = {
       t_stat: tStat,
@@ -480,7 +496,9 @@ export class PairSelectionJob {
     c.reject_reasons = Array.from(new Set(c.reject_reasons));
     c.valid = c.reject_reasons.length === 0;
     const score = c.metrics.sim_insample.profitFactor * Math.sqrt(Math.max(c.metrics.sim_insample.trades, 1)) * (1 - c.metrics.funding_penalty);
-    c.score = c.valid ? Number(score.toFixed(6)) : Number.NEGATIVE_INFINITY;
+    // Keep diagnostic score for rejected near-misses so admin UI is not all zeros/dashes.
+    c.score = Number.isFinite(score) ? Number(score.toFixed(6)) : Number.NEGATIVE_INFINITY;
+    if (!c.valid) c.score = -Math.abs(c.score);
   }
 
   private async loadOpenPositionPairs() {

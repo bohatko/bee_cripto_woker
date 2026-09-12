@@ -174,6 +174,14 @@ export function startInternalApiServer(): http.Server | null {
         entryOn4hCloseOnly: CONFIG.entryOn4hCloseOnly,
         entryExecutionMode: CONFIG.entryExecutionMode,
         exitExecutionMode: CONFIG.exitExecutionMode,
+        minLegVolumeUsd: CONFIG.minLegVolumeUsd,
+        minHurst: CONFIG.minHurst,
+        minLegCorrelation: CONFIG.minLegCorrelation,
+        maxBetaDiff: CONFIG.maxBetaDiff,
+        minStabilityWindows: CONFIG.minStabilityWindows,
+        requireAutocorr: CONFIG.requireAutocorr,
+        requireInTrend: CONFIG.requireInTrend,
+        simNearMissTopN: CONFIG.simNearMissTopN,
       });
       return;
     }
