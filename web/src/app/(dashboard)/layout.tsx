@@ -12,6 +12,7 @@ import {
   LogOut,
   User,
   ShieldAlert,
+  UserCog,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
@@ -117,6 +118,7 @@ export default function DashboardLayout({
 
   const navItems = [
     { name: t('nav.dashboard'), href: '/dashboard', icon: LayoutDashboard },
+    { name: t('nav.profile'), href: '/settings/profile', icon: UserCog },
     { name: t('nav.exchangeKeys'), href: '/settings/exchange', icon: KeyRound },
     { name: t('nav.botTrades'), href: '/history/bot', icon: TrendingUp },
     { name: t('nav.userTrades'), href: '/history', icon: History },

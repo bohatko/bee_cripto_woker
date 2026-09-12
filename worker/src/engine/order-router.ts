@@ -473,6 +473,7 @@ export class OrderRouter {
         telegramNotifier
           .notifyTradeOpened({
             isMaster: false,
+            userId: user.id,
             userEmail: user.email,
             exchange: account.exchange,
             accountName: account.account_name,
@@ -653,6 +654,7 @@ export class OrderRouter {
         telegramNotifier
           .notifyTradeClosed({
             isMaster: false,
+            userId: position.user_id,
             exchange: account.exchange,
             accountName: account.account_name,
             pairSymbol: position.pair_symbol,

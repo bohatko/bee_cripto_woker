@@ -33,6 +33,10 @@ CREATE TABLE IF NOT EXISTS public.users_profile (
     subscription_paid_until TIMESTAMPTZ,
     high_water_mark_equity NUMERIC(18, 4) DEFAULT 0.0000 NOT NULL,
     is_frozen BOOLEAN DEFAULT FALSE NOT NULL,
+    -- Per-user Telegram (bot token AES-256-GCM encrypted as iv:tag:ciphertext)
+    telegram_bot_token_enc TEXT,
+    telegram_chat_id TEXT,
+    telegram_enabled BOOLEAN DEFAULT FALSE NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );

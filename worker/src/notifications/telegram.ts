@@ -1,4 +1,7 @@
-import { CONFIG } from '../config.js';
+import { supabase } from '../config.js';
+import { decryptString } from '../security/encryption.js';
+
+const CREDENTIALS_CACHE_TTL_MS = 60_000;
 
 function escapeHtml(text: string): string {
   return String(text)
@@ -20,8 +23,16 @@ function formatDuration(openedAt?: string, closedAt?: string): string {
   return `${hours}ч ${remMins}м`;
 }
 
+function parseChatIds(raw: string | null | undefined): string[] {
+  return String(raw || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 export interface TradeOpenedNotification {
   isMaster?: boolean;
+  userId?: string | null;
   userEmail?: string;
   exchange?: string;
   accountName?: string;
@@ -42,6 +53,7 @@ export interface TradeOpenedNotification {
 
 export interface TradeClosedNotification {
   isMaster?: boolean;
+  userId?: string | null;
   userEmail?: string;
   exchange?: string;
   accountName?: string;
@@ -62,23 +74,84 @@ export interface TradeClosedNotification {
   closedAt?: string;
 }
 
+interface TelegramCredentials {
+  token: string;
+  chatIds: string[];
+}
+
+interface CachedCredentials {
+  value: TelegramCredentials | null;
+  expiresAt: number;
+}
+
 class TelegramNotifier {
-  private token: string;
-  private chatIds: string[];
+  private cache = new Map<string, CachedCredentials>();
 
-  constructor() {
-    this.token = CONFIG.telegramBotToken;
-    this.chatIds = CONFIG.telegramChatIds;
-  }
-
-  public async sendMessage(htmlText: string): Promise<void> {
-    if (!this.token || this.chatIds.length === 0) {
-      return;
+  private async loadCredentials(userId: string): Promise<TelegramCredentials | null> {
+    const cached = this.cache.get(userId);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.value;
     }
 
-    for (const chatId of this.chatIds) {
+    const { data, error } = await supabase
+      .from('users_profile')
+      .select('telegram_enabled, telegram_bot_token_enc, telegram_chat_id')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (error) {
+      console.warn(`⚠️ [TELEGRAM] Failed to load credentials for ${userId}:`, error.message);
+      return null;
+    }
+
+    let credentials: TelegramCredentials | null = null;
+    if (
+      data?.telegram_enabled &&
+      data.telegram_bot_token_enc &&
+      data.telegram_chat_id
+    ) {
       try {
-        const url = `https://api.telegram.org/bot${this.token}/sendMessage`;
+        const token = decryptString(data.telegram_bot_token_enc);
+        const chatIds = parseChatIds(data.telegram_chat_id);
+        if (token && chatIds.length > 0) {
+          credentials = { token, chatIds };
+        }
+      } catch (err: any) {
+        console.warn(`⚠️ [TELEGRAM] Decrypt failed for ${userId}:`, err.message);
+      }
+    }
+
+    this.cache.set(userId, {
+      value: credentials,
+      expiresAt: Date.now() + CREDENTIALS_CACHE_TTL_MS,
+    });
+    return credentials;
+  }
+
+  private async loadAdminCredentials(): Promise<TelegramCredentials[]> {
+    const { data, error } = await supabase
+      .from('users_profile')
+      .select('id, telegram_enabled, telegram_bot_token_enc, telegram_chat_id')
+      .eq('role', 'admin')
+      .eq('telegram_enabled', true);
+
+    if (error) {
+      console.warn('⚠️ [TELEGRAM] Failed to load admin credentials:', error.message);
+      return [];
+    }
+
+    const results: TelegramCredentials[] = [];
+    for (const row of data || []) {
+      const creds = await this.loadCredentials(row.id);
+      if (creds) results.push(creds);
+    }
+    return results;
+  }
+
+  private async dispatch(token: string, chatIds: string[], htmlText: string): Promise<void> {
+    for (const chatId of chatIds) {
+      try {
+        const url = `https://api.telegram.org/bot${token}/sendMessage`;
         const res = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -100,14 +173,43 @@ class TelegramNotifier {
     }
   }
 
+  public async sendToUser(userId: string, htmlText: string): Promise<void> {
+    if (!userId) return;
+    const creds = await this.loadCredentials(userId);
+    if (!creds) return;
+    await this.dispatch(creds.token, creds.chatIds, htmlText);
+  }
+
+  public async sendToAdmins(htmlText: string): Promise<void> {
+    const all = await this.loadAdminCredentials();
+    // Deduplicate by token+chatId so shared bots don't double-send
+    const seen = new Set<string>();
+    for (const creds of all) {
+      for (const chatId of creds.chatIds) {
+        const key = `${creds.token}:${chatId}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        await this.dispatch(creds.token, [chatId], htmlText);
+      }
+    }
+  }
+
   public async notifyTradeOpened(data: TradeOpenedNotification): Promise<void> {
     const isMaster = Boolean(data.isMaster);
     const sourceBadge = isMaster
       ? '👑 <b>Мастер-стратегия (Benchmark)</b>'
       : `⚡ <b>LIVE: ${escapeHtml((data.exchange || 'EXCHANGE').toUpperCase())}</b> (${escapeHtml(data.accountName || data.userEmail || 'User')})`;
 
-    const tp = data.takeProfitPct ?? CONFIG.takeProfitPct;
-    const sl = data.stopLossPct ?? CONFIG.stopLossPct;
+    const tp = data.takeProfitPct;
+    const sl = data.stopLossPct;
+    const goalsLine =
+      tp != null && sl != null
+        ? `🎯 <b>Цели:</b> TP <code>+${tp.toFixed(1)}%</code> | SL <code>-${sl.toFixed(1)}%</code>`
+        : tp != null
+          ? `🎯 <b>Цели:</b> TP <code>+${tp.toFixed(1)}%</code>`
+          : sl != null
+            ? `🎯 <b>Цели:</b> SL <code>-${sl.toFixed(1)}%</code>`
+            : `🎯 <b>Цели:</b> TP disabled | ATR SL`;
 
     const message = [
       `🐝 <b>НОВАЯ СДЕЛКА В РЫНКЕ</b>`,
@@ -126,12 +228,18 @@ class TelegramNotifier {
       ``,
       `💰 <b>Маржа:</b> <code>$${data.allocatedMargin.toFixed(2)} USDT</code> (Плечо: <code>${data.leverage.toFixed(1)}x</code>)`,
       `📈 <b>Позиция:</b> <code>$${data.totalVolume.toFixed(2)} USDT</code>`,
-      `🎯 <b>Цели:</b> TP <code>+${tp.toFixed(1)}%</code> | SL <code>-${sl.toFixed(1)}%</code>`,
+      goalsLine,
       `━━━━━━━━━━━━━━━━━━`,
       `⏱ <i>Время входа: ${new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} UTC</i>`,
     ].join('\n');
 
-    await this.sendMessage(message);
+    if (isMaster) {
+      await this.sendToAdmins(message);
+      return;
+    }
+    if (data.userId) {
+      await this.sendToUser(data.userId, message);
+    }
   }
 
   public async notifyTradeClosed(data: TradeClosedNotification): Promise<void> {
@@ -152,7 +260,7 @@ class TelegramNotifier {
       reasonBadge = '🛡️ <b>STOP LOSS (-1.5%)</b>';
     } else if (reasonLower === 'trend_flip') {
       reasonBadge = '🔄 <b>TREND FLIP (Разворот 4h тренда)</b>';
-    } else if (reasonLower === 'panic') {
+    } else if (reasonLower === 'panic' || reasonLower === 'panic_close') {
       reasonBadge = '🚨 <b>PANIC CLOSE (Экстренная ликвидация)</b>';
     }
 
@@ -174,9 +282,17 @@ class TelegramNotifier {
       durationStr ? `⏱ <b>Длительность:</b> <code>${durationStr}</code>` : '',
       `━━━━━━━━━━━━━━━━━━`,
       `⏱ <i>Время закрытия: ${new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} UTC</i>`,
-    ].filter(Boolean).join('\n');
+    ]
+      .filter(Boolean)
+      .join('\n');
 
-    await this.sendMessage(message);
+    if (isMaster) {
+      await this.sendToAdmins(message);
+      return;
+    }
+    if (data.userId) {
+      await this.sendToUser(data.userId, message);
+    }
   }
 }
 
