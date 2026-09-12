@@ -8,8 +8,6 @@ import { CandidateMetrics, PairSelectionProgressStep, PairSelectionRun, Strategy
 
 const FOUR_H_MS = 4 * 60 * 60 * 1000;
 const BARS_REQUIRED = 1080;
-const MIN_LEG_CORRELATION = 0.6;
-const MAX_BETA_DIFF = 0.1;
 const MAX_FUNDING_COST_PCT_8H = 0.05;
 const BASKET_SIZE = 4;
 const CANDIDATES_STORED = 50;

@@ -62,6 +62,12 @@ export const CONFIG = {
     .map((s) => s.trim().toUpperCase())
     .filter(Boolean),
   minHurst: Number(process.env.MIN_HURST || 0.55),
+  minLegCorrelation: Number(process.env.MIN_LEG_CORRELATION || 0.45),
+  maxBetaDiff: Number(process.env.MAX_BETA_DIFF || 0.25),
+  // Require this many of the 3 equal time windows to have positive ratio drift (1..3).
+  minStabilityWindows: Math.min(3, Math.max(1, Number(process.env.MIN_STABILITY_WINDOWS || 2))),
+  requireAutocorr: parseBool(process.env.REQUIRE_AUTOCORR, false),
+  requireInTrend: parseBool(process.env.REQUIRE_IN_TREND, true),
   basketMaxRatioCorr: Number(process.env.BASKET_MAX_RATIO_CORR || 0.4),
   anchorCoins: (process.env.ANCHOR_COINS || 'BTC,ETH,SOL,BNB')
     .split(',')
@@ -76,6 +82,8 @@ export const CONFIG = {
   simMaxDrawdownPct: Number(process.env.SIM_MAX_DRAWDOWN_PCT || 15),
   simMaxSlShare: Number(process.env.SIM_MAX_SL_SHARE || 0.4),
   simMaxCandidates: Number(process.env.SIM_MAX_CANDIDATES || 400),
+  // Always run Scenario C sim for top-N by Hurst even if structure rejected (fills admin UI metrics).
+  simNearMissTopN: Number(process.env.SIM_NEAR_MISS_TOP_N || 50),
   liveDemotionMinTrades: Number(process.env.LIVE_DEMOTION_MIN_TRADES || 5),
   liveDemotionPf: Number(process.env.LIVE_DEMOTION_PF || 0.8),
   adminTrc20Wallet: process.env.ADMIN_TRC20_WALLET || 'TFakeWalletAddressForTRC20USDTRechargeXXXX',
