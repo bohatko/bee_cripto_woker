@@ -176,7 +176,11 @@ export function SignalReadinessCard({ userId, strategyId = 'xrp_dip_buy_v1' }: S
 
         <div className="bg-dark-950/70 border border-dark-800/80 rounded-xl p-2.5">
           <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-mono">
-            {strategy?.config?.window_minutes === 60 ? '1h High (Max)' : t('signals.rollingMax')}
+            {strategy?.config?.window_minutes < 60
+              ? `${strategy?.config?.window_minutes}m High`
+              : strategy?.config?.window_minutes === 60
+              ? '1h High'
+              : `${Math.round((strategy?.config?.window_minutes || 1440) / 60)}h High`}
           </span>
           <span className="text-sm font-bold font-mono text-slate-300">
             ${liveState.rolling_max > 0 ? liveState.rolling_max.toFixed(strategy?.symbol === 'ETH' ? 2 : 4) : '---'}
@@ -185,7 +189,11 @@ export function SignalReadinessCard({ userId, strategyId = 'xrp_dip_buy_v1' }: S
 
         <div className="bg-dark-950/70 border border-dark-800/80 rounded-xl p-2.5">
           <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-mono">
-            {strategy?.config?.window_minutes === 60 ? 'Current 1h Drop' : t('signals.currentDrop')}
+            {strategy?.config?.window_minutes < 60
+              ? `Drop (${strategy?.config?.window_minutes}m)`
+              : strategy?.config?.window_minutes === 60
+              ? 'Drop (1h)'
+              : `Drop (${Math.round((strategy?.config?.window_minutes || 1440) / 60)}h)`}
           </span>
           <span className={`text-sm font-bold font-mono ${dropPct >= (strategy?.config?.drop_pct || 15) * 0.7 ? 'text-rose-400' : 'text-slate-200'}`}>
             -{dropPct.toFixed(2)}%{' '}

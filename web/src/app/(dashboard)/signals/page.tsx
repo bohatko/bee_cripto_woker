@@ -122,9 +122,14 @@ function SignalsContent() {
       )
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'signal_strategies', filter: `id=eq.${activeStrategyId}` },
+        { event: 'UPDATE', schema: 'public', table: 'signal_strategies' },
         (payload: any) => {
-          if (payload.new) setStrategy(payload.new);
+          if (payload.new?.id === activeStrategyId) {
+            setStrategy(payload.new);
+          }
+          setStrategies((prev) =>
+            prev.map((s) => (s.id === payload.new?.id ? payload.new : s))
+          );
         }
       )
       .subscribe();
@@ -168,7 +173,7 @@ function SignalsContent() {
             >
               <span>{s.symbol}/USDT</span>
               <span className={`text-[10px] px-1.5 py-0.5 rounded ${isActive ? 'bg-dark-950/20 text-dark-950' : 'bg-dark-800 text-slate-400'}`}>
-                {s.config?.drop_pct}% / {s.config?.window_minutes === 60 ? '1h' : '24h'}
+                {s.config?.drop_pct}% / {s.config?.window_minutes < 60 ? `${s.config.window_minutes}m` : s.config?.window_minutes === 60 ? '1h' : `${Math.round(s.config.window_minutes / 60)}h`}
               </span>
             </button>
           );

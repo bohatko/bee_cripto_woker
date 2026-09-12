@@ -65,18 +65,22 @@ export function SignalStrategyHeader({ strategy }: SignalStrategyHeaderProps) {
           <div className="bg-dark-950/80 border border-dark-800 p-2.5 rounded-xl">
             <span className="text-[10px] text-slate-500 uppercase font-mono block">Window</span>
             <span className="text-xs font-bold font-mono text-slate-300">
-              {config.window_minutes === 60 ? '1 Hour (60m)' : '24 Hours (1440m)'}
+              {config.window_minutes < 60
+                ? `${config.window_minutes} Min (${config.window_minutes}m)`
+                : config.window_minutes === 60
+                ? '1 Hour (60m)'
+                : `${Math.round(config.window_minutes / 60)} Hours (${config.window_minutes}m)`}
             </span>
           </div>
 
           <div className="bg-dark-950/80 border border-dark-800 p-2.5 rounded-xl">
             <span className="text-[10px] text-slate-500 uppercase font-mono block">Take-Profit</span>
-            <span className="text-xs font-bold font-mono text-emerald-400">+{config.tp_pct}.0%</span>
+            <span className="text-xs font-bold font-mono text-emerald-400">+{config.tp_pct}%</span>
           </div>
 
           <div className="bg-dark-950/80 border border-dark-800 p-2.5 rounded-xl">
             <span className="text-[10px] text-slate-500 uppercase font-mono block">Stop-Loss</span>
-            <span className="text-xs font-bold font-mono text-rose-400">-{config.sl_pct}.0%</span>
+            <span className="text-xs font-bold font-mono text-rose-400">-{config.sl_pct}%</span>
           </div>
         </div>
       </div>
