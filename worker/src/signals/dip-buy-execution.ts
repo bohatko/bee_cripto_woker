@@ -20,11 +20,29 @@ export class DipBuyExecution {
    * Sets leverage and margin mode (isolated) with error suppression/graceful fallback
    */
   public static async prepareMarket(
-    client: ExchangeClient,
+    client: any,
     symbol: string,
     leverage: number
   ): Promise<void> {
     await ensureMarketsLoaded(client);
+
+    // Set margin mode to isolated if supported by exchange
+    if (client.setMarginMode) {
+      try {
+        await client.setMarginMode('isolated', symbol);
+      } catch (err: any) {
+        const msg = String(err?.message || '').toLowerCase();
+        // Ignore if already isolated or "no need to change margin type"
+        if (
+          !msg.includes('already') &&
+          !msg.includes('no need to change') &&
+          !msg.includes('not modified')
+        ) {
+          console.warn(`⚠️ [DipBuyExecution] setMarginMode('isolated') for ${symbol}: ${err.message}`);
+        }
+      }
+    }
+
     if (client.setLeverage) {
       try {
         await client.setLeverage(leverage, symbol);

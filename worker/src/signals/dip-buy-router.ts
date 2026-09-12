@@ -222,7 +222,7 @@ export class DipBuyRouter {
       .maybeSingle();
 
     if (openUserSignal) {
-      console.log(`ℹ️ [DipBuyRouter] User ${user.email} already has open signal position. Skipping.`);
+      console.log(`ℹ️ [DipBuyRouter] User ${user.email} already has open signal position in DB for ${event.symbol}. Skipping.`);
       return;
     }
 
@@ -250,6 +250,34 @@ export class DipBuyRouter {
     // 4. Initialize exchange client
     const client = createExchangeInstance(account);
     const ccxtSymbol = `${event.symbol}/USDT:USDT`;
+
+    // 4.1 Strict live exchange guard: ensure no active position exists on the exchange directly for this coin
+    try {
+      let livePositions: any[] = [];
+      if (client.fetchPositions) {
+        livePositions = await client.fetchPositions([ccxtSymbol]);
+      } else if (client.fetchPosition) {
+        const p = await client.fetchPosition(ccxtSymbol);
+        if (p) livePositions = [p];
+      }
+
+      if (livePositions.length > 0) {
+        const existingLivePos = livePositions.find(
+          (p: any) => p.symbol === ccxtSymbol || p.symbol?.startsWith(event.symbol)
+        );
+        const contracts = Math.abs(
+          Number(existingLivePos?.contracts || existingLivePos?.positionAmt || existingLivePos?.size || 0)
+        );
+        if (contracts > 0) {
+          console.warn(
+            `⛔ [DipBuyRouter] User ${user.email} already has an OPEN position of ${contracts} ${event.symbol} on the exchange. Opening blocked until closed.`
+          );
+          return;
+        }
+      }
+    } catch (checkErr: any) {
+      console.warn(`⚠️ [DipBuyRouter] Could not check live exchange positions for ${user.email}: ${checkErr.message}`);
+    }
 
     // Fetch free futures balance
     const balance = await client.fetchBalance({ type: 'future' });
