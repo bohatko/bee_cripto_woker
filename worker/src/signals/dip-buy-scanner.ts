@@ -206,9 +206,9 @@ export class DipBuyScanner {
         : Math.min(100, Math.max(0, (dropPct / targetDrop) * 100));
 
       const liveState: SignalStrategyLiveState = {
-        price: Number(currentPrice.toFixed(4)),
-        rolling_max: Number(rollingMax.toFixed(4)),
-        drop_pct: Number(dropPct.toFixed(2)),
+        price: Number(currentPrice.toFixed(this.symbol === 'ETH' ? 2 : 4)),
+        rolling_max: Number(rollingMax.toFixed(this.symbol === 'ETH' ? 2 : 4)),
+        drop_pct: Number(dropPct.toFixed(3)),
         readiness_pct: Number(readinessPct.toFixed(1)),
         state: isMasterInPosition ? 'in_position' : 'flat',
         updated_at: new Date().toISOString(),

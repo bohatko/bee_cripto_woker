@@ -40,15 +40,15 @@ export function SignalStrategyHeader({ strategy }: SignalStrategyHeaderProps) {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-                  {strategy?.name || 'XRP Dip-Buy 24h'}
+                  {strategy?.name || (strategy?.symbol ? `${strategy.symbol} Dip-Buy` : 'Dip-Buy')}
                 </h1>
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-honey-500/15 text-honey-400 border border-honey-500/30">
-                  {strategy?.leverage || 3.0}x Isolated
+                  {strategy?.leverage || 1.75}x Isolated
                 </span>
               </div>
               <p className="text-xs text-slate-400 max-w-xl">
                 {strategy?.symbol === 'ETH'
-                  ? 'Autonomous Dip-Buy engine on ETH with isolated 1.75x leverage, +2% Take Profit and -15% Stop Loss (1h window).'
+                  ? `Autonomous Dip-Buy engine on ETH with isolated ${strategy?.leverage || 1.75}x leverage, +${config.tp_pct}% Take Profit and -${config.sl_pct}% Stop Loss.`
                   : t('signals.subtitle')}
               </p>
             </div>

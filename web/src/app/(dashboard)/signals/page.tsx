@@ -184,7 +184,7 @@ function SignalsContent() {
       <SignalStrategyHeader strategy={strategy} />
 
       {/* Live Readiness Card */}
-      <SignalReadinessCard userId={user?.id} strategyId={activeStrategyId} />
+      <SignalReadinessCard userId={user?.id} strategyId={activeStrategyId} strategyData={strategy} />
 
       {/* Settings Card */}
       {user && (

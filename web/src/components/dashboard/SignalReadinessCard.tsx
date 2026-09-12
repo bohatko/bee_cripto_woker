@@ -10,13 +10,20 @@ import { playWarningSound } from '@/lib/sound';
 export interface SignalReadinessCardProps {
   userId?: string;
   strategyId?: string;
+  strategyData?: any;
 }
 
-export function SignalReadinessCard({ userId, strategyId = 'xrp_dip_buy_v1' }: SignalReadinessCardProps) {
+export function SignalReadinessCard({ userId, strategyId = 'xrp_dip_buy_v1', strategyData }: SignalReadinessCardProps) {
   const { t } = useLanguage();
-  const [strategy, setStrategy] = useState<any>(null);
+  const [strategy, setStrategy] = useState<any>(strategyData || null);
   const [userSettings, setUserSettings] = useState<any>(null);
   const [hasPlayedSound, setHasPlayedSound] = useState(false);
+
+  useEffect(() => {
+    if (strategyData) {
+      setStrategy(strategyData);
+    }
+  }, [strategyData]);
 
   useEffect(() => {
     async function loadData() {
