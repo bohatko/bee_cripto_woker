@@ -76,11 +76,11 @@ export function StrategyCombinedCard({
 
       {/* Header */}
       <div className="flex items-center justify-between gap-3 relative z-10">
-        <div className="flex items-center gap-2.5 min-w-0">
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
           <div className="w-9 h-9 rounded-xl bg-honey-500/15 border border-honey-500/30 flex items-center justify-center text-honey-400 shadow-md shrink-0">
             <Radar className="w-4 h-4 animate-pulse" />
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <h3 className="text-base font-bold text-white tracking-tight truncate">
                 {strategy?.name || `${symbol} Dip-Buy`}
@@ -95,7 +95,7 @@ export function StrategyCombinedCard({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
           {getStatusBadge()}
           {!hideDetailsLink && (
             <Link

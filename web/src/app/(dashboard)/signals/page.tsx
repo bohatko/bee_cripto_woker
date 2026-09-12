@@ -264,7 +264,7 @@ function SignalsContent() {
                       {strat.symbol}/USDT ({strat.leverage}x Isolated)
                     </span>
                     <span className="text-[10px] font-mono text-slate-500">
-                      Target: Drop ≥ {strat.config?.drop_pct}% / {strat.config?.window_minutes < 60 ? `${strat.config?.window_minutes}m` : strat.config?.window_minutes === 60 ? '1h' : `${Math.round(strat.config?.window_minutes / 60)}h`}
+                      Trigger: Drop ≥ {strat.config?.drop_pct}% / {strat.config?.window_minutes < 60 ? `${strat.config?.window_minutes}m` : strat.config?.window_minutes === 60 ? '1h' : `${Math.round(strat.config?.window_minutes / 60)}h`}
                     </span>
                   </div>
 
@@ -328,7 +328,7 @@ export default function SignalsPage() {
   return (
     <Suspense
       fallback={
-        <div className="p-4 sm:p-8 max-w-5xl flex items-center justify-center font-mono text-sm text-slate-400">
+        <div className="p-4 sm:p-8 w-full flex items-center justify-center font-mono text-sm text-slate-400">
           Loading...
         </div>
       }

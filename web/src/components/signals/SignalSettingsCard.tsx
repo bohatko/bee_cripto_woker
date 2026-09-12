@@ -161,152 +161,146 @@ export function SignalSettingsCard({
           <p className="text-xs text-rose-200/80 leading-relaxed">
             {strategySymbol === 'ETH'
               ? `При плече ${leverage}x падение цены на -15% означает убыток около -${Math.round(15 * leverage)}% маржи. Ликвидация в isolated наступает около -${(100 / leverage).toFixed(0)}%. Управляйте объемом позиции консервативно.`
-              : t('signals.riskWarningText')}
+              : `При плече ${leverage}x падение цены на -30% означает убыток около -${Math.round(30 * leverage)}% маржи. Ликвидация в isolated наступает около -${(100 / leverage).toFixed(0)}%. Управляйте объемом позиции консервативно.`}
           </p>
         </div>
       </div>
 
       {/* Main Settings Grid */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-5">
-        {/* Left: Trading Toggle & Margin Sizing */}
-        <div className="space-y-4">
-          {/* Toggle Block */}
-          <div className="bg-dark-950 border border-dark-800 rounded-xl p-3 sm:p-3.5 flex items-center justify-between gap-2.5">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="text-xs sm:text-sm font-bold text-white truncate">{t('signals.toggleTrading')}</span>
-              </div>
-              <span className="text-[10px] sm:text-[11px] text-slate-400 block mt-0.5 line-clamp-1">
-                {t('signals.toggleDesc')}
-              </span>
+      <div className="space-y-4">
+        {/* Toggle Block */}
+        <div className="bg-dark-950 border border-dark-800 rounded-xl p-3 sm:p-3.5 flex items-center justify-between gap-2.5">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xs sm:text-sm font-bold text-white truncate">{t('signals.toggleTrading')}</span>
             </div>
-
-            <button
-              onClick={handleToggleClick}
-              disabled={saving}
-              className={`px-3 py-1.5 rounded-xl font-mono text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shrink-0 whitespace-nowrap ${
-                isEnabled
-                  ? 'bg-emerald-500 hover:bg-emerald-400 text-dark-950 shadow-emerald-500/20'
-                  : 'bg-dark-800 hover:bg-dark-700 text-slate-300 border border-dark-700'
-              }`}
-            >
-              <Power className="w-3.5 h-3.5 shrink-0" />
-              <span>{isEnabled ? t('signals.on') : t('signals.off')}</span>
-            </button>
+            <span className="text-[10px] sm:text-[11px] text-slate-400 block mt-0.5 line-clamp-1">
+              {t('signals.toggleDesc')}
+            </span>
           </div>
 
-          {/* Margin Allocation Slider */}
-          <div className="bg-dark-950 border border-dark-800 rounded-xl p-4 space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-xs font-semibold text-white flex items-center gap-1.5">
-                <Percent className="w-4 h-4 text-honey-400" />
-                {t('signals.balancePctLabel')}
-              </span>
-              <span className="text-sm font-mono font-bold text-honey-400">
-                {balancePct}%
+          <button
+            onClick={handleToggleClick}
+            disabled={saving}
+            className={`px-3 py-1.5 rounded-xl font-mono text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shrink-0 whitespace-nowrap ${
+              isEnabled
+                ? 'bg-emerald-500 hover:bg-emerald-400 text-dark-950 shadow-emerald-500/20'
+                : 'bg-dark-800 hover:bg-dark-700 text-slate-300 border border-dark-700'
+            }`}
+          >
+            <Power className="w-3.5 h-3.5 shrink-0" />
+            <span>{isEnabled ? t('signals.on') : t('signals.off')}</span>
+          </button>
+        </div>
+
+        {/* Margin Allocation Slider */}
+        <div className="bg-dark-950 border border-dark-800 rounded-xl p-4 space-y-3">
+          <div className="flex justify-between items-center">
+            <span className="text-xs font-semibold text-white flex items-center gap-1.5">
+              <Percent className="w-4 h-4 text-honey-400" />
+              {t('signals.balancePctLabel')}
+            </span>
+            <span className="text-sm font-mono font-bold text-honey-400">
+              {balancePct}%
+            </span>
+          </div>
+
+          <input
+            type="range"
+            min={5}
+            max={100}
+            step={5}
+            value={balancePct}
+            onChange={(e) => setBalancePct(Number(e.target.value))}
+            onMouseUp={() => saveSettings({ balance_pct: balancePct })}
+            onTouchEnd={() => saveSettings({ balance_pct: balancePct })}
+            className="w-full accent-honey-500 h-2 bg-dark-800 rounded-lg cursor-pointer"
+          />
+
+          <div className="flex justify-between items-center text-[11px] font-mono text-slate-400 pt-1">
+            <span>5%</span>
+            <span className="text-slate-300 font-bold">
+              {t('signals.simulatedMargin', { margin: estimatedMargin, notional: estimatedNotional })}
+            </span>
+            <span>100%</span>
+          </div>
+        </div>
+
+        {/* Telegram Alerts Block */}
+        <div className="bg-dark-950 border border-dark-800 rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Bell className="w-4 h-4 text-honey-400" />
+              <span className="text-xs font-bold text-white">
+                {t('signals.telegramAlertsTitle')}
               </span>
             </div>
 
             <input
-              type="range"
-              min={5}
-              max={100}
-              step={5}
-              value={balancePct}
-              onChange={(e) => setBalancePct(Number(e.target.value))}
-              onMouseUp={() => saveSettings({ balance_pct: balancePct })}
-              onTouchEnd={() => saveSettings({ balance_pct: balancePct })}
-              className="w-full accent-honey-500 h-2 bg-dark-800 rounded-lg cursor-pointer"
+              type="checkbox"
+              checked={alertReadiness}
+              onChange={async (e) => {
+                const val = e.target.checked;
+                setAlertReadiness(val);
+                await saveSettings({ alert_readiness_enabled: val });
+              }}
+              className="w-4 h-4 accent-honey-500 rounded cursor-pointer"
             />
+          </div>
+          <p className="text-[11px] text-slate-400 leading-normal">
+            {t('signals.telegramAlertsDesc')}
+          </p>
 
-            <div className="flex justify-between items-center text-[11px] font-mono text-slate-400 pt-1">
-              <span>5%</span>
-              <span className="text-slate-300 font-bold">
-                {t('signals.simulatedMargin', { margin: estimatedMargin, notional: estimatedNotional })}
-              </span>
-              <span>100%</span>
+          <div className="pt-2 border-t border-dark-800/80">
+            <span className="text-[10px] uppercase font-mono text-slate-500 block mb-2">
+              {t('signals.thresholdsLabel')}
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {[70, 80, 90, 95].map((th) => {
+                const active = thresholds.includes(th);
+                return (
+                  <button
+                    key={th}
+                    onClick={() => handleThresholdToggle(th)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-colors ${
+                      active
+                        ? 'bg-honey-500/20 text-honey-400 border border-honey-500/40'
+                        : 'bg-dark-800 text-slate-400 border border-dark-700 hover:text-slate-200'
+                    }`}
+                  >
+                    {th}%
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
 
-        {/* Right: Telegram Approaching Alerts & Panic Close */}
-        <div className="space-y-4">
-          {/* Telegram Alerts Block */}
-          <div className="bg-dark-950 border border-dark-800 rounded-xl p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Bell className="w-4 h-4 text-honey-400" />
-                <span className="text-xs font-bold text-white">
-                  {t('signals.telegramAlertsTitle')}
-                </span>
-              </div>
-
-              <input
-                type="checkbox"
-                checked={alertReadiness}
-                onChange={async (e) => {
-                  const val = e.target.checked;
-                  setAlertReadiness(val);
-                  await saveSettings({ alert_readiness_enabled: val });
-                }}
-                className="w-4 h-4 accent-honey-500 rounded cursor-pointer"
-              />
-            </div>
-            <p className="text-[11px] text-slate-400 leading-normal">
-              {t('signals.telegramAlertsDesc')}
-            </p>
-
-            <div className="pt-2 border-t border-dark-800/80">
-              <span className="text-[10px] uppercase font-mono text-slate-500 block mb-2">
-                {t('signals.thresholdsLabel')}
-              </span>
-              <div className="flex flex-wrap gap-2">
-                {[70, 80, 90, 95].map((th) => {
-                  const active = thresholds.includes(th);
-                  return (
-                    <button
-                      key={th}
-                      onClick={() => handleThresholdToggle(th)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-colors ${
-                        active
-                          ? 'bg-honey-500/20 text-honey-400 border border-honey-500/40'
-                          : 'bg-dark-800 text-slate-400 border border-dark-700 hover:text-slate-200'
-                      }`}
-                    >
-                      {th}%
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+        {/* Panic Close Button */}
+        <div className="bg-dark-950 border border-dark-800 rounded-xl p-3 sm:p-3.5 flex items-center justify-between gap-2.5">
+          <div className="min-w-0 flex-1">
+            <span className="text-xs font-bold text-rose-400 block truncate">
+              {t('signals.panicCloseButton')}
+            </span>
+            <span className="text-[11px] text-slate-400 block mt-0.5 line-clamp-1">
+              {strategySymbol === 'ETH'
+                ? 'Немедленно закрывает активную позицию ETH по рынку и выключает авто-торговлю.'
+                : t('signals.panicCloseDesc')}
+            </span>
           </div>
 
-          {/* Panic Close Button */}
-          <div className="bg-dark-950 border border-dark-800 rounded-xl p-3 sm:p-3.5 flex items-center justify-between gap-2.5">
-            <div className="min-w-0 flex-1">
-              <span className="text-xs font-bold text-rose-400 block truncate">
-                {t('signals.panicCloseButton')}
-              </span>
-              <span className="text-[11px] text-slate-400 block mt-0.5 line-clamp-1">
-                {strategySymbol === 'ETH'
-                  ? 'Немедленно закрывает активную позицию ETH по рынку и выключает авто-торговлю.'
-                  : t('signals.panicCloseDesc')}
-              </span>
-            </div>
-
-            <button
-              onClick={() => setIsPanicOpen(true)}
-              disabled={!hasOpenPosition}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold font-mono transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
-                hasOpenPosition
-                  ? 'bg-rose-500 hover:bg-rose-400 text-white shadow-lg shadow-rose-500/20 cursor-pointer'
-                  : 'bg-dark-800 text-slate-600 border border-dark-700 cursor-not-allowed'
-              }`}
-            >
-              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-              <span>Panic Close</span>
-            </button>
-          </div>
+          <button
+            onClick={() => setIsPanicOpen(true)}
+            disabled={!hasOpenPosition}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold font-mono transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
+              hasOpenPosition
+                ? 'bg-rose-500 hover:bg-rose-400 text-white shadow-lg shadow-rose-500/20 cursor-pointer'
+                : 'bg-dark-800 text-slate-600 border border-dark-700 cursor-not-allowed'
+            }`}
+          >
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+            <span>Panic Close</span>
+          </button>
         </div>
       </div>
 
