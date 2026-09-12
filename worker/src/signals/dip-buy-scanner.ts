@@ -155,6 +155,9 @@ export class DipBuyScanner {
     this.isScanning = true;
 
     try {
+      // Re-read strategy config every tick to pick up DB changes live without restart
+      await this.loadConfigFromDb();
+
       // 1. Fetch recent bars and ticker
       const [ohlcv, ticker] = await Promise.all([
         this.client.fetchOHLCV(this.ccxtSymbol, '1m', undefined, 15),
