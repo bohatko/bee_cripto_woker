@@ -171,10 +171,12 @@ export function SignalSettingsCard({
         {/* Left: Trading Toggle & Margin Sizing */}
         <div className="space-y-4">
           {/* Toggle Block */}
-          <div className="bg-dark-950 border border-dark-800 rounded-xl p-4 flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <span className="text-sm font-bold text-white block truncate">{t('signals.toggleTrading')}</span>
-              <span className="text-xs text-slate-400 block mt-0.5 line-clamp-2">
+          <div className="bg-dark-950 border border-dark-800 rounded-xl p-3 sm:p-3.5 flex items-center justify-between gap-2.5">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="text-xs sm:text-sm font-bold text-white truncate">{t('signals.toggleTrading')}</span>
+              </div>
+              <span className="text-[10px] sm:text-[11px] text-slate-400 block mt-0.5 line-clamp-1">
                 {t('signals.toggleDesc')}
               </span>
             </div>
@@ -182,13 +184,13 @@ export function SignalSettingsCard({
             <button
               onClick={handleToggleClick}
               disabled={saving}
-              className={`px-3.5 py-2 rounded-xl font-mono text-xs font-bold flex items-center gap-2 transition-all shadow-md shrink-0 ${
+              className={`px-3 py-1.5 rounded-xl font-mono text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shrink-0 whitespace-nowrap ${
                 isEnabled
                   ? 'bg-emerald-500 hover:bg-emerald-400 text-dark-950 shadow-emerald-500/20'
                   : 'bg-dark-800 hover:bg-dark-700 text-slate-300 border border-dark-700'
               }`}
             >
-              <Power className="w-3.5 h-3.5" />
+              <Power className="w-3.5 h-3.5 shrink-0" />
               <span>{isEnabled ? t('signals.on') : t('signals.off')}</span>
             </button>
           </div>
@@ -280,12 +282,12 @@ export function SignalSettingsCard({
           </div>
 
           {/* Panic Close Button */}
-          <div className="bg-dark-950 border border-dark-800 rounded-xl p-4 flex items-center justify-between gap-3">
-            <div className="min-w-0">
+          <div className="bg-dark-950 border border-dark-800 rounded-xl p-3 sm:p-3.5 flex items-center justify-between gap-2.5">
+            <div className="min-w-0 flex-1">
               <span className="text-xs font-bold text-rose-400 block truncate">
                 {t('signals.panicCloseButton')}
               </span>
-              <span className="text-[11px] text-slate-400 block mt-0.5 line-clamp-2">
+              <span className="text-[11px] text-slate-400 block mt-0.5 line-clamp-1">
                 {strategySymbol === 'ETH'
                   ? 'Немедленно закрывает активную позицию ETH по рынку и выключает авто-торговлю.'
                   : t('signals.panicCloseDesc')}
@@ -295,13 +297,13 @@ export function SignalSettingsCard({
             <button
               onClick={() => setIsPanicOpen(true)}
               disabled={!hasOpenPosition}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold font-mono transition-all flex items-center gap-1.5 shrink-0 ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold font-mono transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
                 hasOpenPosition
                   ? 'bg-rose-500 hover:bg-rose-400 text-white shadow-lg shadow-rose-500/20 cursor-pointer'
                   : 'bg-dark-800 text-slate-600 border border-dark-700 cursor-not-allowed'
               }`}
             >
-              <AlertTriangle className="w-3.5 h-3.5" />
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
               <span>Panic Close</span>
             </button>
           </div>

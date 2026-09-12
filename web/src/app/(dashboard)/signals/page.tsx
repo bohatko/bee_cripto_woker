@@ -41,7 +41,13 @@ function SignalsContent() {
         .order('id', { ascending: false });
 
       if (strats && strats.length > 0) {
-        setStrategies(strats);
+        // Keep canonical order: XRP first, ETH second
+        const sorted = [...strats].sort((a, b) => {
+          if (a.symbol === 'XRP') return -1;
+          if (b.symbol === 'XRP') return 1;
+          return a.symbol.localeCompare(b.symbol);
+        });
+        setStrategies(sorted);
       }
 
       // 2. Fetch user settings for all strategies
@@ -210,7 +216,7 @@ function SignalsContent() {
       {/* Active Open Positions across all signal strategies */}
       <SignalPositionsTable positions={positions} />
 
-      {/* Live Strategies Proximity & Readiness (Both XRP & ETH visible side by side in unified card) */}
+      {/* Live Strategies Proximity & Readiness (Unified Cards) */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <Compass className="w-4 h-4 text-honey-400" />
@@ -244,7 +250,7 @@ function SignalsContent() {
             {t('signals.settingsTitle')}
           </h2>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             {strategies.map((strat) => {
               const uSettings = userSettingsMap[strat.id];
               const hasOpen = positions.some(

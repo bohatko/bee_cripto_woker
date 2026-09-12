@@ -7,13 +7,7 @@ import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 export interface StrategyCombinedCardProps {
   strategy: any;
-  liveState: {
-    price: number;
-    rolling_max: number;
-    drop_pct: number;
-    readiness_pct: number;
-    state: string;
-  };
+  liveState: any;
   isTradingOn: boolean;
   hideDetailsLink?: boolean;
 }
@@ -36,7 +30,7 @@ export function StrategyCombinedCard({
   const readiness = Number(liveState?.readiness_pct || 0);
   const dropPct = Number(liveState?.drop_pct || 0);
   const symbol = (strategy?.symbol || 'XRP').toUpperCase();
-  const leverage = strategy?.leverage || 3.0;
+  const leverage = strategy?.leverage ? Number(strategy.leverage) : 3.0;
 
   const getProgressColor = (r: number) => {
     if (r >= 90) return 'bg-rose-500 shadow-rose-500/50 animate-pulse';

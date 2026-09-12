@@ -89,19 +89,19 @@ export function SignalPositionsTable({ positions }: SignalPositionsTableProps) {
                     <div>
                       <span className="text-slate-500 block">{t('signals.entryPrice')}</span>
                       <span className="text-white font-bold">
-                        ${Number(pos.entry_price || 0).toFixed(4)}
+                        ${Number(pos.entry_price || 0).toFixed(pos.symbol === 'ETH' ? 2 : 4)}
                       </span>
                     </div>
                     <div>
                       <span className="text-slate-500 block">{t('signals.tpPrice')}</span>
                       <span className="text-emerald-400 font-bold">
-                        ${Number(pos.tp_price || 0).toFixed(4)}
+                        ${Number(pos.tp_price || 0).toFixed(pos.symbol === 'ETH' ? 2 : 4)}
                       </span>
                     </div>
                     <div>
                       <span className="text-slate-500 block">{t('signals.slPrice')}</span>
                       <span className="text-rose-400 font-bold">
-                        ${Number(pos.sl_price || 0).toFixed(4)}
+                        ${Number(pos.sl_price || 0).toFixed(pos.symbol === 'ETH' ? 2 : 4)}
                       </span>
                     </div>
                   </div>
@@ -172,8 +172,8 @@ export function SignalPositionsTable({ positions }: SignalPositionsTableProps) {
                         ${Number(pos.allocated_margin_usd || 0).toFixed(2)}
                       </td>
                       <td className="py-3 px-3 text-slate-300">
-                        ${Number(pos.entry_price || 0).toFixed(4)} ➔ $
-                        {Number(pos.exit_price || 0).toFixed(4)}
+                        ${Number(pos.entry_price || 0).toFixed(pos.symbol === 'ETH' ? 2 : 4)} ➔ $
+                        {Number(pos.exit_price || 0).toFixed(pos.symbol === 'ETH' ? 2 : 4)}
                       </td>
                       <td className="py-3 px-3">
                         {renderReasonBadge(pos.exit_reason)}
