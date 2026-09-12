@@ -737,6 +737,7 @@ export const en = {
     tablePnl: 'Net PnL',
     tableReason: 'Exit Reason',
     openPositionCardTitle: 'Active Open Position',
+    activePositionsTitle: 'Active Open Positions',
     unrealizedPnl: 'Unrealized PnL',
     entryPrice: 'Entry Price',
     tpPrice: 'Take Profit',
@@ -744,5 +745,10 @@ export const en = {
     toastSettingsSaved: 'Signal settings saved successfully.',
     toastPanicTriggered: 'Emergency panic close requested. Orders are being submitted to the exchange.',
     toastTradeOpened: 'Dip-Buy {symbol} signal opened! Position: ${notional} USDT (3x).',
+    filterAll: 'All Coins',
+    performanceChartTitle: 'Signal PnL Growth Dynamics',
+    performanceChartSubtitle: 'Cumulative net realized PnL of your personal Dip-Buy signal executions',
+    noChartData: 'Chart will appear after your first closed signal trade.',
+    strategiesOverview: 'Signal Strategies Monitor',
   },
 } as const;

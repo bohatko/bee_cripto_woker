@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Sliders,
   Power,
@@ -49,6 +49,15 @@ export function SignalSettingsCard({
   const [thresholds, setThresholds] = useState<number[]>(
     Array.isArray(initialSettings?.alert_thresholds) ? initialSettings.alert_thresholds : [80, 90]
   );
+
+  useEffect(() => {
+    setIsEnabled(Boolean(initialSettings?.is_enabled));
+    setBalancePct(Number(initialSettings?.balance_pct || 50));
+    setAlertReadiness(initialSettings?.alert_readiness_enabled !== false);
+    setThresholds(
+      Array.isArray(initialSettings?.alert_thresholds) ? initialSettings.alert_thresholds : [80, 90]
+    );
+  }, [initialSettings, strategyId]);
 
   const [saving, setSaving] = useState(false);
   const [isConfirmToggleOpen, setIsConfirmToggleOpen] = useState(false);

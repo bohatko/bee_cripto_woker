@@ -28,42 +28,42 @@ export function SignalStrategyHeader({ strategy }: SignalStrategyHeaderProps) {
   };
 
   return (
-    <div className="bg-gradient-to-r from-dark-900 via-dark-900 to-dark-950 border border-dark-800 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
-      <div className="absolute top-0 right-0 w-80 h-80 bg-honey-500/10 rounded-full blur-3xl pointer-events-none" />
+    <div className="bg-gradient-to-r from-dark-900 via-dark-900 to-dark-950 border border-dark-800 rounded-2xl p-4 sm:p-5 shadow-xl relative overflow-hidden">
+      <div className="absolute top-0 right-0 w-64 h-64 bg-honey-500/10 rounded-full blur-3xl pointer-events-none" />
 
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
-        <div className="space-y-2">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-honey-500/15 border border-honey-500/30 flex items-center justify-center text-honey-400 shadow-lg shadow-honey-500/10">
-              <Radar className="w-6 h-6 animate-pulse" />
+      <div className="flex flex-col gap-4 relative z-10">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-honey-500/15 border border-honey-500/30 flex items-center justify-center text-honey-400 shadow-md">
+              <Radar className="w-4 h-4 animate-pulse" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                <h3 className="text-base font-bold text-white tracking-tight">
                   {strategy?.name || (strategy?.symbol ? `${strategy.symbol} Dip-Buy` : 'Dip-Buy')}
-                </h1>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-honey-500/15 text-honey-400 border border-honey-500/30">
+                </h3>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-honey-500/15 text-honey-400 border border-honey-500/30">
                   {strategy?.leverage || 1.75}x Isolated
                 </span>
               </div>
-              <p className="text-xs text-slate-400 max-w-xl">
+              <p className="text-[11px] text-slate-400 font-mono mt-0.5">
                 {strategy?.symbol === 'ETH'
-                  ? `Autonomous Dip-Buy engine on ETH with isolated ${strategy?.leverage || 1.75}x leverage, +${config.tp_pct}% Take Profit and -${config.sl_pct}% Stop Loss.`
-                  : t('signals.subtitle')}
+                  ? `ETH Dip-Buy • Drop ≥ ${config.drop_pct}% / ${config.window_minutes}m • TP +${config.tp_pct}% • SL -${config.sl_pct}%`
+                  : `XRP Dip-Buy • Drop ≥ ${config.drop_pct}% / 24h • TP +${config.tp_pct}% • SL -${config.sl_pct}%`}
               </p>
             </div>
           </div>
         </div>
 
         {/* Strategy Badges Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-          <div className="bg-dark-950/80 border border-dark-800 p-2.5 rounded-xl">
-            <span className="text-[10px] text-slate-500 uppercase font-mono block">Trigger</span>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="bg-dark-950/80 border border-dark-800 p-2 rounded-lg">
+            <span className="text-[9px] text-slate-500 uppercase font-mono block">Trigger</span>
             <span className="text-xs font-bold font-mono text-white">Drop ≥ {config.drop_pct}%</span>
           </div>
 
-          <div className="bg-dark-950/80 border border-dark-800 p-2.5 rounded-xl">
-            <span className="text-[10px] text-slate-500 uppercase font-mono block">Window</span>
+          <div className="bg-dark-950/80 border border-dark-800 p-2 rounded-lg">
+            <span className="text-[9px] text-slate-500 uppercase font-mono block">Window</span>
             <span className="text-xs font-bold font-mono text-slate-300">
               {config.window_minutes < 60
                 ? `${config.window_minutes} Min (${config.window_minutes}m)`
@@ -73,13 +73,13 @@ export function SignalStrategyHeader({ strategy }: SignalStrategyHeaderProps) {
             </span>
           </div>
 
-          <div className="bg-dark-950/80 border border-dark-800 p-2.5 rounded-xl">
-            <span className="text-[10px] text-slate-500 uppercase font-mono block">Take-Profit</span>
+          <div className="bg-dark-950/80 border border-dark-800 p-2 rounded-lg">
+            <span className="text-[9px] text-slate-500 uppercase font-mono block">Take-Profit</span>
             <span className="text-xs font-bold font-mono text-emerald-400">+{config.tp_pct}%</span>
           </div>
 
-          <div className="bg-dark-950/80 border border-dark-800 p-2.5 rounded-xl">
-            <span className="text-[10px] text-slate-500 uppercase font-mono block">Stop-Loss</span>
+          <div className="bg-dark-950/80 border border-dark-800 p-2 rounded-lg">
+            <span className="text-[9px] text-slate-500 uppercase font-mono block">Stop-Loss</span>
             <span className="text-xs font-bold font-mono text-rose-400">-{config.sl_pct}%</span>
           </div>
         </div>

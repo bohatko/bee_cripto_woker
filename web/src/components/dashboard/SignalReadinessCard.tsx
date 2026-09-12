@@ -11,9 +11,15 @@ export interface SignalReadinessCardProps {
   userId?: string;
   strategyId?: string;
   strategyData?: any;
+  hideDetailsLink?: boolean;
 }
 
-export function SignalReadinessCard({ userId, strategyId = 'xrp_dip_buy_v1', strategyData }: SignalReadinessCardProps) {
+export function SignalReadinessCard({
+  userId,
+  strategyId = 'xrp_dip_buy_v1',
+  strategyData,
+  hideDetailsLink = false,
+}: SignalReadinessCardProps) {
   const { t } = useLanguage();
   const [strategy, setStrategy] = useState<any>(strategyData || null);
   const [userSettings, setUserSettings] = useState<any>(null);
@@ -160,13 +166,15 @@ export function SignalReadinessCard({ userId, strategyId = 'xrp_dip_buy_v1', str
 
         <div className="flex items-center gap-2">
           {getStatusBadge()}
-          <Link
-            href={`/signals?tab=${strategy?.symbol?.toLowerCase() || 'xrp'}`}
-            className="text-xs text-honey-400 hover:text-honey-300 font-mono font-semibold flex items-center gap-0.5 bg-honey-500/10 hover:bg-honey-500/20 px-2.5 py-1 rounded-lg border border-honey-500/25 transition-all"
-          >
-            {t('signals.viewDetails')}
-            <ArrowUpRight className="w-3.5 h-3.5" />
-          </Link>
+          {!hideDetailsLink && (
+            <Link
+              href="/signals"
+              className="text-xs text-honey-400 hover:text-honey-300 font-mono font-semibold flex items-center gap-0.5 bg-honey-500/10 hover:bg-honey-500/20 px-2.5 py-1 rounded-lg border border-honey-500/25 transition-all"
+            >
+              {t('signals.viewDetails')}
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </Link>
+          )}
         </div>
       </div>
 

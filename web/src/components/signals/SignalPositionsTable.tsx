@@ -19,14 +19,14 @@ export function SignalPositionsTable({ positions }: SignalPositionsTableProps) {
     if (r === 'tp') {
       return (
         <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-          TP (+4.0%)
+          TP
         </span>
       );
     }
     if (r === 'sl') {
       return (
         <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30">
-          SL (-30.0%)
+          SL
         </span>
       );
     }

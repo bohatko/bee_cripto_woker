@@ -741,6 +741,7 @@ export const ru = {
     tablePnl: 'Чистый PnL',
     tableReason: 'Причина',
     openPositionCardTitle: 'Активная открытая сделка',
+    activePositionsTitle: 'Активные открытые сделки',
     unrealizedPnl: 'Нереализованный PnL',
     entryPrice: 'Цена входа',
     tpPrice: 'Take Profit',
@@ -748,5 +749,10 @@ export const ru = {
     toastSettingsSaved: 'Настройки сигналов успешно сохранены.',
     toastPanicTriggered: 'Запрос на экстренное закрытие отправлен воркеру.',
     toastTradeOpened: 'Сигнал Dip-Buy {symbol} открыт! Позиция: ${notional} USDT (3x).',
+    filterAll: 'Все монеты',
+    performanceChartTitle: 'Динамика PnL по сигналам',
+    performanceChartSubtitle: 'Кумулятивный чистый реализованный PnL ваших сделок по Dip-Buy сигналам',
+    noChartData: 'График появится после закрытия первой сделки по сигналам.',
+    strategiesOverview: 'Монитор сигнальных стратегий',
   },
 };
