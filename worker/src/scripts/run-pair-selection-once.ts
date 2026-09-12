@@ -2,7 +2,7 @@
  * One-shot: pick up pending pair_selection_runs and execute the momentum screener.
  * Usage: npx tsx src/scripts/run-pair-selection-once.ts
  */
-import { PairSelectionJob } from '../jobs/pair-selection.js';
+import { PairSelectionJob } from '../jobs/pair-selection-engine-aware.js';
 
 async function main() {
   console.log('🔬 One-shot PairSelectionJob.tick()...');

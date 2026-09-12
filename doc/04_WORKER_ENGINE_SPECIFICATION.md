@@ -262,10 +262,10 @@ All new execution and risk parameters are configurable via environment variables
 | `MAX_CONSECUTIVE_SL` | `2` | Count | Consecutive stop-loss exit threshold. If the last N closed positions are all SLs and the latest is within the block window, entry is blocked. |
 | `SL_STREAK_BLOCK_MS` | `86400000` (24h) | Milliseconds | Window during which a `MAX_CONSECUTIVE_SL` streak blocks new entries. |
 | `RISK_MODE` | `margin` | `margin` or `spread` | How TP/SL thresholds are interpreted. `margin` triggers on PnL% of allocated margin (legacy behavior). `spread` interprets the configured TP/SL as a percentage move of the ratio, converted to margin PnL% via effective leverage (`total_position_volume_usd / allocated_margin_usd`). |
-| `SL_ATR_MULT` | `0` | Multiplier (0 = disabled) | Optional ATR-based stop loss. When > 0, the SL threshold in spread terms is `SL_ATR_MULT * ATR14%`. The ATR is computed from the synthetic 4h ratio series using close-to-close log true range and Wilder's smoothing. The resulting margin threshold is capped by `SL_MAX_MARGIN_PCT`. |
+| `SL_ATR_MULT` | `1.5` | Multiplier (0 = disabled) | Optional ATR-based stop loss. When > 0, the SL threshold in spread terms is `SL_ATR_MULT * ATR14%`. The ATR is computed from the synthetic 4h ratio series using close-to-close log true range and Wilder's smoothing. The resulting margin threshold is capped by `SL_MAX_MARGIN_PCT`. |
 | `SL_MAX_MARGIN_PCT` | `10` | Percent | Maximum margin PnL% for the SL threshold when using `spread` mode or ATR-based stops. |
-| `TP_DISABLED` | `false` | Boolean | When `true`, the fixed take-profit is disabled; exits are triggered only by SL, trend flip or panic close. |
-| `ENTRY_ON_4H_CLOSE_ONLY` | `false` | Boolean | When `true`, entry signals are evaluated only once per new closed 4-hour candle and use the closed candle's ratio against EMA10 (matching the validated backtest). When `false` (default), live-tick entries are allowed whenever `currentRatio > EMA10`. |
+| `TP_DISABLED` | `true` | Boolean | When `true`, the fixed take-profit is disabled; exits are triggered only by SL, trend flip or panic close. |
+| `ENTRY_ON_4H_CLOSE_ONLY` | `true` | Boolean | When `true`, entry signals are evaluated only once per new closed 4-hour candle and use the closed candle's ratio against EMA10 (matching the validated backtest). When `false`, live-tick entries are allowed whenever `currentRatio > EMA10`. |
 | `ENTRY_4H_CLOSE_GRACE_MS` | `600000` (10 min) | Milliseconds | Cold-start grace window for `ENTRY_ON_4H_CLOSE_ONLY`. On initial EMA load, if the last closed 4h candle is older than this grace window, it is seeded as already emitted so a redeploy does not open positions mid-candle. Candles within the grace window remain eligible as new signals. |
 | `RISK_ON_NET_PNL` | `false` | Boolean | When `false` (default), TP/SL/ATR exit triggers use gross PnL% to match the validated backtest barriers. Dashboard `unrealized_pnl_usd`/`pnl_pct` are always stored net of known fees and funding. When `true`, triggers are also tested against net PnL%. |
 
@@ -301,9 +301,9 @@ When `ENTRY_ON_4H_CLOSE_ONLY=true`, the scanner refreshes the closed 4h EMA/ATR 
 | `PAIR_SELECTION_UTC_HOUR` | `0` | UTC hour after which a daily cron run may start. |
 | `PAIR_SELECTION_UTC_MINUTE` | `10` | UTC minute companion to the hour (default 00:10). |
 | `ROTATION_MAX_REPLACEMENTS` | `2` | Max pairs swapped in one apply. |
-| `ROTATION_HYSTERESIS` | `1.25` | Challenger score must be ≥ this × incumbent score. |
+| `ROTATION_HYSTERESIS` | `1.5` | Challenger score must be ≥ this × incumbent score. |
 | `UNIVERSE_SIZE` | `60` | Top-N USDT-M perps by 24h volume. |
-| `MIN_LEG_VOLUME_USD` | `50000000` | Min 24h quote volume per leg. |
+| `MIN_LEG_VOLUME_USD` | `100000000` | Min 24h quote volume per leg. |
 
 > **Validation gate (2026-09-07):** walk-forward in `research/pair_selection/MOMENTUM_VALIDATION_RESULTS.md` failed (dynamic worse than static). Keep `engine_settings.auto_rotation_enabled = false` in production until the screener improves. Manual admin runs still store candidates for inspection.
 

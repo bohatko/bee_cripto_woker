@@ -25,9 +25,10 @@ Always consult the documentation in `doc/` before modifying architectural, datab
 - Removed pairs with open positions are managed to TP/SL/Trend-Flip; scanner unions active basket + open-position pairs.
 - Entry condition: `Ratio > EMA10` on 4h timeframe, and pair is in the active global basket.
 - Margin split: 25% of available free margin per pair.
-- Leverage: 7.0x.
-- Take Profit: +5.0% on net pair.
-- Stop Loss: -1.5% on net pair.
+- Leverage: 3.0x (hard cap via `MAX_LEVERAGE=3`).
+- Take Profit: disabled by default (`TP_DISABLED=true`).
+- Stop Loss: ATR-based (`SL_ATR_MULT=1.5`) capped by `SL_MAX_MARGIN_PCT=10`.
+- Entry mode: closed 4h candle only (`ENTRY_ON_4H_CLOSE_ONLY=true`).
 - Trend Flip: immediate market exit if ratio drops below EMA10.
 
 ## Security Rules

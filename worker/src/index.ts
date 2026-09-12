@@ -6,7 +6,7 @@ import { OrderRouter } from './engine/order-router.js';
 import { PositionGuard } from './engine/position-guard.js';
 import { HealthCheckJob } from './jobs/health-check.js';
 import { BillingCronJob } from './jobs/billing-cron.js';
-import { PairSelectionJob } from './jobs/pair-selection.js';
+import { PairSelectionJob } from './jobs/pair-selection-engine-aware.js';
 import { pairRegistry } from './exchanges/pair-registry.js';
 
 async function main() {

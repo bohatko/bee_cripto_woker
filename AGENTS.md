@@ -88,16 +88,16 @@ bee_cripto_woker/
    * Вход **ТОЛЬКО** когда $\text{Ratio} > \text{EMA}_{10}$ (на 4-часовом таймфрейме) и пара в **активной глобальной** корзине (`PairRegistry`). Per-user `trading_settings.active_pairs` больше не фильтрует входы.
 3. **Распределение капитала**:
    * Депозит делится на 4 равных слота: **25% свободной маржи на пару**.
-   * Рабочее эффективное плечо: **7.0x**.
+  * Рабочее эффективное плечо: **3.0x** (hard cap `MAX_LEVERAGE=3`).
    * Объем делится поровну между лонгом и шортом: $\text{Volume}_{\text{leg}} = (\text{Margin} \times 7) / 2$.
 4. **Условия выхода**:
-   * **Take-Profit (TP)**: фиксированный **+5.0%** на суммарную связку.
-   * **Stop-Loss (SL)**: фиксированный **-1.5%** на связку.
+ * **Take-Profit (TP)**: по умолчанию отключен (`TP_DISABLED=true`).
+ * **Stop-Loss (SL)**: **ATR-based** (`SL_ATR_MULT=1.5`) с cap `SL_MAX_MARGIN_PCT=10`.
    * **Trend-Flip**: 4-часовая свеча закрылась ниже $\text{EMA}_{10}$ — немедленное закрытие.
    * **Panic Close**: пользователь нажал экстренную кнопку в интерфейсе.
    * Market Scanner сканирует **union(активная корзина ∪ пары с open `bot_positions`)**, чтобы trend-flip работал после ротации.
 
-> **Аудит 2026-09-04:** TP/SL по умолчанию — **% выделенной маржи слота** (`RISK_MODE=margin`). При текущих defaults (7x, TP +5%, SL $-1,5%$) честный 1m-бэктест показал **отрицательное матожидание и ликвидацию**; см. [`doc/02_STRATEGY_AND_BACKTESTS.md`](doc/02_STRATEGY_AND_BACKTESTS.md) разделы 4–6 и [`research/backtest/RESULTS.md`](research/backtest/RESULTS.md).
+> **Аудит 2026-09-04:** legacy TP/SL (7x, TP +5%, SL $-1,5%$ margin) показали **отрицательное матожидание и ликвидацию**. Текущий дефолт движка переведен на Scenario C: 3x, `TP_DISABLED=true`, `SL_ATR_MULT=1.5`, вход только на закрытии 4h; см. [`doc/02_STRATEGY_AND_BACKTESTS.md`](doc/02_STRATEGY_AND_BACKTESTS.md) разделы 4–6 и [`research/backtest/RESULTS.md`](research/backtest/RESULTS.md).
 
 > **Аудит 2026-09-07:** динамический momentum-отбор walk-forward **хуже** статичной корзины (−806% vs −211% margin PnL) — гейт авторотации **FAIL**; держать `auto_rotation_enabled=false` до улучшения скринера.
 

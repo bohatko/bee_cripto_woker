@@ -136,6 +136,8 @@ export function ReplacePairModal({
                 <tr>
                   <th className="px-5 py-2.5">{t('admin.candColPair')}</th>
                   <th className="px-5 py-2.5 text-right">{t('admin.candColScore')}</th>
+                  <th className="px-5 py-2.5 text-right">PF IS/OOS</th>
+                  <th className="px-5 py-2.5 text-right">DD IS</th>
                   <th className="px-5 py-2.5">{t('admin.replaceReasons')}</th>
                   <th className="px-5 py-2.5 text-right">{t('admin.colControl')}</th>
                 </tr>
@@ -161,12 +163,26 @@ export function ReplacePairModal({
                       <td className="px-5 py-3 text-right text-honey-400 font-bold">
                         {Number(c.score).toFixed(3)}
                       </td>
+                      <td className="px-5 py-3 text-right text-slate-300">
+                        {Number((c.metrics as any)?.sim_insample?.profitFactor || 0).toFixed(2)} / {Number((c.metrics as any)?.sim_oos?.profitFactor || 0).toFixed(2)}
+                      </td>
+                      <td className="px-5 py-3 text-right text-slate-300">
+                        {Number((c.metrics as any)?.sim_insample?.maxDrawdownPct || 0).toFixed(2)}%
+                      </td>
                       <td className="px-5 py-3 text-[10px] text-slate-500">
-                        {c.valid ? (
-                          <span className="text-emerald-400">{t('admin.replaceValid')}</span>
-                        ) : (
-                          (c.reject_reasons || []).join(', ') || '—'
-                        )}
+                        <div className="space-y-0.5">
+                          {c.valid ? (
+                            <span className="text-emerald-400">{t('admin.replaceValid')}</span>
+                          ) : (
+                            <span>{(c.reject_reasons || []).join(', ') || '—'}</span>
+                          )}
+                          {Number((c.metrics as any)?.sim_oos?.profitFactor || 0) < 1 && (
+                            <div className="text-rose-400">OOS PF is below 1.0</div>
+                          )}
+                          {Number((c.metrics as any)?.basket_corr_max || 0) > 0.4 && (
+                            <div className="text-rose-400">Correlation with basket is above 0.4</div>
+                          )}
+                        </div>
                       </td>
                       <td className="px-5 py-3 text-right">
                         <button

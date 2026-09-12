@@ -37,6 +37,7 @@ import { toast } from '@/components/ui/sonner';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { LanguageSwitcher } from '@/lib/i18n/LanguageSwitcher';
 import { isUnfilledSimulation, getDisplayPnlUsd } from '@/lib/positions';
+import { LineChart, Line } from 'recharts';
 
 export default function AdminDashboardPage() {
   const router = useRouter();
@@ -62,6 +63,9 @@ export default function AdminDashboardPage() {
   const [activePairs, setActivePairs] = useState<any[]>([]);
   const [pairRuns, setPairRuns] = useState<any[]>([]);
   const [engineSettings, setEngineSettings] = useState<any>(null);
+  const [engineConfig, setEngineConfig] = useState<any>(null);
+  const [lockedPairs, setLockedPairs] = useState<Set<string>>(new Set());
+  const [validOnlyCandidates, setValidOnlyCandidates] = useState(true);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const [pairsAction, setPairsAction] = useState<'toggleRotation' | 'runSelection' | null>(null);
   const [isPairsConfirmOpen, setIsPairsConfirmOpen] = useState(false);
@@ -102,6 +106,23 @@ export default function AdminDashboardPage() {
       .maybeSingle();
 
     if (settings) setEngineSettings(settings);
+
+    const { data: openMaster } = await supabase
+      .from('bot_positions')
+      .select('pair_symbol')
+      .eq('is_master', true)
+      .in('status', ['open', 'closing']);
+    setLockedPairs(new Set((openMaster || []).map((p: any) => String(p.pair_symbol))));
+
+    try {
+      const res = await fetch('/api/admin/engine-config', { cache: 'no-store' });
+      if (res.ok) {
+        const payload = await res.json();
+        setEngineConfig(payload);
+      }
+    } catch {
+      setEngineConfig(null);
+    }
   }
 
   async function checkAdminAndLoadData() {
@@ -346,6 +367,13 @@ export default function AdminDashboardPage() {
   const latestRun = pairRuns[0];
   const isRunInProgress =
     latestRun && (latestRun.status === 'pending' || latestRun.status === 'running');
+  const lastRotationAt = engineSettings?.last_rotation_applied_at
+    ? new Date(engineSettings.last_rotation_applied_at)
+    : null;
+  const nextRotationAt = lastRotationAt
+    ? new Date(lastRotationAt.getTime() + 14 * 24 * 60 * 60 * 1000)
+    : null;
+  const isCooldownActive = nextRotationAt ? nextRotationAt.getTime() > Date.now() : false;
   const tracedRun =
     (traceRunId ? pairRuns.find((r) => r.id === traceRunId) : null) ||
     (isRunInProgress ? latestRun : null);
@@ -1047,7 +1075,13 @@ export default function AdminDashboardPage() {
                         <th className="px-5 py-3">{t('admin.colPair')}</th>
                         <th className="px-5 py-3">{t('admin.colLongShort')}</th>
                         <th className="px-5 py-3">{t('admin.colScore')}</th>
-                        <th className="px-5 py-3">{t('admin.colMetrics')}</th>
+                        <th className="px-5 py-3">PF (IS/OOS)</th>
+                        <th className="px-5 py-3">Trades IS</th>
+                        <th className="px-5 py-3">MaxDD IS</th>
+                        <th className="px-5 py-3">Hurst</th>
+                        <th className="px-5 py-3">Live PF 30d</th>
+                        <th className="px-5 py-3">Funding</th>
+                        <th className="px-5 py-3">Equity</th>
                         <th className="px-5 py-3 text-right">{t('admin.colActivated')}</th>
                         <th className="px-5 py-3 text-right">{t('admin.basketActions')}</th>
                       </tr>
@@ -1060,20 +1094,27 @@ export default function AdminDashboardPage() {
                             <span className="text-emerald-400 font-bold">L:{pair.long_coin}</span>
                             <span className="text-slate-500 mx-1.5">/</span>
                             <span className="text-rose-400 font-bold">S:{pair.short_coin}</span>
+                            {lockedPairs.has(pair.pair_symbol) && (
+                              <span className="ml-2 px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-400 border border-rose-500/30 text-[10px] font-bold uppercase">
+                                Locked
+                              </span>
+                            )}
                           </td>
                           <td className="px-5 py-4 text-honey-400 font-bold">
                             {formatScore(pair.score)}
                           </td>
-                          <td className="px-5 py-4 text-slate-400 text-[11px]">
-                            {pair.metrics ? (
-                              <span>
-                                t: {formatMetric(pair.metrics.t_stat)} • corr:{' '}
-                                {formatMetric(pair.metrics.corr)} • β: {formatMetric(pair.metrics.beta_diff, 3)}{' '}
-                                • fund: {formatMetric(pair.metrics.funding_cost_pct_8h, 4)}%
-                              </span>
-                            ) : (
-                              <span className="text-slate-600">—</span>
-                            )}
+                          <td className="px-5 py-4 text-slate-300 text-[11px]">{formatMetric((pair.metrics as any)?.sim_insample?.profitFactor, 2)} / {formatMetric((pair.metrics as any)?.sim_oos?.profitFactor, 2)}</td>
+                          <td className="px-5 py-4 text-slate-300 text-[11px]">{formatMetric((pair.metrics as any)?.sim_insample?.trades, 0)}</td>
+                          <td className="px-5 py-4 text-slate-300 text-[11px]">{formatMetric((pair.metrics as any)?.sim_insample?.maxDrawdownPct, 2)}%</td>
+                          <td className="px-5 py-4 text-slate-300 text-[11px]">{formatMetric((pair.metrics as any)?.hurst, 3)}</td>
+                          <td className="px-5 py-4 text-slate-300 text-[11px]">{formatMetric((pair.metrics as any)?.live_pf_30d, 2)}</td>
+                          <td className="px-5 py-4 text-slate-300 text-[11px]">{formatMetric((pair.metrics as any)?.funding_cost_pct_8h, 4)}%</td>
+                          <td className="px-5 py-4 text-slate-300 text-[11px]">
+                            {Array.isArray((pair.metrics as any)?.sim_insample?.equityCurve) && (pair.metrics as any).sim_insample.equityCurve.length > 1 ? (
+                              <LineChart width={110} height={32} data={(pair.metrics as any).sim_insample.equityCurve.map((y: number, idx: number) => ({ x: idx, y }))}>
+                                <Line type="monotone" dataKey="y" stroke="#F59E0B" dot={false} strokeWidth={1.5} />
+                              </LineChart>
+                            ) : '—'}
                           </td>
                           <td className="px-5 py-4 text-right text-slate-400 text-[11px]">
                             {formatDateTime(pair.activated_at)}
@@ -1109,8 +1150,17 @@ export default function AdminDashboardPage() {
                   <div className="flex items-center gap-2 text-sm font-bold text-white">
                     <Repeat className="w-4 h-4 text-honey-400" />
                     {t('admin.autoRotation')}
+                    {isCooldownActive && (
+                      <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/40 text-[10px] uppercase">
+                        Cooldown
+                      </span>
+                    )}
                   </div>
                   <p className="text-[11px] text-slate-500 mt-1.5">{t('admin.autoRotationDesc')}</p>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Last: {lastRotationAt ? formatDateTime(lastRotationAt.toISOString()) : '—'} | Next:{' '}
+                    {nextRotationAt ? formatDateTime(nextRotationAt.toISOString()) : '—'}
+                  </p>
                 </div>
                 <button
                   onClick={handleToggleRotation}
@@ -1151,6 +1201,15 @@ export default function AdminDashboardPage() {
                     {t('admin.runNow')}
                   </button>
                 )}
+              </div>
+            </div>
+
+            <div className="bg-dark-900 border border-dark-800 p-4 rounded-2xl shadow-xl">
+              <div className="text-sm font-bold text-white">Engine Mode</div>
+              <div className="text-xs text-slate-400 mt-1.5 font-mono">
+                {engineConfig
+                  ? `Lev ${engineConfig.defaultLeverage}x (cap ${engineConfig.maxLeverage}x) • TP disabled: ${engineConfig.tpDisabled ? 'yes' : 'no'} • ATR SL x${engineConfig.slAtrMult} • 4h close only: ${engineConfig.entryOn4hCloseOnly ? 'yes' : 'no'}`
+                  : 'Unavailable'}
               </div>
             </div>
 
@@ -1275,22 +1334,33 @@ export default function AdminDashboardPage() {
                                     </div>
                                   ) : (
                                     <div>
-                                      <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-2">
-                                        {t('admin.topCandidates', { count: candidates.length })}
+                                      <div className="flex items-center justify-between mb-2">
+                                        <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">
+                                          {t('admin.topCandidates', { count: candidates.length })}
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => setValidOnlyCandidates((v) => !v)}
+                                          className={`px-2 py-1 rounded text-[10px] font-bold border ${validOnlyCandidates ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' : 'bg-dark-800 text-slate-400 border-dark-700'}`}
+                                        >
+                                          Valid only
+                                        </button>
                                       </div>
                                       <table className="w-full text-left font-mono text-[11px]">
                                         <thead className="text-[10px] uppercase tracking-wider text-slate-500 border-b border-dark-800">
                                           <tr>
                                             <th className="px-3 py-2">{t('admin.candColPair')}</th>
                                             <th className="px-3 py-2 text-right">{t('admin.candColScore')}</th>
-                                            <th className="px-3 py-2 text-right">{t('admin.candColTstat')}</th>
-                                            <th className="px-3 py-2 text-right">{t('admin.candColCorr')}</th>
-                                            <th className="px-3 py-2 text-right">{t('admin.candColBeta')}</th>
-                                            <th className="px-3 py-2 text-right">{t('admin.candColFunding')}</th>
+                                            <th className="px-3 py-2 text-right">PF IS</th>
+                                            <th className="px-3 py-2 text-right">PF OOS</th>
+                                            <th className="px-3 py-2 text-right">Trades</th>
+                                            <th className="px-3 py-2 text-right">DD</th>
+                                            <th className="px-3 py-2 text-right">Hurst</th>
+                                            <th className="px-3 py-2">Reject reasons</th>
                                           </tr>
                                         </thead>
                                         <tbody className="divide-y divide-dark-800/60">
-                                          {candidates.map((c: any, idx: number) => (
+                                          {candidates.filter((c: any) => (validOnlyCandidates ? !!c.valid : true)).map((c: any, idx: number) => (
                                             <tr key={`${run.id}-${c.pair_symbol || idx}`}>
                                               <td className="px-3 py-1.5 text-white font-bold">
                                                 {c.pair_symbol || `${c.long_coin}/${c.short_coin}`}
@@ -1299,16 +1369,22 @@ export default function AdminDashboardPage() {
                                                 {formatScore(c.score)}
                                               </td>
                                               <td className="px-3 py-1.5 text-right text-slate-300">
-                                                {formatMetric(c.metrics?.t_stat)}
+                                                {formatMetric(c.metrics?.sim_insample?.profitFactor)}
                                               </td>
                                               <td className="px-3 py-1.5 text-right text-slate-300">
-                                                {formatMetric(c.metrics?.corr)}
+                                                {formatMetric(c.metrics?.sim_oos?.profitFactor)}
                                               </td>
                                               <td className="px-3 py-1.5 text-right text-slate-300">
-                                                {formatMetric(c.metrics?.beta_diff, 3)}
+                                                {formatMetric(c.metrics?.sim_insample?.trades, 0)}
                                               </td>
                                               <td className="px-3 py-1.5 text-right text-slate-300">
-                                                {formatMetric(c.metrics?.funding_cost_pct_8h, 4)}%
+                                                {formatMetric(c.metrics?.sim_insample?.maxDrawdownPct, 2)}%
+                                              </td>
+                                              <td className="px-3 py-1.5 text-right text-slate-300">
+                                                {formatMetric(c.metrics?.hurst, 3)}
+                                              </td>
+                                              <td className="px-3 py-1.5 text-slate-300">
+                                                {Array.isArray(c.reject_reasons) && c.reject_reasons.length > 0 ? c.reject_reasons.join(', ') : '—'}
                                               </td>
                                             </tr>
                                           ))}

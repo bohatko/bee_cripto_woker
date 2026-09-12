@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS public.trading_settings (
     user_id UUID NOT NULL REFERENCES public.users_profile(id) ON DELETE CASCADE UNIQUE,
     exchange_account_id UUID REFERENCES public.exchange_accounts(id) ON DELETE SET NULL,
     is_bot_active BOOLEAN DEFAULT FALSE NOT NULL,
-    effective_leverage NUMERIC(4, 1) DEFAULT 7.0 NOT NULL, -- 5.0 - 10.0x
+    effective_leverage NUMERIC(4, 1) DEFAULT 3.0 NOT NULL, -- capped by worker MAX_LEVERAGE
     max_allocated_margin_usd NUMERIC(18, 4), -- NULL = использовать 100% свободного депозита
     active_pairs TEXT[] DEFAULT ARRAY['ZEC/AVAX', 'ENA/SUI', 'SOL/ADA', 'BNB/ETH']::TEXT[] NOT NULL,
     take_profit_pct NUMERIC(5, 2) DEFAULT 5.00 NOT NULL,
@@ -265,6 +265,7 @@ WHERE NOT EXISTS (SELECT 1 FROM public.strategy_pairs);
 CREATE TABLE IF NOT EXISTS public.engine_settings (
     id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
     auto_rotation_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    last_rotation_applied_at TIMESTAMPTZ,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -349,7 +350,7 @@ BEGIN
     VALUES (
         NEW.id, 
         FALSE, 
-        7.0
+        3.0
     )
     ON CONFLICT (user_id) DO NOTHING;
 

@@ -150,7 +150,49 @@ export interface PairSelectionRun {
 export interface EngineSettings {
   id: number;
   auto_rotation_enabled: boolean;
+  last_rotation_applied_at: string | null;
   updated_at: string;
+}
+
+export interface SimResultMetrics {
+  netPnlPct: number;
+  trades: number;
+  winRate: number;
+  profitFactor: number;
+  maxDrawdownPct: number;
+  slShare: number;
+  avgHoldBars: number;
+  equityCurve: number[];
+}
+
+export interface CandidateMetrics {
+  t_stat: number;
+  drift_w1: number;
+  drift_w2: number;
+  drift_w3: number;
+  corr: number;
+  beta_long: number;
+  beta_short: number;
+  beta_diff: number;
+  funding_long: number;
+  funding_short: number;
+  funding_cost_pct_8h: number;
+  funding_penalty: number;
+  vol_long_usd_24h: number;
+  vol_short_usd_24h: number;
+  spread_long_pct: number;
+  spread_short_pct: number;
+  funding_mean_long_8h: number;
+  funding_mean_short_8h: number;
+  in_trend: boolean;
+  hurst: number;
+  autocorr_1_3: number;
+  samples: number;
+  sim_insample: SimResultMetrics;
+  sim_oos: SimResultMetrics;
+  live_pf_30d?: number;
+  live_trades_30d?: number;
+  basket_corr_max?: number;
 }
 
 /** Normalized fill result from exchange execution (market or maker-hedge). */

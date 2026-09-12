@@ -164,6 +164,20 @@ export function startInternalApiServer(): http.Server | null {
       return;
     }
 
+    if (method === 'GET' && url.pathname === '/internal/config') {
+      sendJson(res, 200, {
+        defaultLeverage: CONFIG.defaultLeverage,
+        maxLeverage: CONFIG.maxLeverage,
+        tpDisabled: CONFIG.tpDisabled,
+        slAtrMult: CONFIG.slAtrMult,
+        slMaxMarginPct: CONFIG.slMaxMarginPct,
+        entryOn4hCloseOnly: CONFIG.entryOn4hCloseOnly,
+        entryExecutionMode: CONFIG.entryExecutionMode,
+        exitExecutionMode: CONFIG.exitExecutionMode,
+      });
+      return;
+    }
+
     if (!authorize(req)) {
       sendJson(res, 401, { error: 'Unauthorized' });
       return;

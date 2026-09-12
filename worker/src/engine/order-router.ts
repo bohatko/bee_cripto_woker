@@ -378,7 +378,8 @@ export class OrderRouter {
         return;
       }
 
-      const leverage = Number(settings.effective_leverage || CONFIG.defaultLeverage);
+      const requestedLeverage = Number(settings.effective_leverage || CONFIG.defaultLeverage);
+      const leverage = Math.max(1, Math.min(requestedLeverage, CONFIG.maxLeverage));
       const totalVolume = slotMargin * leverage;
       const legVolume = totalVolume / 2;
 

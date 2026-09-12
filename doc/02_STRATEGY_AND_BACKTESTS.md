@@ -234,7 +234,7 @@ Top-10 по Daily Sharpe: плечо **2–3x**, SL **5–10%** маржи, **б
 
 ## 6. Рекомендуемая конфигурация для paper-trading / дальнейшей валидации
 
-Параметры задаются через env (полный справочник: [`doc/04_WORKER_ENGINE_SPECIFICATION.md`](04_WORKER_ENGINE_SPECIFICATION.md), раздел 7). **Значения по умолчанию в коде сохраняют legacy-поведение (7x, TP +5%, SL $-1,5%$ margin)** — для paper-trading их нужно **переопределить явно**:
+Параметры задаются через env (полный справочник: [`doc/04_WORKER_ENGINE_SPECIFICATION.md`](04_WORKER_ENGINE_SPECIFICATION.md), раздел 7). **Значения по умолчанию в коде переведены на Scenario C** (3x, `TP_DISABLED=true`, `SL_ATR_MULT=1.5`, `ENTRY_ON_4H_CLOSE_ONLY=true`):
 
 | Переменная | Рекомендуемое значение | Назначение |
 | :--- | :--- | :--- |
