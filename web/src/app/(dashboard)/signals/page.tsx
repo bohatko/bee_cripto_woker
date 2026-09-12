@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
@@ -11,7 +11,7 @@ import { SignalEventsTable } from '@/components/signals/SignalEventsTable';
 import { SignalPositionsTable } from '@/components/signals/SignalPositionsTable';
 import { SignalReadinessCard } from '@/components/dashboard/SignalReadinessCard';
 
-export default function SignalsPage() {
+function SignalsContent() {
   const { t } = useLanguage();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -205,5 +205,19 @@ export default function SignalsPage() {
       {/* Global Signal Events Log */}
       <SignalEventsTable events={events} userPositions={positions} />
     </div>
+  );
+}
+
+export default function SignalsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="p-4 sm:p-8 max-w-5xl flex items-center justify-center font-mono text-sm text-slate-400">
+          Loading...
+        </div>
+      }
+    >
+      <SignalsContent />
+    </Suspense>
   );
 }
