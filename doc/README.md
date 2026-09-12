@@ -11,6 +11,7 @@ C:\Projects\PET-projects\bee_cripto_woker\doc\
 ├── 04_WORKER_ENGINE_SPECIFICATION.md      # Спецификация торгового ядра на Railway, CCXT, шифрование AES-256
 ├── 05_FRONTEND_AND_UI_SPECIFICATION.md    # Спецификация UI/UX Next.js 15, экраны, дашборд, модалки
 ├── 06_IMPLEMENTATION_ROADMAP_AND_AGENTS_GUIDE.md # Пошаговый план разработки из 6 этапов для агентов
+├── 07_SIGNALS_DIP_BUY_XRP.md              # Спецификация автономного сигнального движка Dip-Buy XRP 24h
 └── README.md                              # Данный индексный файл
 ```
 

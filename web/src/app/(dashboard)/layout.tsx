@@ -13,6 +13,7 @@ import {
   User,
   ShieldAlert,
   UserCog,
+  Radar,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
@@ -102,6 +103,38 @@ export default function DashboardLayout({
           );
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'signal_positions',
+        },
+        (payload: any) => {
+          const newPos = payload.new;
+          if (!newPos || newPos.status !== 'open') return;
+
+          const isUserPos = newPos.user_id === user.id;
+          const isMaster = Boolean(newPos.is_master);
+
+          if (!isUserPos && !isMaster) return;
+          if (notifiedPosIds.has(newPos.id)) return;
+          notifiedPosIds.add(newPos.id);
+
+          playTradeOpenSound();
+
+          const sym = newPos.symbol || 'XRP';
+          const notional = Number(newPos.notional_usd || 0).toFixed(0);
+
+          toast.success(
+            t('signals.toastTradeOpened', { symbol: sym, notional }),
+            {
+              description: isMaster ? 'Benchmark Master Strategy' : 'Live Exchange Position',
+              duration: 8000,
+            }
+          );
+        }
+      )
       .subscribe();
 
     return () => {
@@ -118,6 +151,7 @@ export default function DashboardLayout({
 
   const navItems = [
     { name: t('nav.dashboard'), href: '/dashboard', icon: LayoutDashboard },
+    { name: t('nav.signals'), href: '/signals', icon: Radar },
     { name: t('nav.profile'), href: '/settings/profile', icon: UserCog },
     { name: t('nav.exchangeKeys'), href: '/settings/exchange', icon: KeyRound },
     { name: t('nav.botTrades'), href: '/history/bot', icon: TrendingUp },

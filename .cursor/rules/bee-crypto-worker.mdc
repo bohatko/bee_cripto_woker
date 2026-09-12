@@ -13,6 +13,7 @@ Always consult the documentation in `doc/` before modifying architectural, datab
 - `doc/04_WORKER_ENGINE_SPECIFICATION.md` — Railway daemon, CCXT integration, encryption.
 - `doc/05_FRONTEND_AND_UI_SPECIFICATION.md` — UI/UX Next.js specifications.
 - `doc/06_IMPLEMENTATION_ROADMAP_AND_AGENTS_GUIDE.md` — Implementation roadmap.
+- `doc/07_SIGNALS_DIP_BUY_XRP.md` — Autonomous Dip-Buy XRP Signals engine specification.
 - `AGENTS.md` — Full AI Agent Handbook.
 
 ## Language and UI Rules

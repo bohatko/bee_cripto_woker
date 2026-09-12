@@ -182,6 +182,14 @@ export function startInternalApiServer(): http.Server | null {
         requireAutocorr: CONFIG.requireAutocorr,
         requireInTrend: CONFIG.requireInTrend,
         simNearMissTopN: CONFIG.simNearMissTopN,
+        dipBuyEnabled: CONFIG.dipBuyEnabled,
+        dipSymbol: CONFIG.dipSymbol,
+        dipDropPct: CONFIG.dipDropPct,
+        dipWindowMinutes: CONFIG.dipWindowMinutes,
+        dipLeverage: CONFIG.dipLeverage,
+        dipTpPct: CONFIG.dipTpPct,
+        dipSlPct: CONFIG.dipSlPct,
+        dipReferenceMarginUsd: CONFIG.dipReferenceMarginUsd,
       });
       return;
     }

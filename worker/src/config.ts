@@ -93,6 +93,20 @@ export const CONFIG = {
   internalApiEnabled: parseBool(process.env.INTERNAL_API_ENABLED, true),
   internalApiPort: Number(process.env.PORT || process.env.INTERNAL_API_PORT || 8080),
   internalApiSecret: process.env.INTERNAL_API_SECRET || '',
+
+  // Dip-Buy XRP Signals Engine
+  dipBuyEnabled: parseBool(process.env.DIP_BUY_ENABLED, true),
+  dipSymbol: (process.env.DIP_SYMBOL || 'XRP').toUpperCase(),
+  dipDropPct: Number(process.env.DIP_DROP_PCT || 15),
+  dipWindowMinutes: Number(process.env.DIP_WINDOW_MINUTES || 1440),
+  dipLeverage: Number(process.env.DIP_LEVERAGE || 3.0),
+  dipTpPct: Number(process.env.DIP_TP_PCT || 4.0),
+  dipSlPct: Number(process.env.DIP_SL_PCT || 30.0),
+  dipPaperSlippagePct: Number(process.env.DIP_PAPER_SLIPPAGE_PCT || 0.05),
+  dipPaperFeePct: Number(process.env.DIP_PAPER_FEE_PCT || 0.10),
+  dipReferenceMarginUsd: Number(process.env.DIP_REFERENCE_MARGIN_USD || 20000),
+  dipMinMarginUsd: Number(process.env.DIP_MIN_MARGIN_USD || 20),
+  dipGuardIntervalMs: Number(process.env.DIP_GUARD_INTERVAL_MS || 15000),
 };
 
 if (!CONFIG.supabaseKey) {

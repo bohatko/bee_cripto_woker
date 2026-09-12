@@ -323,3 +323,15 @@ Endpoints (auth required except `/health`):
 - `GET /health`
 - `POST /internal/exchange/validate` — live key check + futures balance
 - `POST /internal/exchange/fetch-balance` — balance sync for encrypted credentials
+
+---
+
+## 9. Автономный Сигнальный Движок: Dip-Buy XRP 24h
+
+Воркер содержит параллельный независимый торговый движок `src/signals/`:
+- `CandleBuffer`: буфер 1-минутных свечей (1440m окно), расчет 24h максимума.
+- `DipBuyScanner`: 1m тикер, расчет метрики Readiness (0–100%), сохранение в `signal_strategies.live_state`, генерация `signal_events`.
+- `ReadinessAlerter`: пороги приближения (80%, 90%) в Telegram с гистерезисом.
+- `DipBuyRouter`: создание Master Paper benchmark позиции и fan-out исполнение для активных пользователей (3x leverage, isolated, native reduce-only TP +4% и SL -30%).
+- `DipBuyGuard`: 15-секундный цикл сверки ордеров и закрытия позиций по TP/SL/Panic.
+- Документация: `doc/07_SIGNALS_DIP_BUY_XRP.md`.

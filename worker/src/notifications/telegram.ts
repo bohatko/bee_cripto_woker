@@ -294,6 +294,178 @@ class TelegramNotifier {
       await this.sendToUser(data.userId, message);
     }
   }
+
+  // ==============================================================================
+  // DIP-BUY XRP SIGNALS NOTIFICATIONS
+  // ==============================================================================
+
+  public async notifySignalReadiness(
+    threshold: number,
+    liveState: { price: number; rolling_max: number; drop_pct: number; readiness_pct: number },
+    targetUserIds?: string[]
+  ): Promise<void> {
+    const message = [
+      `👀 <b>СИГНАЛ БЛИЗОК: XRP DIP-BUY (${threshold}%)</b>`,
+      `━━━━━━━━━━━━━━━━━━`,
+      `⚡ <b>Readiness:</b> <code>${liveState.readiness_pct.toFixed(1)}%</code> (порог ${threshold}%)`,
+      `📉 <b>Падение за 24h:</b> <code>-${liveState.drop_pct.toFixed(2)}%</code> (цель для входа: -15.0%)`,
+      `💰 <b>Текущая цена:</b> <code>$${liveState.price.toFixed(4)}</code>`,
+      `🔝 <b>24h максимум:</b> <code>$${liveState.rolling_max.toFixed(4)}</code>`,
+      `━━━━━━━━━━━━━━━━━━`,
+      `ℹ️ <i>При достижении -15% сработает автоматический вход LONG 3x для активных аккаунтов.</i>`,
+    ].join('\n');
+
+    await this.sendToAdmins(message);
+
+    if (targetUserIds && targetUserIds.length > 0) {
+      for (const uid of targetUserIds) {
+        await this.sendToUser(uid, message);
+      }
+    }
+  }
+
+  public async notifySignalFired(event: {
+    symbol: string;
+    signal_close: number;
+    rolling_max: number;
+    drop_pct: number;
+    reference_entry_price: number;
+  }, targetUserIds?: string[]): Promise<void> {
+    const message = [
+      `🚨 <b>СИГНАЛ СРАБОТАЛ: ${escapeHtml(event.symbol)} DIP-BUY</b>`,
+      `━━━━━━━━━━━━━━━━━━`,
+      `🎯 <b>Условие:</b> Падение ≥ 15% за 24h выполнено!`,
+      `📉 <b>Зафиксированное падение:</b> <code>-${event.drop_pct.toFixed(2)}%</code>`,
+      `💰 <b>Цена закрытия свечи:</b> <code>$${event.signal_close.toFixed(4)}</code>`,
+      `🔝 <b>24h High:</b> <code>$${event.rolling_max.toFixed(4)}</code>`,
+      `🚀 <b>Ориентир входа:</b> <code>~$${event.reference_entry_price.toFixed(4)}</code>`,
+      `🎯 <b>Цели:</b> TP <code>+4.0%</code> | SL <code>-30.0%</code> | Плечо <code>3.0x</code>`,
+      `━━━━━━━━━━━━━━━━━━`,
+      `⚡ <i>Отправка ордеров на исполнение...</i>`,
+    ].join('\n');
+
+    await this.sendToAdmins(message);
+
+    if (targetUserIds && targetUserIds.length > 0) {
+      for (const uid of targetUserIds) {
+        await this.sendToUser(uid, message);
+      }
+    }
+  }
+
+  public async notifySignalOpened(data: {
+    isMaster?: boolean;
+    userId?: string | null;
+    userEmail?: string;
+    exchange?: string;
+    accountName?: string;
+    symbol: string;
+    entryPrice: number;
+    qty: number;
+    allocatedMargin: number;
+    notional: number;
+    leverage: number;
+    tpPrice?: number | null;
+    slPrice?: number | null;
+  }): Promise<void> {
+    const isMaster = Boolean(data.isMaster);
+    const sourceBadge = isMaster
+      ? '👑 <b>Master Paper Portfolio (Benchmark)</b>'
+      : `⚡ <b>LIVE: ${escapeHtml((data.exchange || 'EXCHANGE').toUpperCase())}</b> (${escapeHtml(data.accountName || data.userEmail || 'User')})`;
+
+    const message = [
+      `🐝 <b>DIP-BUY ПОЗИЦИЯ ОТКРЫТА</b>`,
+      `━━━━━━━━━━━━━━━━━━`,
+      `${sourceBadge}`,
+      `📊 <b>Монета:</b> <code>${escapeHtml(data.symbol)}/USDT</code> (LONG)`,
+      `💰 <b>Цена входа:</b> <code>$${data.entryPrice.toFixed(4)}</code>`,
+      `📦 <b>Количество:</b> <code>${data.qty} ${escapeHtml(data.symbol)}</code>`,
+      `💵 <b>Маржа:</b> <code>$${data.allocatedMargin.toFixed(2)} USDT</code> (Плечо: <code>${data.leverage.toFixed(1)}x</code>)`,
+      `📈 <b>Объем позиции:</b> <code>$${data.notional.toFixed(2)} USDT</code>`,
+      data.tpPrice ? `🎯 <b>Take Profit:</b> <code>$${data.tpPrice.toFixed(4)} (+4.0%)</code>` : '',
+      data.slPrice ? `🛡️ <b>Stop Loss:</b> <code>$${data.slPrice.toFixed(4)} (-30.0%)</code>` : '',
+      `━━━━━━━━━━━━━━━━━━`,
+      `⏱ <i>Время входа: ${new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} UTC</i>`,
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    if (isMaster) {
+      await this.sendToAdmins(message);
+      return;
+    }
+    if (data.userId) {
+      await this.sendToUser(data.userId, message);
+    }
+  }
+
+  public async notifySignalClosed(data: {
+    isMaster?: boolean;
+    userId?: string | null;
+    userEmail?: string;
+    exchange?: string;
+    accountName?: string;
+    symbol: string;
+    exitReason: string;
+    realizedPnl: number;
+    pnlPct: number;
+    allocatedMargin: number;
+    entryPrice: number;
+    exitPrice: number;
+    openedAt?: string;
+    closedAt?: string;
+  }): Promise<void> {
+    const isMaster = Boolean(data.isMaster);
+    const sourceBadge = isMaster
+      ? '👑 <b>Master Paper Portfolio (Benchmark)</b>'
+      : `⚡ <b>LIVE: ${escapeHtml((data.exchange || 'EXCHANGE').toUpperCase())}</b> (${escapeHtml(data.accountName || data.userEmail || 'User')})`;
+
+    const isWin = data.realizedPnl >= 0;
+    const pnlSign = isWin ? '+' : '';
+    const pnlEmoji = isWin ? '🟢' : '🔴';
+
+    let reasonBadge = 'Закрытие позиции';
+    const reasonLower = (data.exitReason || '').toLowerCase();
+    if (reasonLower === 'tp') {
+      reasonBadge = '🎯 <b>TAKE PROFIT (+4.0%)</b>';
+    } else if (reasonLower === 'sl') {
+      reasonBadge = '🛡️ <b>STOP LOSS (-30.0%)</b>';
+    } else if (reasonLower === 'panic' || reasonLower === 'panic_close') {
+      reasonBadge = '🚨 <b>PANIC CLOSE (Экстренно)</b>';
+    } else if (reasonLower === 'admin_close') {
+      reasonBadge = '⚙️ <b>ADMIN CLOSE</b>';
+    } else if (reasonLower === 'external_flat') {
+      reasonBadge = '🔄 <b>EXTERNAL FLAT (Закрыто на бирже)</b>';
+    }
+
+    const durationStr = formatDuration(data.openedAt, data.closedAt);
+
+    const message = [
+      `🏁 <b>DIP-BUY ПОЗИЦИЯ ЗАКРЫТА</b>`,
+      `━━━━━━━━━━━━━━━━━━`,
+      `${sourceBadge}`,
+      `📊 <b>Монета:</b> <code>${escapeHtml(data.symbol)}/USDT</code>`,
+      `📌 <b>Причина:</b> ${reasonBadge}`,
+      ``,
+      `${pnlEmoji} <b>Итоговый PnL:</b> <b>${pnlSign}$${data.realizedPnl.toFixed(2)} USDT</b> (${pnlSign}${data.pnlPct.toFixed(2)}%)`,
+      `💰 <b>Задействованная маржа:</b> <code>$${data.allocatedMargin.toFixed(2)} USDT</code>`,
+      `🟢 <b>Вход:</b> <code>$${data.entryPrice.toFixed(4)}</code> ➔ <b>Выход:</b> <code>$${data.exitPrice.toFixed(4)}</code>`,
+      durationStr ? `⏱ <b>Длительность:</b> <code>${durationStr}</code>` : '',
+      `━━━━━━━━━━━━━━━━━━`,
+      `⏱ <i>Время закрытия: ${new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} UTC</i>`,
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    if (isMaster) {
+      await this.sendToAdmins(message);
+      return;
+    }
+    if (data.userId) {
+      await this.sendToUser(data.userId, message);
+    }
+  }
 }
 
 export const telegramNotifier = new TelegramNotifier();
+

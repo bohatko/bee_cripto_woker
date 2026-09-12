@@ -32,6 +32,7 @@ src/app/
 ├── (dashboard)/
 │   ├── layout.tsx              # Защищенный лейаут кабинета (Sidebar + Header + Realtime WS)
 │   ├── dashboard/page.tsx      # Главный экран: Баланс, Health, Активные позиции
+│   ├── signals/page.tsx        # Раздел сигналов: XRP Dip-Buy 24h (настройки, статистика, история)
 │   ├── settings/
 │   │   ├── exchange/page.tsx   # Подключение API-ключей (Binance, OKX, Bybit)
 │   │   └── bot/page.tsx        # Настройка плеча и выбор пар корзины

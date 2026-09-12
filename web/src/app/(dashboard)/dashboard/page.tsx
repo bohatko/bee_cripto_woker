@@ -23,6 +23,7 @@ import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { PanicCloseModal } from '@/components/modals/PanicCloseModal';
 import { TradeReadinessMonitor } from '@/components/dashboard/TradeReadinessMonitor';
+import { SignalReadinessCard } from '@/components/dashboard/SignalReadinessCard';
 import { toast } from '@/components/ui/sonner';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { isUnfilledSimulation } from '@/lib/positions';
@@ -30,6 +31,7 @@ import { playWarningSound } from '@/lib/sound';
 
 export default function DashboardPage() {
   const { t, dateLocale, formatDateTime } = useLanguage();
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const [positions, setPositions] = useState<any[]>([]);
   const [settings, setSettings] = useState<any>(null);
   const [accounts, setAccounts] = useState<any[]>([]);
@@ -51,6 +53,7 @@ export default function DashboardPage() {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return;
+    setCurrentUser(user);
 
     // 1. Fetch user trading settings
     const { data: sett } = await supabase
@@ -808,6 +811,8 @@ export default function DashboardPage() {
       )}
 
       {/* Trade Readiness & Signal Proximity Monitor (100% Scale) */}
+      <SignalReadinessCard userId={currentUser?.id} />
+
       <TradeReadinessMonitor
         marketData={marketData}
         activeBasket={activeBasket}

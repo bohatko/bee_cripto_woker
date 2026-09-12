@@ -53,6 +53,7 @@ bee_cripto_woker/
     │   ├── security/          # Шифрование AES-256-GCM
 │   ├── exchanges/         # Фабрика CCXT, PairRegistry, маппинг тикеров
 │   ├── engine/            # Сканер рынка (EMA10), роутер ордеров и риск-гард
+│   ├── signals/           # Модуль сигналов Dip-Buy XRP 24h (буфер, сканер, роутер, гард, алерты)
 │   ├── jobs/              # Health Check, Billing Cron, PairSelection (momentum)
 │   └── types/             # TypeScript-интерфейсы
     └── tsconfig.json
@@ -100,6 +101,13 @@ bee_cripto_woker/
 > **Аудит 2026-09-04:** legacy TP/SL (7x, TP +5%, SL $-1,5%$ margin) показали **отрицательное матожидание и ликвидацию**. Текущий дефолт движка переведен на Scenario C: 3x, `TP_DISABLED=true`, `SL_ATR_MULT=1.5`, вход только на закрытии 4h; см. [`doc/02_STRATEGY_AND_BACKTESTS.md`](doc/02_STRATEGY_AND_BACKTESTS.md) разделы 4–6 и [`research/backtest/RESULTS.md`](research/backtest/RESULTS.md).
 
 > **Аудит 2026-09-07:** динамический momentum-отбор walk-forward **хуже** статичной корзины (−806% vs −211% margin PnL) — гейт авторотации **FAIL**; держать `auto_rotation_enabled=false` до улучшения скринера.
+
+5. **Модуль сигналов Dip-Buy XRP 24h (`doc/07_SIGNALS_DIP_BUY_XRP.md`)**:
+   * Независимый торговый движок: пара `XRP/USDT`, 3.0x Isolated, вход при падении $\ge 15.0\%$ за 1440 1m закрытых баров от 24h максимума.
+   * Выходы: биржевые reduce-only ордера Take-Profit (+4.0%) и Stop-Loss (-30.0%).
+   * Master Paper Benchmark позиция открывается на каждый подтвержденный сигнал ($20k reference margin).
+   * Fan-out исполнение сделок пользователям с включенным тумблером в `/signals`.
+   * Live readiness статус и приближение в Telegram (пороги 80%, 90%).
 
 ---
 

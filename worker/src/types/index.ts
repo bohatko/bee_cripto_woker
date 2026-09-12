@@ -212,3 +212,104 @@ export interface PairFillResult {
   /** Sum of both leg fees for this execution (entry or exit). */
   feesUsd: number;
 }
+
+// ==============================================================================
+// DIP-BUY SIGNALS ENGINE TYPES
+// ==============================================================================
+
+export type SignalPositionStatus = 'open' | 'closed' | 'error';
+export type SignalExitReason = 'tp' | 'sl' | 'panic_close' | 'admin_close' | 'external_flat';
+export type SignalStrategyState = 'flat' | 'in_position';
+
+export interface SignalStrategyConfig {
+  drop_pct: number;
+  window_minutes: number;
+  tp_pct: number;
+  sl_pct: number;
+  reference_margin_usd: number;
+}
+
+export interface SignalStrategyLiveState {
+  price: number;
+  rolling_max: number;
+  drop_pct: number;
+  readiness_pct: number;
+  state: SignalStrategyState;
+  updated_at: string | null;
+  alerted_thresholds?: number[];
+}
+
+export interface SignalStrategy {
+  id: string;
+  name: string;
+  symbol: string;
+  side: 'long';
+  leverage: number;
+  config: SignalStrategyConfig;
+  is_enabled: boolean;
+  live_state: SignalStrategyLiveState;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserSignalSettings {
+  id: string;
+  user_id: string;
+  strategy_id: string;
+  is_enabled: boolean;
+  balance_pct: number;
+  alert_readiness_enabled: boolean;
+  alert_thresholds: number[];
+  panic_close_requested_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SignalEvent {
+  id: string;
+  strategy_id: string;
+  symbol: string;
+  signal_bar_ts: string;
+  rolling_max: number;
+  signal_close: number;
+  drop_pct: number;
+  reference_entry_price: number;
+  status: 'fired' | 'skipped_in_position';
+  created_at: string;
+}
+
+export interface SignalPosition {
+  id: string;
+  signal_event_id: string | null;
+  strategy_id: string;
+  user_id: string | null;
+  exchange_account_id: string | null;
+  is_master: boolean;
+  symbol: string;
+  side: 'long';
+  status: SignalPositionStatus;
+  leverage: number;
+  allocated_margin_usd: number;
+  notional_usd: number;
+  qty: number;
+  entry_price: number;
+  entry_order_id: string | null;
+  tp_price: number | null;
+  sl_price: number | null;
+  tp_order_id: string | null;
+  sl_order_id: string | null;
+  exit_price: number | null;
+  exit_order_id: string | null;
+  exit_reason: SignalExitReason | null;
+  entry_fees_usd: number;
+  exit_fees_usd: number;
+  funding_fees_usd: number;
+  gross_pnl_usd: number | null;
+  realized_pnl_usd: number | null;
+  unrealized_pnl_usd: number;
+  pnl_pct: number | null;
+  last_error: string | null;
+  opened_at: string;
+  closed_at: string | null;
+}
+
