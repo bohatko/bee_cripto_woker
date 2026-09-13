@@ -6,7 +6,7 @@ import { useLanguage } from '@/lib/i18n/LanguageContext';
 import type { Locale } from '@/lib/i18n/types';
 
 interface LanguageSwitcherProps {
-  variant?: 'sidebar' | 'compact';
+  variant?: 'sidebar' | 'compact' | 'icon';
   className?: string;
 }
 
@@ -20,6 +20,25 @@ export function LanguageSwitcher({
     { code: 'en', label: 'EN' },
     { code: 'ru', label: 'RU' },
   ];
+
+  const toggleLocale = () => {
+    setLocale(locale === 'en' ? 'ru' : 'en');
+  };
+
+  if (variant === 'icon') {
+    const nextLocale = locale === 'en' ? 'RU' : 'EN';
+    return (
+      <button
+        type="button"
+        onClick={toggleLocale}
+        title={`${t('common.language')}: ${nextLocale}`}
+        aria-label={`${t('common.language')}: ${nextLocale}`}
+        className={`inline-flex items-center justify-center w-8 h-8 rounded-xl text-slate-400 hover:text-honey-400 hover:bg-dark-850 transition-colors ${className}`}
+      >
+        <Languages className="w-4 h-4" />
+      </button>
+    );
+  }
 
   if (variant === 'compact') {
     return (

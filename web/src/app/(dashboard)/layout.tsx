@@ -273,16 +273,16 @@ export default function DashboardLayout({
           )}
         </nav>
 
-        <div className="border-t border-dark-800">
-          <LanguageSwitcher variant="sidebar" />
-          <div className="px-4 pb-4">
+        <div className="border-t border-dark-800 px-4 py-3">
+          <div className="flex items-center gap-1">
             <button
               onClick={() => setIsLogoutModalOpen(true)}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-rose-400 hover:bg-dark-850 transition-colors"
+              className="flex-1 flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-rose-400 hover:bg-dark-850 transition-colors"
             >
               <LogOut className="w-4 h-4" />
               {t('nav.signOut')}
             </button>
+            <LanguageSwitcher variant="icon" />
           </div>
         </div>
       </aside>
