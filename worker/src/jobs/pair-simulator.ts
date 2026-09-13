@@ -9,6 +9,11 @@ export interface SimParams {
   slMaxMarginPct: number;
   tpDisabled: boolean;
   takeProfitPct: number;
+  stopLossPct?: number;
+  trailingActive?: boolean;
+  trailingActivationPct?: number;
+  trailingDeltaPct?: number;
+  minHoldBarsBeforeTrendExit?: number;
   takerFeePct: number;
   simSlippagePct: number;
   fundingLong8h: number;
@@ -48,11 +53,18 @@ export function simulatePairEngine(ratioBars: RatioBar[], params: SimParams): Si
   let inPosition = false;
   let entryRatio = 0;
   let entryIndex = -1;
+  let peakGrossPnlPct = 0;
   let fundingCarry = 0;
   let blockEntryUntil = -1;
   let equity = 0;
   const equityRaw: number[] = [0];
   const trades: TradeStats[] = [];
+
+  const trailingActive = params.trailingActive ?? true;
+  const trailingActivationPct = params.trailingActivationPct ?? 2.0;
+  const trailingDeltaPct = params.trailingDeltaPct ?? 0.8;
+  const defaultSlPct = params.stopLossPct ?? 2.5;
+  const minHoldBarsBeforeTrendExit = params.minHoldBarsBeforeTrendExit ?? 3;
 
   for (let i = 15; i < ratioBars.length; i++) {
     const close = closes[i];
@@ -65,33 +77,68 @@ export function simulatePairEngine(ratioBars: RatioBar[], params: SimParams): Si
       }
 
       const grossPnlPct = params.leverage * ((close / entryRatio) - 1) * 100;
+      const highPnlPct = params.leverage * ((ratioBars[i].high / entryRatio) - 1) * 100;
+      const lowPnlPct = params.leverage * ((ratioBars[i].low / entryRatio) - 1) * 100;
+
+      if (highPnlPct > peakGrossPnlPct) {
+        peakGrossPnlPct = highPnlPct;
+      }
+
       const atrPct = close > 0 ? (atrSeries[i] / close) * 100 : 0;
       const atrSlMarginPct = params.slAtrMult > 0 ? params.slAtrMult * atrPct * params.leverage : 0;
-      const slThresholdPct = Math.min(params.slMaxMarginPct, Math.max(0, atrSlMarginPct));
+      let slThresholdPct = Math.max(defaultSlPct, atrSlMarginPct);
+      slThresholdPct = Math.min(params.slMaxMarginPct, Math.max(0, slThresholdPct));
 
-      let reason: 'sl' | 'tp' | 'trend' | null = null;
-      if (slThresholdPct > 0 && grossPnlPct <= -slThresholdPct) reason = 'sl';
-      else if (!params.tpDisabled && grossPnlPct >= params.takeProfitPct) reason = 'tp';
-      else if (close < emaNow) reason = 'trend';
+      const holdBars = Math.max(1, i - entryIndex);
+
+      let reason: 'sl' | 'tp' | 'trailing' | 'trend' | null = null;
+      let exitPnlPct = grossPnlPct;
+
+      if (slThresholdPct > 0 && grossPnlPct <= -slThresholdPct) {
+        reason = 'sl';
+        exitPnlPct = grossPnlPct;
+      } else if (!params.tpDisabled && grossPnlPct >= params.takeProfitPct) {
+        reason = 'tp';
+        exitPnlPct = grossPnlPct;
+      } else if (
+        !params.tpDisabled &&
+        trailingActive &&
+        peakGrossPnlPct >= trailingActivationPct &&
+        grossPnlPct <= (peakGrossPnlPct - trailingDeltaPct)
+      ) {
+        reason = 'trailing';
+        exitPnlPct = grossPnlPct;
+      } else if (close < emaNow && holdBars >= minHoldBarsBeforeTrendExit) {
+        reason = 'trend';
+        exitPnlPct = grossPnlPct;
+      }
 
       if (reason) {
-        const netPnlPct = grossPnlPct - roundTripFeePct - roundTripSlippagePct - fundingCarry;
+        const netPnlPct = exitPnlPct - roundTripFeePct - roundTripSlippagePct - fundingCarry;
         equity += netPnlPct;
         trades.push({
           netPnlPct,
-          bars: Math.max(1, i - entryIndex),
+          bars: holdBars,
           sl: reason === 'sl',
         });
         inPosition = false;
         blockEntryUntil = i + 1;
         fundingCarry = 0;
+        peakGrossPnlPct = 0;
       }
     }
 
-    if (!inPosition && i >= blockEntryUntil && close > emaNow) {
+    // Clean breakout entry: ratio crosses above EMA10, or is comfortably above EMA10
+    const prevClose = i > 0 ? closes[i - 1] : close;
+    const prevEma = i > 0 ? emaSeries[i - 1] : emaNow;
+    const isCrossover = prevClose <= prevEma && close > emaNow;
+    const isConfirmedTrend = close > emaNow * 1.002;
+
+    if (!inPosition && i >= blockEntryUntil && (isCrossover || isConfirmedTrend)) {
       inPosition = true;
       entryRatio = close;
       entryIndex = i;
+      peakGrossPnlPct = 0;
       fundingCarry = 0;
     }
 

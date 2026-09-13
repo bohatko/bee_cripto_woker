@@ -9,6 +9,7 @@ export class PositionGuard {
   private scanner: MarketScanner;
   private timer: NodeJS.Timeout | null = null;
   private checkIntervalMs: number;
+  private peakGrossPnlMap = new Map<string, number>();
 
   constructor(orderRouter: OrderRouter, scanner: MarketScanner, checkIntervalMs: number = 5000) {
     this.orderRouter = orderRouter;
@@ -116,12 +117,25 @@ export class PositionGuard {
       }
       slMarginPct = Math.min(slMarginPct, CONFIG.slMaxMarginPct);
 
+      // Update peak PnL for trailing tracking
+      const prevPeak = this.peakGrossPnlMap.get(position.id) ?? 0;
+      const currentPeak = Math.max(prevPeak, grossPnlPct);
+      this.peakGrossPnlMap.set(position.id, currentPeak);
+
       // Check exit conditions against gross PnL% by default (validated backtest barriers).
       // With RISK_ON_NET_PNL=true, thresholds are tested against net PnL% instead.
       const triggerPnlPct = CONFIG.riskOnNetPnl ? netPnlPct : grossPnlPct;
       let exitReason: 'tp' | 'sl' | 'trend_flip' | null = null;
       if (!CONFIG.tpDisabled && triggerPnlPct >= tpMarginPct) {
         console.log(`🎯 [TP TRIGGERED] ${position.pair_symbol} PnL: +${triggerPnlPct.toFixed(2)}% >= ${tpMarginPct.toFixed(2)}%`);
+        exitReason = 'tp';
+      } else if (
+        !CONFIG.tpDisabled &&
+        CONFIG.trailingActive &&
+        currentPeak >= CONFIG.trailingActivationPct &&
+        grossPnlPct <= (currentPeak - CONFIG.trailingDeltaPct)
+      ) {
+        console.log(`🎯 [TRAILING TP TRIGGERED] ${position.pair_symbol} Peak: +${currentPeak.toFixed(2)}%, Current: +${grossPnlPct.toFixed(2)}% (dropped > ${CONFIG.trailingDeltaPct}%)`);
         exitReason = 'tp';
       } else if (triggerPnlPct <= -slMarginPct) {
         console.log(`🛡️ [SL TRIGGERED] ${position.pair_symbol} PnL: ${triggerPnlPct.toFixed(2)}% <= -${slMarginPct.toFixed(2)}%`);
@@ -132,6 +146,7 @@ export class PositionGuard {
       }
 
       if (exitReason) {
+        this.peakGrossPnlMap.delete(position.id);
         if (position.is_master || !account) {
           // Master benchmark trade exit
           await this.orderRouter.executeMasterExit(position, exitReason, currentLongPrice, currentShortPrice);

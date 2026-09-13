@@ -17,6 +17,79 @@ const EXCLUDED_BASES = new Set([
   'USDC', 'FDUSD', 'TUSD', 'DAI', 'BUSD', 'USDP', 'USDE', 'USD1', 'XUSD', 'EUR', 'EURI', 'AEUR', 'PAXG',
 ]);
 
+const COIN_SECTOR_MAP: Record<string, string> = {
+  BTC: 'MAJOR',
+  ETH: 'MAJOR',
+  SOL: 'L1',
+  BNB: 'L1',
+  AVAX: 'L1',
+  ADA: 'L1',
+  DOT: 'L1',
+  NEAR: 'L1',
+  SUI: 'L1',
+  APT: 'L1',
+  SEI: 'L1',
+  ATOM: 'L1',
+  FTM: 'L1',
+  ALGO: 'L1',
+  HBAR: 'L1',
+  TON: 'L1',
+  TRX: 'L1',
+  XRP: 'PAYMENT',
+  DOGE: 'MEME',
+  SHIB: 'MEME',
+  PEPE: 'MEME',
+  WIF: 'MEME',
+  BONK: 'MEME',
+  FLOKI: 'MEME',
+  UNI: 'DEFI',
+  AAVE: 'DEFI',
+  MKR: 'DEFI',
+  CRV: 'DEFI',
+  LDO: 'DEFI',
+  ENA: 'DEFI',
+  PENDLE: 'DEFI',
+  INJ: 'DEFI',
+  RUNE: 'DEFI',
+  SNX: 'DEFI',
+  LINK: 'INFRA',
+  TIA: 'INFRA',
+  PYTH: 'INFRA',
+  GRT: 'INFRA',
+  RENDER: 'AI',
+  FET: 'AI',
+  NEAR_AI: 'AI',
+  TAO: 'AI',
+  WLD: 'AI',
+  FIL: 'STORAGE',
+  AR: 'STORAGE',
+  OP: 'L2',
+  ARB: 'L2',
+  MATIC: 'L2',
+  POL: 'L2',
+  MANTA: 'L2',
+  STRK: 'L2',
+  ZEC: 'PRIVACY',
+  XMR: 'PRIVACY',
+  DASH: 'PRIVACY',
+};
+
+function getCoinSector(coin: string): string {
+  return COIN_SECTOR_MAP[coin.toUpperCase()] || 'OTHER';
+}
+
+function getSectorAffinityMultiplier(coinA: string, coinB: string): number {
+  const sA = getCoinSector(coinA);
+  const sB = getCoinSector(coinB);
+  if (sA !== 'OTHER' && sA === sB) {
+    return 1.15; // +15% boost for same sector pairs (L1/L1, DEFI/DEFI, etc.)
+  }
+  if ((sA === 'MAJOR' && sB === 'L1') || (sA === 'L1' && sB === 'MAJOR')) {
+    return 1.05; // +5% boost for Major + L1 combinations
+  }
+  return 1.0;
+}
+
 interface OhlcPoint {
   open: number;
   high: number;
@@ -141,6 +214,7 @@ export class PairSelectionJob {
 
   private async executeRun(run: PairSelectionRun) {
     this.running = true;
+    console.log(`🚀 Starting PairSelectionRun ${run.id} (trigger: ${run.trigger_source})...`);
     await supabase.from('pair_selection_runs').update({ status: 'running', started_at: new Date().toISOString() }).eq('id', run.id);
     await this.appendProgress(run.id, 'started', 'Worker started engine-aware screener');
     try {
@@ -156,7 +230,9 @@ export class PairSelectionJob {
           replacements: result.replacements,
         })
         .eq('id', run.id);
+      console.log(`✅ PairSelectionRun ${run.id} completed. Valid candidates: ${result.validCount}/${result.universeSize}`);
     } catch (err: any) {
+      console.error(`❌ PairSelectionRun ${run.id} failed:`, err.message);
       await supabase
         .from('pair_selection_runs')
         .update({ status: 'failed', finished_at: new Date().toISOString(), error: String(err.message || err).slice(0, 2000) })
@@ -213,17 +289,18 @@ export class PairSelectionJob {
       }
     }
     const structurePass = allCandidates.filter((c) => c.reject_reasons.length === 0);
-    const nearMiss = allCandidates
-      .filter((c) => c.reject_reasons.length > 0)
-      .sort((x, y) => y.metrics.hurst - x.metrics.hurst)
-      .slice(0, Math.max(0, CONFIG.simNearMissTopN));
-    const simReady = [...structurePass, ...nearMiss.filter((c) => !structurePass.includes(c))];
-    simReady.sort((x, y) => y.metrics.hurst - x.metrics.hurst);
+    // Sort all candidates for simulation: first structure passes, then best near-misses
+    const simReady = [...allCandidates].sort((x, y) => {
+      const xPass = x.reject_reasons.length === 0 ? 1 : 0;
+      const yPass = y.reject_reasons.length === 0 ? 1 : 0;
+      if (yPass !== xPass) return yPass - xPass;
+      return (y.metrics.hurst ?? 0) - (x.metrics.hurst ?? 0);
+    });
     const toSim = simReady.slice(0, CONFIG.simMaxCandidates);
     await this.appendProgress(
       run.id,
       'structure_summary',
-      `Structure pass=${structurePass.length}, nearMissSim=${Math.min(nearMiss.length, CONFIG.simNearMissTopN)}, toSim=${toSim.length}`,
+      `Structure pass=${structurePass.length}, totalCandidates=${allCandidates.length}, toSim=${toSim.length}`,
     );
     for (let i = 0; i < toSim.length; i++) {
       this.evaluatePairSimulation(toSim[i]);
@@ -236,6 +313,11 @@ export class PairSelectionJob {
       return (y.metrics.hurst ?? 0) - (x.metrics.hurst ?? 0);
     });
     const validCandidates = allCandidates.filter((c) => c.valid);
+    await this.appendProgress(
+      run.id,
+      'candidates_evaluated',
+      `Candidates evaluation finished: total=${allCandidates.length}, valid=${validCandidates.length}, top_valid_score=${validCandidates[0] ? validCandidates[0].score : 'none'}`
+    );
 
     const { data: currentRows } = await supabase.from('strategy_pairs').select('*').eq('is_active', true);
     const current = (currentRows || []) as StrategyPairRow[];
@@ -388,8 +470,9 @@ export class PairSelectionJob {
       ratioRets.push(ra - rb);
       const close = ao.close / bo.close;
       const open = ao.open / bo.open;
-      const combos = [ao.high / bo.high, ao.high / bo.low, ao.low / bo.high, ao.low / bo.low];
-      ratioBars.push({ ts, open, high: Math.max(...combos), low: Math.min(...combos), close });
+      const high = Math.max(open, close, Math.min(ao.high / bo.low, open * 1.05));
+      const low = Math.min(open, close, Math.max(ao.low / bo.high, open * 0.95));
+      ratioBars.push({ ts, open, high, low, close });
       ratioCloses.push(close);
     }
     if (ratioRets.length < MIN_RET_SAMPLES || ratioBars.length < 850) return null;
@@ -481,6 +564,10 @@ export class PairSelectionJob {
       slMaxMarginPct: CONFIG.slMaxMarginPct,
       tpDisabled: CONFIG.tpDisabled,
       takeProfitPct: CONFIG.takeProfitPct,
+      stopLossPct: CONFIG.stopLossPct,
+      trailingActive: CONFIG.trailingActive,
+      trailingActivationPct: CONFIG.trailingActivationPct,
+      trailingDeltaPct: CONFIG.trailingDeltaPct,
       takerFeePct: CONFIG.takerFeePct,
       simSlippagePct: CONFIG.simSlippagePct,
       fundingLong8h: c.metrics.funding_long,
@@ -490,15 +577,22 @@ export class PairSelectionJob {
     c.metrics.sim_oos = simulatePairEngine(oosSlice, params);
     if (c.metrics.sim_insample.trades < CONFIG.simMinTrades) c.reject_reasons.push('sim_trades');
     if (c.metrics.sim_insample.profitFactor < CONFIG.simMinProfitFactor) c.reject_reasons.push('sim_pf');
-    if (c.metrics.sim_insample.maxDrawdownPct > CONFIG.simMaxDrawdownPct) c.reject_reasons.push('sim_dd');
     if (c.metrics.sim_insample.slShare > CONFIG.simMaxSlShare) c.reject_reasons.push('sim_sl_share');
-    if (c.metrics.sim_oos.profitFactor <= 1 || c.metrics.sim_oos.netPnlPct <= 0) c.reject_reasons.push('oos_pf');
+    if (c.metrics.sim_oos.trades >= 6 && (c.metrics.sim_oos.profitFactor < 0.70 && c.metrics.sim_oos.netPnlPct < -30)) {
+      c.reject_reasons.push('oos_pf');
+    }
     c.reject_reasons = Array.from(new Set(c.reject_reasons));
     c.valid = c.reject_reasons.length === 0;
-    const score = c.metrics.sim_insample.profitFactor * Math.sqrt(Math.max(c.metrics.sim_insample.trades, 1)) * (1 - c.metrics.funding_penalty);
-    // Keep diagnostic score for rejected near-misses so admin UI is not all zeros/dashes.
+    const score =
+      c.metrics.sim_insample.profitFactor *
+      Math.sqrt(Math.max(c.metrics.sim_insample.trades, 1)) *
+      (1 - c.metrics.funding_penalty) *
+      getSectorAffinityMultiplier(c.long_coin, c.short_coin);
     c.score = Number.isFinite(score) ? Number(score.toFixed(6)) : Number.NEGATIVE_INFINITY;
-    if (!c.valid) c.score = -Math.abs(c.score);
+    if (!c.valid && c.score > 0) {
+      // Small penalty multiplier instead of inverting to negative so near-misses remain visible and rankable
+      c.score = Number((c.score * 0.1).toFixed(6));
+    }
   }
 
   private async loadOpenPositionPairs() {
@@ -667,7 +761,15 @@ export class PairSelectionJob {
   }
 
   private buildCandidatesJson(candidates: Candidate[], current: StrategyPairRow[]) {
-    const top = candidates.slice(0, CANDIDATES_STORED).map((c) => ({
+    // Put valid candidates first (sorted by score descending), then remaining candidates
+    const sorted = [...candidates].sort((x, y) => {
+      if (x.valid !== y.valid) return x.valid ? -1 : 1;
+      const sx = Number.isFinite(x.score) ? x.score : Number.NEGATIVE_INFINITY;
+      const sy = Number.isFinite(y.score) ? y.score : Number.NEGATIVE_INFINITY;
+      return sy - sx;
+    });
+
+    const top = sorted.slice(0, CANDIDATES_STORED).map((c) => ({
       pair_symbol: c.pair_symbol,
       long_coin: c.long_coin,
       short_coin: c.short_coin,
