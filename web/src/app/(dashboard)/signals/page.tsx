@@ -214,7 +214,7 @@ function SignalsContent() {
       <SignalStatsCards positions={filteredPositions} />
 
       {/* Active Open Positions across all signal strategies */}
-      <SignalPositionsTable positions={positions} />
+      <SignalPositionsTable positions={positions} mode="open" />
 
       {/* Live Strategies Proximity & Readiness (Unified Cards) */}
       <div className="space-y-4">
@@ -318,7 +318,10 @@ function SignalsContent() {
         </div>
       </div>
 
-      {/* Global Signal Events Log */}
+      {/* Closed Positions History (История моих сделок) */}
+      <SignalPositionsTable positions={filteredPositions} mode="closed" />
+
+      {/* Global Signal Events Log (Глобальный журнал сигналов) */}
       <SignalEventsTable events={filteredEvents} userPositions={filteredPositions} />
     </div>
   );

@@ -6,9 +6,10 @@ import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 export interface SignalPositionsTableProps {
   positions: any[];
+  mode?: 'all' | 'open' | 'closed';
 }
 
-export function SignalPositionsTable({ positions }: SignalPositionsTableProps) {
+export function SignalPositionsTable({ positions, mode = 'all' }: SignalPositionsTableProps) {
   const { t, dateLocale, formatDateTime } = useLanguage();
 
   const openPositions = positions.filter((p) => p.status === 'open');
@@ -47,7 +48,7 @@ export function SignalPositionsTable({ positions }: SignalPositionsTableProps) {
   return (
     <div className="space-y-6">
       {/* Active Open Positions Card */}
-      {openPositions.length > 0 && (
+      {mode !== 'closed' && openPositions.length > 0 && (
         <div className="bg-gradient-to-r from-honey-950/30 via-dark-900 to-dark-950 border border-honey-500/40 rounded-2xl p-5 shadow-2xl space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -121,79 +122,81 @@ export function SignalPositionsTable({ positions }: SignalPositionsTableProps) {
       )}
 
       {/* Closed Positions History */}
-      <div className="bg-dark-900 border border-dark-800 rounded-2xl p-5 shadow-xl space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Layers className="w-4 h-4 text-honey-400" />
-            <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-              {t('signals.positionsTitle')}
-            </h3>
+      {mode !== 'open' && (
+        <div className="bg-dark-900 border border-dark-800 rounded-2xl p-5 shadow-xl space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Layers className="w-4 h-4 text-honey-400" />
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                {t('signals.positionsTitle')}
+              </h3>
+            </div>
+            <span className="text-xs font-mono text-slate-500">
+              {closedPositions.length} closed
+            </span>
           </div>
-          <span className="text-xs font-mono text-slate-500">
-            {closedPositions.length} closed
-          </span>
+
+          {closedPositions.length === 0 ? (
+            <div className="text-center py-8 text-xs font-mono text-slate-500">
+              {t('signals.positionsEmpty')}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-dark-800 text-[11px] font-mono uppercase text-slate-500">
+                    <th className="py-2.5 px-3">{t('signals.tableTime')}</th>
+                    <th className="py-2.5 px-3">{t('signals.tableSymbol')}</th>
+                    <th className="py-2.5 px-3">{t('signals.tableMargin')}</th>
+                    <th className="py-2.5 px-3">{t('signals.tableEntryExit')}</th>
+                    <th className="py-2.5 px-3">{t('signals.tableReason')}</th>
+                    <th className="py-2.5 px-3 text-right">{t('signals.tablePnl')}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-dark-800/60 font-mono text-xs">
+                  {closedPositions.map((pos) => {
+                    const rPnl = Number(pos.realized_pnl_usd || 0);
+                    const pnlPct = Number(pos.pnl_pct || 0);
+                    const isWin = rPnl >= 0;
+
+                    return (
+                      <tr key={pos.id} className="hover:bg-dark-950/40 transition-colors">
+                        <td className="py-3 px-3 text-slate-400">
+                          {formatDateTime(pos.closed_at || pos.opened_at)}
+                        </td>
+                        <td className="py-3 px-3 font-bold text-white">
+                          {pos.symbol}/USDT{' '}
+                          <span className="text-[10px] text-slate-500 font-normal">
+                            {pos.is_master ? '(Benchmark)' : ''}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-slate-300">
+                          ${Number(pos.allocated_margin_usd || 0).toFixed(2)}
+                        </td>
+                        <td className="py-3 px-3 text-slate-300">
+                          ${Number(pos.entry_price || 0).toFixed(pos.symbol === 'ETH' ? 2 : 4)} ➔ $
+                          {Number(pos.exit_price || 0).toFixed(pos.symbol === 'ETH' ? 2 : 4)}
+                        </td>
+                        <td className="py-3 px-3">
+                          {renderReasonBadge(pos.exit_reason)}
+                        </td>
+                        <td
+                          className={`py-3 px-3 text-right font-bold ${
+                            isWin ? 'text-emerald-400' : 'text-rose-400'
+                          }`}
+                        >
+                          {isWin ? '+' : ''}${rPnl.toFixed(2)} ({isWin ? '+' : ''}
+                          {pnlPct.toFixed(2)}%)
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
-
-        {closedPositions.length === 0 ? (
-          <div className="text-center py-8 text-xs font-mono text-slate-500">
-            {t('signals.positionsEmpty')}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-dark-800 text-[11px] font-mono uppercase text-slate-500">
-                  <th className="py-2.5 px-3">{t('signals.tableTime')}</th>
-                  <th className="py-2.5 px-3">{t('signals.tableSymbol')}</th>
-                  <th className="py-2.5 px-3">{t('signals.tableMargin')}</th>
-                  <th className="py-2.5 px-3">{t('signals.tableEntryExit')}</th>
-                  <th className="py-2.5 px-3">{t('signals.tableReason')}</th>
-                  <th className="py-2.5 px-3 text-right">{t('signals.tablePnl')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-dark-800/60 font-mono text-xs">
-                {closedPositions.map((pos) => {
-                  const rPnl = Number(pos.realized_pnl_usd || 0);
-                  const pnlPct = Number(pos.pnl_pct || 0);
-                  const isWin = rPnl >= 0;
-
-                  return (
-                    <tr key={pos.id} className="hover:bg-dark-950/40 transition-colors">
-                      <td className="py-3 px-3 text-slate-400">
-                        {formatDateTime(pos.closed_at || pos.opened_at)}
-                      </td>
-                      <td className="py-3 px-3 font-bold text-white">
-                        {pos.symbol}/USDT{' '}
-                        <span className="text-[10px] text-slate-500 font-normal">
-                          {pos.is_master ? '(Benchmark)' : ''}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 text-slate-300">
-                        ${Number(pos.allocated_margin_usd || 0).toFixed(2)}
-                      </td>
-                      <td className="py-3 px-3 text-slate-300">
-                        ${Number(pos.entry_price || 0).toFixed(pos.symbol === 'ETH' ? 2 : 4)} ➔ $
-                        {Number(pos.exit_price || 0).toFixed(pos.symbol === 'ETH' ? 2 : 4)}
-                      </td>
-                      <td className="py-3 px-3">
-                        {renderReasonBadge(pos.exit_reason)}
-                      </td>
-                      <td
-                        className={`py-3 px-3 text-right font-bold ${
-                          isWin ? 'text-emerald-400' : 'text-rose-400'
-                        }`}
-                      >
-                        {isWin ? '+' : ''}${rPnl.toFixed(2)} ({isWin ? '+' : ''}
-                        {pnlPct.toFixed(2)}%)
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }
