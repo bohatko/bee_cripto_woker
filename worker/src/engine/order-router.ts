@@ -366,14 +366,20 @@ export class OrderRouter {
           .eq('id', account.id);
       }
 
-      // 4 pairs in basket => 25% of FREE (not occupied) USDT margin per pair
-      const slotMargin = freeUsdt * 0.25;
+      // User can reserve only a portion of free margin for pair trading (default 100%).
+      const pairsBalancePctRaw = Number(settings.pairs_balance_pct);
+      const pairsBalancePct = Number.isFinite(pairsBalancePctRaw)
+        ? Math.min(100, Math.max(5, pairsBalancePctRaw))
+        : 100;
+      const pairTradingBudgetUsd = freeUsdt * (pairsBalancePct / 100);
+      // 4 pairs in basket => 25% of the pair-trading budget per pair
+      const slotMargin = pairTradingBudgetUsd * 0.25;
       if (!Number.isFinite(freeUsdt) || slotMargin < MIN_SLOT_MARGIN_USD) {
         await this.skipEntry(
           user,
           account,
           pairSymbol,
-          `Insufficient free USDT futures margin to open ${pairSymbol}. Free: $${freeUsdt.toFixed(2)}, occupied equity: $${equityUsdt.toFixed(2)}. New entries are skipped until free margin is available.`
+          `Insufficient free USDT futures margin to open ${pairSymbol}. Free: $${freeUsdt.toFixed(2)}, pairs budget ${pairsBalancePct}% = $${pairTradingBudgetUsd.toFixed(2)}, occupied equity: $${equityUsdt.toFixed(2)}. New entries are skipped until free margin is available.`
         );
         return;
       }

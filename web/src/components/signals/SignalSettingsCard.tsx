@@ -8,7 +8,6 @@ import {
   Bell,
   Percent,
   Wallet,
-  ShieldAlert,
   HelpCircle,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
@@ -151,25 +150,16 @@ export function SignalSettingsCard({
 
   return (
     <div className="bg-dark-900 border border-dark-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-5">
-      {/* Risk Warning Header */}
-      <div className="bg-rose-500/10 border border-rose-500/25 rounded-xl p-3.5 sm:p-4 flex items-start gap-3">
-        <ShieldAlert className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
-        <div className="space-y-1">
-          <h4 className="text-xs font-bold text-rose-300 tracking-wide uppercase">
-            {t('signals.riskWarningTitle')}
-          </h4>
-          <p className="text-xs text-rose-200/80 leading-relaxed">
-            {strategySymbol === 'ETH'
-              ? `При плече ${leverage}x падение цены на -15% означает убыток около -${Math.round(15 * leverage)}% маржи. Ликвидация в isolated наступает около -${(100 / leverage).toFixed(0)}%. Управляйте объемом позиции консервативно.`
-              : `При плече ${leverage}x падение цены на -30% означает убыток около -${Math.round(30 * leverage)}% маржи. Ликвидация в isolated наступает около -${(100 / leverage).toFixed(0)}%. Управляйте объемом позиции консервативно.`}
-          </p>
-        </div>
-      </div>
-
       {/* Main Settings Grid */}
       <div className="space-y-4">
         {/* Toggle Block */}
-        <div className="bg-dark-950 border border-dark-800 rounded-xl p-3 sm:p-3.5 flex items-center justify-between gap-2.5">
+        <div
+          className={`rounded-xl p-3 sm:p-3.5 flex items-center justify-between gap-2.5 border ${
+            isEnabled
+              ? 'bg-emerald-500/10 border-emerald-500/30'
+              : 'bg-rose-500/10 border-rose-500/30'
+          }`}
+        >
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <span className="text-xs sm:text-sm font-bold text-white truncate">{t('signals.toggleTrading')}</span>
@@ -184,8 +174,8 @@ export function SignalSettingsCard({
             disabled={saving}
             className={`px-3 py-1.5 rounded-xl font-mono text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shrink-0 whitespace-nowrap ${
               isEnabled
-                ? 'bg-emerald-500 hover:bg-emerald-400 text-dark-950 shadow-emerald-500/20'
-                : 'bg-dark-800 hover:bg-dark-700 text-slate-300 border border-dark-700'
+                ? 'bg-emerald-500 hover:bg-emerald-400 text-dark-950 shadow-emerald-500/30'
+                : 'bg-rose-500 hover:bg-rose-400 text-white shadow-rose-500/30'
             }`}
           >
             <Power className="w-3.5 h-3.5 shrink-0" />

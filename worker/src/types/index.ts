@@ -51,6 +51,8 @@ export interface TradingSettings {
   is_bot_active: boolean;
   effective_leverage: number;
   max_allocated_margin_usd: number | null;
+  /** Percent of free futures margin allocated to the pair-trading basket (5..100). */
+  pairs_balance_pct: number;
   active_pairs: string[];
   take_profit_pct: number;
   stop_loss_pct: number;

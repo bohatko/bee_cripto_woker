@@ -32,12 +32,46 @@ export function StrategyCombinedCard({
   const symbol = (strategy?.symbol || 'XRP').toUpperCase();
   const leverage = strategy?.leverage ? Number(strategy.leverage) : 3.0;
 
-  const getProgressColor = (r: number) => {
-    if (r >= 90) return 'bg-rose-500 shadow-rose-500/50 animate-pulse';
-    if (r >= 80) return 'bg-amber-400 shadow-amber-400/50';
-    if (r >= 50) return 'bg-honey-500 shadow-honey-500/30';
-    return 'bg-slate-500';
+  const clampedReadiness = Math.min(100, Math.max(0, readiness));
+
+  const getReadinessTone = (r: number) => {
+    if (r >= 90) {
+      return {
+        text: 'text-rose-400',
+        track: 'border-rose-500/25 bg-rose-500/5',
+        fill: 'from-rose-600 via-rose-400 to-amber-300',
+        glow: 'shadow-[0_0_14px_rgba(244,63,94,0.55)]',
+        pulse: true,
+      };
+    }
+    if (r >= 80) {
+      return {
+        text: 'text-amber-300',
+        track: 'border-amber-500/25 bg-amber-500/5',
+        fill: 'from-amber-600 via-amber-400 to-honey-300',
+        glow: 'shadow-[0_0_12px_rgba(251,191,36,0.45)]',
+        pulse: false,
+      };
+    }
+    if (r >= 50) {
+      return {
+        text: 'text-honey-400',
+        track: 'border-honey-500/20 bg-honey-500/5',
+        fill: 'from-honey-600 via-honey-500 to-amber-300',
+        glow: 'shadow-[0_0_10px_rgba(245,158,11,0.35)]',
+        pulse: false,
+      };
+    }
+    return {
+      text: 'text-sky-400',
+      track: 'border-sky-500/15 bg-sky-500/5',
+      fill: 'from-sky-700 via-sky-500 to-cyan-300',
+      glow: 'shadow-[0_0_8px_rgba(56,189,248,0.3)]',
+      pulse: false,
+    };
   };
+
+  const tone = getReadinessTone(readiness);
 
   const getStatusBadge = () => {
     if (liveState?.state === 'in_position') {
@@ -188,22 +222,47 @@ export function StrategyCombinedCard({
       </div>
 
       {/* Progress Bar & Readiness */}
-      <div className="space-y-1.5 relative z-10 pt-1">
-        <div className="flex justify-between items-center text-xs font-mono">
-          <span className="text-slate-400 flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-honey-400" />
+      <div className={`relative z-10 rounded-xl border p-3 space-y-2.5 ${tone.track}`}>
+        <div className="flex justify-between items-center gap-3">
+          <span className="text-xs font-mono text-slate-300 flex items-center gap-1.5">
+            <span className="relative flex h-5 w-5 items-center justify-center rounded-md bg-dark-950/70 border border-dark-700/80">
+              <Sparkles className={`w-3 h-3 ${tone.text} ${tone.pulse ? 'animate-pulse' : ''}`} />
+            </span>
             {t('signals.readiness')}
           </span>
-          <span className={`font-bold ${readiness >= 80 ? 'text-rose-400 font-mono text-sm' : 'text-honey-400'}`}>
-            {readiness.toFixed(1)}%
+          <span
+            className={`font-mono text-sm font-black tracking-tight tabular-nums ${tone.text} ${
+              tone.pulse ? 'animate-pulse' : ''
+            }`}
+          >
+            {clampedReadiness.toFixed(1)}%
           </span>
         </div>
 
-        <div className="w-full bg-dark-950 h-2.5 rounded-full overflow-hidden p-0.5 border border-dark-800">
+        <div className="relative h-3 w-full rounded-full bg-dark-950/90 border border-dark-800/90 overflow-hidden shadow-inner">
+          {/* Soft track sheen */}
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.03] to-transparent pointer-events-none" />
+
+          {/* Threshold markers */}
+          <div className="absolute inset-y-0 left-[80%] w-px bg-amber-400/25 pointer-events-none" />
+          <div className="absolute inset-y-0 left-[90%] w-px bg-rose-400/30 pointer-events-none" />
+
           <div
-            className={`h-full rounded-full transition-all duration-500 shadow-sm ${getProgressColor(readiness)}`}
-            style={{ width: `${Math.min(100, Math.max(0, readiness))}%` }}
-          />
+            className={`relative h-full rounded-full bg-gradient-to-r ${tone.fill} ${tone.glow} transition-all duration-700 ease-out ${
+              tone.pulse ? 'animate-pulse' : ''
+            }`}
+            style={{ width: `${clampedReadiness}%` }}
+          >
+            {/* Leading edge highlight */}
+            <div className="absolute inset-y-0 right-0 w-4 bg-gradient-to-l from-white/35 to-transparent rounded-full" />
+          </div>
+        </div>
+
+        <div className="flex justify-between text-[9px] font-mono text-slate-600 px-0.5">
+          <span>0%</span>
+          <span className="text-amber-500/50">80%</span>
+          <span className="text-rose-500/50">90%</span>
+          <span>100%</span>
         </div>
       </div>
     </div>

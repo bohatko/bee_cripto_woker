@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS public.trading_settings (
     is_bot_active BOOLEAN DEFAULT FALSE NOT NULL,
     effective_leverage NUMERIC(4, 1) DEFAULT 3.0 NOT NULL, -- capped by worker MAX_LEVERAGE
     max_allocated_margin_usd NUMERIC(18, 4), -- NULL = использовать 100% свободного депозита
+    pairs_balance_pct NUMERIC(5, 2) DEFAULT 100.00 NOT NULL, -- % of free margin for pair basket (5..100)
     active_pairs TEXT[] DEFAULT ARRAY['ZEC/AVAX', 'ENA/SUI', 'SOL/ADA', 'BNB/ETH']::TEXT[] NOT NULL,
     take_profit_pct NUMERIC(5, 2) DEFAULT 5.00 NOT NULL,
     stop_loss_pct NUMERIC(5, 2) DEFAULT 1.50 NOT NULL,

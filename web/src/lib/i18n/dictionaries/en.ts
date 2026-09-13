@@ -474,6 +474,12 @@ export const en = {
     nowPrimary: '{exchange} is now set as your active trading exchange!',
     autoPrimary: '{exchange} is now automatically set as your primary trading exchange.',
     removed: '{exchange} API keys removed completely from database.',
+    pairsBalancePctLabel: 'Pair Trading Margin (% of free margin)',
+    pairsBalancePctHelp:
+      'Share of free futures USDT margin reserved for the 4-pair basket. Each pair uses 25% of that budget. The remaining free margin stays unused by the pair bot.',
+    pairsBalanceEstimate: 'Budget ${budget} · ~${slot}/slot',
+    pairsBalanceSaved: 'Pair trading margin set to {pct}%.',
+    pairsBalanceSaveError: 'Failed to save pair trading margin setting.',
   },
   readiness: {
     title: 'Trade Readiness & Signal Proximity',
@@ -702,8 +708,6 @@ export const en = {
     paramTp: 'Take-Profit: +4.0% (Exchange Native)',
     paramSl: 'Stop-Loss: -30.0% (Exchange Native)',
     paramLeverage: 'Leverage: 3.0x Fixed Isolated',
-    riskWarningTitle: 'Risk & Capital Warning',
-    riskWarningText: 'At 3.0x leverage, a -30% price drop equals approximately -90% of allocated margin. Liquidation occurs near -33%. Keep margin sizing conservative. Also, one-way position mode forbids overlapping XRP basket positions.',
     settingsTitle: 'Trading Settings',
     toggleTrading: 'Enable Autonomous Trading',
     toggleDesc: 'When enabled, entries will automatically replicate to your primary exchange account upon trigger.',
