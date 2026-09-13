@@ -24,6 +24,7 @@ import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { PanicCloseModal } from '@/components/modals/PanicCloseModal';
 import { TradeReadinessMonitor } from '@/components/dashboard/TradeReadinessMonitor';
 import { SignalReadinessCard } from '@/components/dashboard/SignalReadinessCard';
+import { DashboardSkeleton } from '@/components/dashboard/DashboardSkeleton';
 import { toast } from '@/components/ui/sonner';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { isUnfilledSimulation } from '@/lib/positions';
@@ -50,127 +51,129 @@ export default function DashboardPage() {
   const [signalStrategyIds, setSignalStrategyIds] = useState<string[]>([]);
 
   async function loadDashboardData() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
-    setCurrentUser(user);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+      setCurrentUser(user);
 
-    // 1. Fetch user trading settings
-    const { data: sett } = await supabase
-      .from('trading_settings')
-      .select('*')
-      .eq('user_id', user.id)
-      .single();
-
-    if (sett) setSettings(sett);
-
-    // 2. Fetch all active connected exchange accounts
-    const { data: accs } = await supabase
-      .from('exchange_accounts')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('is_active', true)
-      .order('created_at', { ascending: true });
-
-    const currentAccounts = accs || [];
-    setAccounts(currentAccounts);
-
-    const hasValidated = currentAccounts.some((a) => a.is_validated);
-
-    // Auto-disable bot if all exchange keys were removed/missing
-    if (!hasValidated && sett?.is_bot_active) {
-      await supabase
+      // 1. Fetch user trading settings
+      const { data: sett } = await supabase
         .from('trading_settings')
-        .update({ is_bot_active: false })
-        .eq('id', sett.id);
-      setSettings((prev: any) => (prev ? { ...prev, is_bot_active: false } : null));
-    }
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
 
-    // 3. Fetch active open positions (check user's first, fallback to Master Bot live positions)
-    const { data: userPos } = await supabase
-      .from('bot_positions')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('status', 'open');
+      if (sett) setSettings(sett);
 
-    const liveUserPos = (userPos || []).filter((p) => !isUnfilledSimulation(p));
+      // 2. Fetch all active connected exchange accounts
+      const { data: accs } = await supabase
+        .from('exchange_accounts')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .order('created_at', { ascending: true });
 
-    if (liveUserPos.length > 0) {
-      setPositions(liveUserPos);
-      setIsShowingMaster(false);
-    } else {
-      const { data: masterPos } = await supabase
+      const currentAccounts = accs || [];
+      setAccounts(currentAccounts);
+
+      const hasValidated = currentAccounts.some((a) => a.is_validated);
+
+      // Auto-disable bot if all exchange keys were removed/missing
+      if (!hasValidated && sett?.is_bot_active) {
+        await supabase
+          .from('trading_settings')
+          .update({ is_bot_active: false })
+          .eq('id', sett.id);
+        setSettings((prev: any) => (prev ? { ...prev, is_bot_active: false } : null));
+      }
+
+      // 3. Fetch active open positions (check user's first, fallback to Master Bot live positions)
+      const { data: userPos } = await supabase
         .from('bot_positions')
         .select('*')
-        .eq('is_master', true)
+        .eq('user_id', user.id)
         .eq('status', 'open');
-      setPositions(masterPos || []);
-      setIsShowingMaster(true);
-    }
 
-    // 4. Active basket (source of truth) + live scanner cache for ratios/prices
-    const [{ data: basket }, { data: mData }] = await Promise.all([
-      supabase
-        .from('strategy_pairs')
-        .select('pair_symbol, long_coin, short_coin, score')
-        .eq('is_active', true)
-        .order('activated_at', { ascending: true }),
-      supabase.from('pair_market_data').select('*').order('pair_symbol', { ascending: true }),
-    ]);
+      const liveUserPos = (userPos || []).filter((p) => !isUnfilledSimulation(p));
 
-    if (basket) setActiveBasket(basket);
-    if (mData) setMarketData(mData);
+      if (liveUserPos.length > 0) {
+        setPositions(liveUserPos);
+        setIsShowingMaster(false);
+      } else {
+        const { data: masterPos } = await supabase
+          .from('bot_positions')
+          .select('*')
+          .eq('is_master', true)
+          .eq('status', 'open');
+        setPositions(masterPos || []);
+        setIsShowingMaster(true);
+      }
 
-    // 5. Enabled Dip-Buy signal strategies (dynamic: XRP / ETH / BTC / ...)
-    const { data: signalStrats } = await supabase
-      .from('signal_strategies')
-      .select('id, symbol, is_enabled')
-      .eq('is_enabled', true);
+      // 4. Active basket (source of truth) + live scanner cache for ratios/prices
+      const [{ data: basket }, { data: mData }] = await Promise.all([
+        supabase
+          .from('strategy_pairs')
+          .select('pair_symbol, long_coin, short_coin, score')
+          .eq('is_active', true)
+          .order('activated_at', { ascending: true }),
+        supabase.from('pair_market_data').select('*').order('pair_symbol', { ascending: true }),
+      ]);
 
-    if (signalStrats && signalStrats.length > 0) {
-      const sorted = [...signalStrats].sort((a, b) => {
-        if (a.symbol === 'XRP') return -1;
-        if (b.symbol === 'XRP') return 1;
-        return String(a.symbol).localeCompare(String(b.symbol));
-      });
-      setSignalStrategyIds(sorted.map((s) => s.id));
-    } else {
-      setSignalStrategyIds([]);
-    }
+      if (basket) setActiveBasket(basket);
+      if (mData) setMarketData(mData);
 
-    setLoading(false);
+      // 5. Enabled Dip-Buy signal strategies (dynamic: XRP / ETH / BTC / ...)
+      const { data: signalStrats } = await supabase
+        .from('signal_strategies')
+        .select('id, symbol, is_enabled')
+        .eq('is_enabled', true);
 
-    // Initial check for low free margin
-    const freeMarginSum = currentAccounts.reduce(
-      (sum, a) =>
-        sum +
-        (a.free_balance_usd !== null && a.free_balance_usd !== undefined
-          ? Number(a.free_balance_usd)
-          : Number(a.last_balance_usd) * 0.75),
-      0
-    );
-    const primAcc =
-      currentAccounts.find((a) => a.id === sett?.exchange_account_id) || currentAccounts[0];
-    const isMarginLow =
-      hasValidated &&
-      (freeMarginSum < 20 ||
-        Boolean(
-          primAcc?.last_error_msg &&
-            (primAcc.last_error_msg.toLowerCase().includes('insufficient free') ||
-              primAcc.last_error_msg.toLowerCase().includes('free usdt'))
-        ));
+      if (signalStrats && signalStrats.length > 0) {
+        const sorted = [...signalStrats].sort((a, b) => {
+          if (a.symbol === 'XRP') return -1;
+          if (b.symbol === 'XRP') return 1;
+          return String(a.symbol).localeCompare(String(b.symbol));
+        });
+        setSignalStrategyIds(sorted.map((s) => s.id));
+      } else {
+        setSignalStrategyIds([]);
+      }
 
-    if (isMarginLow && sett?.is_bot_active && !hasWarnedMarginRef.current) {
-      hasWarnedMarginRef.current = true;
-      playWarningSound();
-      toast.warning(t('dashboard.toastLowMarginTitle'), {
-        description: t('dashboard.toastLowMarginDesc', {
-          free: freeMarginSum.toFixed(2),
-          min: '20.00',
-        }),
-        duration: 9000,
-      });
+      // Initial check for low free margin
+      const freeMarginSum = currentAccounts.reduce(
+        (sum, a) =>
+          sum +
+          (a.free_balance_usd !== null && a.free_balance_usd !== undefined
+            ? Number(a.free_balance_usd)
+            : Number(a.last_balance_usd) * 0.75),
+        0
+      );
+      const primAcc =
+        currentAccounts.find((a) => a.id === sett?.exchange_account_id) || currentAccounts[0];
+      const isMarginLow =
+        hasValidated &&
+        (freeMarginSum < 20 ||
+          Boolean(
+            primAcc?.last_error_msg &&
+              (primAcc.last_error_msg.toLowerCase().includes('insufficient free') ||
+                primAcc.last_error_msg.toLowerCase().includes('free usdt'))
+          ));
+
+      if (isMarginLow && sett?.is_bot_active && !hasWarnedMarginRef.current) {
+        hasWarnedMarginRef.current = true;
+        playWarningSound();
+        toast.warning(t('dashboard.toastLowMarginTitle'), {
+          description: t('dashboard.toastLowMarginDesc', {
+            free: freeMarginSum.toFixed(2),
+            min: '20.00',
+          }),
+          duration: 9000,
+        });
+      }
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -443,6 +446,10 @@ export default function DashboardPage() {
       toast.error(err.message || 'Failed to trigger panic close');
     }
   };
+
+  if (loading) {
+    return <DashboardSkeleton />;
+  }
 
   return (
     <div className="p-4 sm:p-8 space-y-6">
