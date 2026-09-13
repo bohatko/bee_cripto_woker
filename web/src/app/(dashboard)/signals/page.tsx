@@ -8,6 +8,7 @@ import { SignalStatsCards } from '@/components/signals/SignalStatsCards';
 import { SignalPositionsTable } from '@/components/signals/SignalPositionsTable';
 import { StrategyCombinedCard } from '@/components/signals/StrategyCombinedCard';
 import { EquityGrowthChart } from '@/components/charts/EquityGrowthChart';
+import { SignalsSkeleton } from '@/components/skeletons/PageSkeletons';
 import { Compass, Sparkles, Filter } from 'lucide-react';
 
 function SignalsContent() {
@@ -122,11 +123,7 @@ function SignalsContent() {
   }, [positions]);
 
   if (loading) {
-    return (
-      <div className="flex-1 p-6 md:p-8 flex items-center justify-center font-mono text-sm text-slate-400">
-        {t('common.loading')}
-      </div>
-    );
+    return <SignalsSkeleton />;
   }
 
   return (
@@ -270,13 +267,7 @@ function SignalsContent() {
 
 export default function SignalsPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="p-4 sm:p-8 w-full flex items-center justify-center font-mono text-sm text-slate-400">
-          Loading...
-        </div>
-      }
-    >
+    <Suspense fallback={<SignalsSkeleton />}>
       <SignalsContent />
     </Suspense>
   );

@@ -38,6 +38,7 @@ import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { LanguageSwitcher } from '@/lib/i18n/LanguageSwitcher';
 import { isUnfilledSimulation, getDisplayPnlUsd } from '@/lib/positions';
 import { signalPriceDecimals } from '@/lib/signals';
+import { AdminSkeleton } from '@/components/skeletons/PageSkeletons';
 import { LineChart, Line } from 'recharts';
 
 export default function AdminDashboardPage() {
@@ -611,11 +612,7 @@ export default function AdminDashboardPage() {
   const pendingReviewInvoices = invoices.filter((i) => i.status === 'pending_review');
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-dark-950 flex items-center justify-center text-slate-400 font-mono text-sm">
-        {t('admin.loading')}
-      </div>
-    );
+    return <AdminSkeleton />;
   }
 
   if (!isAdmin) {

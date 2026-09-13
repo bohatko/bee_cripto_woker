@@ -17,6 +17,7 @@ import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { toast } from '@/components/ui/sonner';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { ProfileSkeleton } from '@/components/skeletons/PageSkeletons';
 
 interface ProfileResponse {
   full_name: string;
@@ -167,12 +168,7 @@ export default function ProfileSettingsPage() {
   }
 
   if (loading) {
-    return (
-      <div className="p-4 sm:p-8 max-w-5xl flex items-center justify-center h-64 text-slate-400 gap-2">
-        <Loader2 className="w-5 h-5 animate-spin text-honey-400" />
-        {t('common.loading')}
-      </div>
-    );
+    return <ProfileSkeleton />;
   }
 
   const telegramReady = hasToken && Boolean(chatId.trim()) && enabled;

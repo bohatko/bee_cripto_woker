@@ -13,6 +13,7 @@ import { supabase } from '@/lib/supabase/client';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { resolveRealizedPnl, getTotalFeesUsd, getGrossPnlUsd } from '@/lib/positions';
 import { EquityGrowthChart } from '@/components/charts/EquityGrowthChart';
+import { HistorySkeleton } from '@/components/skeletons/PageSkeletons';
 
 export default function BotHistoryPage() {
   const { t, dateLocale, formatDateTime } = useLanguage();
@@ -98,6 +99,10 @@ export default function BotHistoryPage() {
   }
 
   const finalEquity = BOT_STARTING_BALANCE + totalRealizedPnl;
+
+  if (loading) {
+    return <HistorySkeleton />;
+  }
 
   return (
     <div className="p-4 sm:p-8 space-y-6">
@@ -239,9 +244,7 @@ export default function BotHistoryPage() {
 
       {/* Trade Log Table */}
       <div className="bg-dark-900 border border-dark-800 rounded-2xl shadow-xl overflow-hidden">
-        {loading ? (
-          <div className="p-12 text-center text-slate-500 font-mono text-sm">{t('history.loading')}</div>
-        ) : filteredPositions.length === 0 ? (
+        {filteredPositions.length === 0 ? (
           <div className="p-12 text-center max-w-md mx-auto">
             <Layers className="w-12 h-12 text-slate-600 mx-auto mb-3" />
             <h3 className="text-base font-semibold text-white">{t('history.noTradesTitle')}</h3>

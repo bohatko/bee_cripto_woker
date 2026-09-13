@@ -7,6 +7,7 @@ import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { EquityGrowthChart } from '@/components/charts/EquityGrowthChart';
 import { SignalEventsTable } from '@/components/signals/SignalEventsTable';
 import { SignalStatsCards } from '@/components/signals/SignalStatsCards';
+import { SignalsBacktestSkeleton } from '@/components/skeletons/PageSkeletons';
 
 const SIGNAL_BACKTEST_START_USD = 10000;
 
@@ -101,11 +102,7 @@ export default function SignalsBacktestPage() {
   );
 
   if (loading) {
-    return (
-      <div className="flex-1 p-6 md:p-8 flex items-center justify-center font-mono text-sm text-slate-400">
-        {t('common.loading')}
-      </div>
-    );
+    return <SignalsBacktestSkeleton />;
   }
 
   return (

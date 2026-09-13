@@ -21,6 +21,7 @@ import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { toast } from '@/components/ui/sonner';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { ExchangeSkeleton } from '@/components/skeletons/PageSkeletons';
 
 interface ExchangeAccountItem {
   id: string;
@@ -51,6 +52,7 @@ export default function ExchangeSettingsPage() {
   const [isPrimaryForTrading, setIsPrimaryForTrading] = useState(true);
 
   const [loading, setLoading] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
   const [syncingAll, setSyncingAll] = useState(false);
   const [settingPrimary, setSettingPrimary] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -69,41 +71,45 @@ export default function ExchangeSettingsPage() {
   const hasAutoSyncedRef = useRef(false);
 
   async function loadAccountsAndSettings() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
 
-    // 1. Fetch exchange accounts
-    const { data: accData } = await supabase
-      .from('exchange_accounts')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: true });
+      // 1. Fetch exchange accounts
+      const { data: accData } = await supabase
+        .from('exchange_accounts')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true });
 
-    const accList = (accData || []) as ExchangeAccountItem[];
-    setAccounts(accList);
+      const accList = (accData || []) as ExchangeAccountItem[];
+      setAccounts(accList);
 
-    // 2. Fetch trading settings to know primary exchange
-    const { data: settData } = await supabase
-      .from('trading_settings')
-      .select('id, exchange_account_id, is_bot_active')
-      .eq('user_id', user.id)
-      .maybeSingle();
+      // 2. Fetch trading settings to know primary exchange
+      const { data: settData } = await supabase
+        .from('trading_settings')
+        .select('id, exchange_account_id, is_bot_active')
+        .eq('user_id', user.id)
+        .maybeSingle();
 
-    if (settData) {
-      setTradingSettings(settData as TradingSettingsItem);
-    }
+      if (settData) {
+        setTradingSettings(settData as TradingSettingsItem);
+      }
 
-    // Auto-determine default checkbox state:
-    // If user has no active primary account yet, enable by default
-    const hasActivePrimary = settData?.exchange_account_id && accList.some((a) => a.id === settData.exchange_account_id);
-    setIsPrimaryForTrading(!hasActivePrimary);
+      // Auto-determine default checkbox state:
+      // If user has no active primary account yet, enable by default
+      const hasActivePrimary = settData?.exchange_account_id && accList.some((a) => a.id === settData.exchange_account_id);
+      setIsPrimaryForTrading(!hasActivePrimary);
 
-    // Initial silent sync once if accounts exist
-    if (accList.length > 0 && !hasAutoSyncedRef.current) {
-      hasAutoSyncedRef.current = true;
-      handleSyncAll(true);
+      // Initial silent sync once if accounts exist
+      if (accList.length > 0 && !hasAutoSyncedRef.current) {
+        hasAutoSyncedRef.current = true;
+        handleSyncAll(true);
+      }
+    } finally {
+      setPageLoading(false);
     }
   }
 
@@ -301,6 +307,10 @@ export default function ExchangeSettingsPage() {
   const isCurrentTabPrimary = Boolean(
     currentTabAccount && tradingSettings?.exchange_account_id === currentTabAccount.id
   );
+
+  if (pageLoading) {
+    return <ExchangeSkeleton />;
+  }
 
   return (
     <div className="p-4 sm:p-8 max-w-5xl space-y-8">

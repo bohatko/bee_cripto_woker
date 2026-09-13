@@ -15,6 +15,7 @@ import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { toast } from '@/components/ui/sonner';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { BillingSkeleton } from '@/components/skeletons/PageSkeletons';
 
 export default function BillingPage() {
   const { t, dateLocale, formatDate } = useLanguage();
@@ -25,6 +26,7 @@ export default function BillingPage() {
   const [copied, setCopied] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const walletAddresses = {
     TRC20: 'TJY4mFakeTRC20DepositWalletBeeWorkerXXXXXXXXXX',
@@ -32,24 +34,28 @@ export default function BillingPage() {
   };
 
   async function loadBilling() {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-    const { data: prof } = await supabase
-      .from('users_profile')
-      .select('*')
-      .eq('id', user.id)
-      .single();
+      const { data: prof } = await supabase
+        .from('users_profile')
+        .select('*')
+        .eq('id', user.id)
+        .single();
 
-    if (prof) setProfile(prof);
+      if (prof) setProfile(prof);
 
-    const { data: invs } = await supabase
-      .from('invoices')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
+      const { data: invs } = await supabase
+        .from('invoices')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
 
-    if (invs) setInvoices(invs);
+      if (invs) setInvoices(invs);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -57,6 +63,10 @@ export default function BillingPage() {
   }, []);
 
   const activeInvoice = invoices.find((i) => ['issued', 'pending_review'].includes(i.status));
+
+  if (loading) {
+    return <BillingSkeleton />;
+  }
 
   const handleCopyWallet = () => {
     navigator.clipboard.writeText(walletAddresses[selectedNetwork]);

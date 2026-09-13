@@ -16,6 +16,7 @@ import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { isUnfilledSimulation, resolveRealizedPnl, getTotalFeesUsd, getGrossPnlUsd } from '@/lib/positions';
 import { EquityGrowthChart } from '@/components/charts/EquityGrowthChart';
 import { PairTradingMarginSettings } from '@/components/history/PairTradingMarginSettings';
+import { HistorySkeleton } from '@/components/skeletons/PageSkeletons';
 
 export default function UserHistoryPage() {
   const { t, dateLocale, formatDateTime } = useLanguage();
@@ -128,6 +129,10 @@ export default function UserHistoryPage() {
         maxDrawdownUsd = ddUsd;
       }
     }
+  }
+
+  if (loading) {
+    return <HistorySkeleton />;
   }
 
   return (
@@ -274,9 +279,7 @@ export default function UserHistoryPage() {
 
       {/* Trade Log Table */}
       <div className="bg-dark-900 border border-dark-800 rounded-2xl shadow-xl overflow-hidden">
-        {loading ? (
-          <div className="p-12 text-center text-slate-500 font-mono text-sm">{t('history.loading')}</div>
-        ) : filteredPositions.length === 0 ? (
+        {filteredPositions.length === 0 ? (
           <div className="p-12 text-center max-w-md mx-auto">
             <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-3">
               <KeyRound className="w-6 h-6" />
