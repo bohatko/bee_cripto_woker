@@ -16,7 +16,6 @@ import {
   Building2,
   Activity,
   AlertTriangle,
-  Percent,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
@@ -41,7 +40,6 @@ interface TradingSettingsItem {
   id: string;
   exchange_account_id: string | null;
   is_bot_active: boolean;
-  pairs_balance_pct: number;
 }
 
 export default function ExchangeSettingsPage() {
@@ -59,8 +57,6 @@ export default function ExchangeSettingsPage() {
 
   const [accounts, setAccounts] = useState<ExchangeAccountItem[]>([]);
   const [tradingSettings, setTradingSettings] = useState<TradingSettingsItem | null>(null);
-  const [pairsBalancePct, setPairsBalancePct] = useState(100);
-  const [savingPairsPct, setSavingPairsPct] = useState(false);
 
   // Modals state
   const [accountToDelete, setAccountToDelete] = useState<ExchangeAccountItem | null>(null);
@@ -91,14 +87,12 @@ export default function ExchangeSettingsPage() {
     // 2. Fetch trading settings to know primary exchange
     const { data: settData } = await supabase
       .from('trading_settings')
-      .select('id, exchange_account_id, is_bot_active, pairs_balance_pct')
+      .select('id, exchange_account_id, is_bot_active')
       .eq('user_id', user.id)
       .maybeSingle();
 
     if (settData) {
       setTradingSettings(settData as TradingSettingsItem);
-      const pct = Number((settData as TradingSettingsItem).pairs_balance_pct);
-      setPairsBalancePct(Number.isFinite(pct) ? Math.min(100, Math.max(5, pct)) : 100);
     }
 
     // Auto-determine default checkbox state:
@@ -135,26 +129,6 @@ export default function ExchangeSettingsPage() {
     setCopied(true);
     toast.success(t('exchange.ipCopied'));
     setTimeout(() => setCopied(false), 2000);
-  };
-
-  const savePairsBalancePct = async (nextPct: number) => {
-    if (!tradingSettings) return;
-    const clamped = Math.min(100, Math.max(5, Math.round(nextPct)));
-    setSavingPairsPct(true);
-    try {
-      const { error } = await supabase
-        .from('trading_settings')
-        .update({ pairs_balance_pct: clamped })
-        .eq('id', tradingSettings.id);
-      if (error) throw error;
-      setPairsBalancePct(clamped);
-      setTradingSettings({ ...tradingSettings, pairs_balance_pct: clamped });
-      toast.success(t('exchange.pairsBalanceSaved', { pct: clamped }));
-    } catch (err: any) {
-      toast.error(err.message || t('exchange.pairsBalanceSaveError'));
-    } finally {
-      setSavingPairsPct(false);
-    }
   };
 
   const handleSaveKeys = async () => {
@@ -690,54 +664,6 @@ export default function ExchangeSettingsPage() {
                   )}
                 </div>
               </div>
-
-              {tradingSettings && (
-                <div className="mt-4 bg-dark-950 border border-dark-800 rounded-xl p-4 space-y-3">
-                  <div className="flex justify-between items-center gap-3">
-                    <span className="text-xs font-semibold text-white flex items-center gap-1.5">
-                      <Percent className="w-4 h-4 text-honey-400 shrink-0" />
-                      {t('exchange.pairsBalancePctLabel')}
-                    </span>
-                    <span className="text-sm font-mono font-bold text-honey-400 shrink-0">
-                      {pairsBalancePct}%
-                    </span>
-                  </div>
-
-                  <input
-                    type="range"
-                    min={5}
-                    max={100}
-                    step={5}
-                    value={pairsBalancePct}
-                    disabled={savingPairsPct}
-                    onChange={(e) => setPairsBalancePct(Number(e.target.value))}
-                    onMouseUp={(e) => savePairsBalancePct(Number((e.target as HTMLInputElement).value))}
-                    onTouchEnd={(e) => savePairsBalancePct(Number((e.target as HTMLInputElement).value))}
-                    className="w-full accent-honey-500 h-2 bg-dark-800 rounded-lg cursor-pointer disabled:opacity-50"
-                  />
-
-                  <div className="flex justify-between items-center text-[11px] font-mono text-slate-400 pt-1 gap-2">
-                    <span>5%</span>
-                    <span className="text-slate-300 font-bold text-center">
-                      {t('exchange.pairsBalanceEstimate', {
-                        budget: (
-                          (Number(currentTabAccount.free_balance_usd ?? 0) * pairsBalancePct) /
-                          100
-                        ).toFixed(2),
-                        slot: (
-                          (Number(currentTabAccount.free_balance_usd ?? 0) * pairsBalancePct) /
-                          100 /
-                          4
-                        ).toFixed(2),
-                      })}
-                    </span>
-                    <span>100%</span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 leading-relaxed">
-                    {t('exchange.pairsBalancePctHelp')}
-                  </p>
-                </div>
-              )}
             </div>
           ) : (
             /* ============================================================

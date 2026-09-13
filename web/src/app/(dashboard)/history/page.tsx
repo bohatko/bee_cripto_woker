@@ -15,6 +15,7 @@ import { supabase } from '@/lib/supabase/client';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { isUnfilledSimulation, resolveRealizedPnl, getTotalFeesUsd, getGrossPnlUsd } from '@/lib/positions';
 import { EquityGrowthChart } from '@/components/charts/EquityGrowthChart';
+import { PairTradingMarginSettings } from '@/components/history/PairTradingMarginSettings';
 
 export default function UserHistoryPage() {
   const { t, dateLocale, formatDateTime } = useLanguage();
@@ -159,6 +160,8 @@ export default function UserHistoryPage() {
           </span>
         </div>
       </div>
+
+      <PairTradingMarginSettings />
 
       {/* Realized PnL Growth Dynamics Chart (Strictly trade-by-trade, no exchange capital) */}
       <EquityGrowthChart

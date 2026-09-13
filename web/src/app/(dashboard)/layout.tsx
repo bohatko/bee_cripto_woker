@@ -149,14 +149,31 @@ export default function DashboardLayout({
     router.push('/login');
   };
 
-  const navItems = [
-    { name: t('nav.dashboard'), href: '/dashboard', icon: LayoutDashboard },
-    { name: t('nav.signals'), href: '/signals', icon: Radar },
-    { name: t('nav.profile'), href: '/settings/profile', icon: UserCog },
-    { name: t('nav.exchangeKeys'), href: '/settings/exchange', icon: KeyRound },
-    { name: t('nav.botTrades'), href: '/history/bot', icon: TrendingUp },
-    { name: t('nav.userTrades'), href: '/history', icon: History },
-    { name: t('nav.billing'), href: '/billing', icon: CreditCard },
+  const navSections: Array<{
+    label?: string;
+    items: Array<{ name: string; href: string; icon: typeof LayoutDashboard }>;
+  }> = [
+    {
+      items: [{ name: t('nav.dashboard'), href: '/dashboard', icon: LayoutDashboard }],
+    },
+    {
+      label: t('nav.sectionSignals'),
+      items: [{ name: t('nav.signals'), href: '/signals', icon: Radar }],
+    },
+    {
+      label: t('nav.sectionPairTrading'),
+      items: [
+        { name: t('nav.pairTrading'), href: '/history', icon: History },
+        { name: t('nav.pairBacktest'), href: '/history/bot', icon: TrendingUp },
+      ],
+    },
+    {
+      items: [
+        { name: t('nav.profile'), href: '/settings/profile', icon: UserCog },
+        { name: t('nav.exchangeKeys'), href: '/settings/exchange', icon: KeyRound },
+        { name: t('nav.billing'), href: '/billing', icon: CreditCard },
+      ],
+    },
   ];
 
   return (
@@ -195,28 +212,40 @@ export default function DashboardLayout({
           </div>
         </div>
 
-        <nav className="flex-1 px-3 py-2 space-y-1 overflow-y-auto">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-honey-500 text-dark-950 font-bold shadow-md shadow-honey-500/20'
-                    : 'text-slate-400 hover:text-white hover:bg-dark-850'
-                }`}
-              >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-dark-950' : 'text-slate-400'}`} />
-                {item.name}
-              </Link>
-            );
-          })}
+        <nav className="flex-1 px-3 py-2 space-y-3 overflow-y-auto">
+          {navSections.map((section, sectionIdx) => (
+            <div key={section.label || `section-${sectionIdx}`} className="space-y-1">
+              {section.label && (
+                <span className="px-3 text-[10px] uppercase tracking-wider font-mono text-slate-500 font-bold">
+                  {section.label}
+                </span>
+              )}
+              {section.items.map((item) => {
+                const Icon = item.icon;
+                const isActive =
+                  item.href === '/history'
+                    ? pathname === '/history'
+                    : pathname === item.href || pathname.startsWith(`${item.href}/`);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'bg-honey-500 text-dark-950 font-bold shadow-md shadow-honey-500/20'
+                        : 'text-slate-400 hover:text-white hover:bg-dark-850'
+                    }`}
+                  >
+                    <Icon className={`w-4 h-4 ${isActive ? 'text-dark-950' : 'text-slate-400'}`} />
+                    {item.name}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
 
           {profile?.role === 'admin' && (
-            <div className="pt-3 mt-3 border-t border-dark-800">
+            <div className="pt-3 mt-1 border-t border-dark-800">
               <span className="px-3 text-[10px] uppercase tracking-wider font-mono text-honey-400/80 font-bold">
                 {t('nav.adminPanel')}
               </span>
