@@ -245,18 +245,6 @@ export default function ProfileSettingsPage() {
         </div>
       </div>
 
-      <div className="bg-dark-900 border border-honey-500/30 rounded-2xl p-5 shadow-xl">
-        <div className="flex items-start gap-3">
-          <div className="p-2.5 rounded-xl bg-honey-500/10 text-honey-400 border border-honey-500/20">
-            <Bot className="w-5 h-5" />
-          </div>
-          <div>
-            <h3 className="text-sm font-bold text-white">{t('profile.telegram')}</h3>
-            <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">{t('profile.telegramHelp')}</p>
-          </div>
-        </div>
-      </div>
-
       <div className="bg-dark-900 border border-dark-800 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 border-b border-dark-800 gap-4">
           <div className="flex items-center gap-3">

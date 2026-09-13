@@ -11,6 +11,7 @@ export interface StrategyCombinedCardProps {
   liveState: any;
   isTradingOn: boolean;
   hideDetailsLink?: boolean;
+  settingsSlot?: React.ReactNode;
 }
 
 export function StrategyCombinedCard({
@@ -18,6 +19,7 @@ export function StrategyCombinedCard({
   liveState,
   isTradingOn,
   hideDetailsLink = true,
+  settingsSlot,
 }: StrategyCombinedCardProps) {
   const { t } = useLanguage();
 
@@ -266,6 +268,15 @@ export function StrategyCombinedCard({
           <span>100%</span>
         </div>
       </div>
+
+      {settingsSlot ? (
+        <div className="relative z-10 pt-4 border-t border-dark-800/90 space-y-3">
+          <h4 className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500 px-0.5">
+            {t('signals.settingsTitle')}
+          </h4>
+          {settingsSlot}
+        </div>
+      ) : null}
     </div>
   );
 }

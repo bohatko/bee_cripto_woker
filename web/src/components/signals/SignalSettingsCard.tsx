@@ -2,13 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  Sliders,
   Power,
   AlertTriangle,
   Bell,
   Percent,
-  Wallet,
-  HelpCircle,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
@@ -26,6 +23,8 @@ export interface SignalSettingsCardProps {
   freeMargin: number;
   hasOpenPosition: boolean;
   onSettingsUpdated: (newSettings: any) => void;
+  /** When true, omit outer card chrome (for embedding inside StrategyCombinedCard). */
+  embedded?: boolean;
 }
 
 export function SignalSettingsCard({
@@ -38,6 +37,7 @@ export function SignalSettingsCard({
   freeMargin,
   hasOpenPosition,
   onSettingsUpdated,
+  embedded = false,
 }: SignalSettingsCardProps) {
   const { t } = useLanguage();
   const [isEnabled, setIsEnabled] = useState(Boolean(initialSettings?.is_enabled));
@@ -149,12 +149,17 @@ export function SignalSettingsCard({
   };
 
   return (
-    <div className="bg-dark-900 border border-dark-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-5">
-      {/* Main Settings Grid */}
-      <div className="space-y-4">
+    <div
+      className={
+        embedded
+          ? 'space-y-3'
+          : 'bg-dark-900 border border-dark-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-5'
+      }
+    >
+      <div className="space-y-3">
         {/* Toggle Block */}
         <div
-          className={`rounded-xl p-3 sm:p-3.5 flex items-center justify-between gap-2.5 border ${
+          className={`rounded-xl p-3 flex items-center justify-between gap-2.5 border ${
             isEnabled
               ? 'bg-emerald-500/10 border-emerald-500/30'
               : 'bg-rose-500/10 border-rose-500/30'
@@ -162,9 +167,9 @@ export function SignalSettingsCard({
         >
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <span className="text-xs sm:text-sm font-bold text-white truncate">{t('signals.toggleTrading')}</span>
+              <span className="text-xs font-bold text-white truncate">{t('signals.toggleTrading')}</span>
             </div>
-            <span className="text-[10px] sm:text-[11px] text-slate-400 block mt-0.5 line-clamp-1">
+            <span className="text-[10px] text-slate-400 block mt-0.5 line-clamp-2">
               {t('signals.toggleDesc')}
             </span>
           </div>
@@ -184,13 +189,13 @@ export function SignalSettingsCard({
         </div>
 
         {/* Margin Allocation Slider */}
-        <div className="bg-dark-950 border border-dark-800 rounded-xl p-4 space-y-3">
-          <div className="flex justify-between items-center">
-            <span className="text-xs font-semibold text-white flex items-center gap-1.5">
-              <Percent className="w-4 h-4 text-honey-400" />
-              {t('signals.balancePctLabel')}
+        <div className="bg-dark-950 border border-dark-800 rounded-xl p-3 space-y-2.5">
+          <div className="flex justify-between items-center gap-2">
+            <span className="text-xs font-semibold text-white flex items-center gap-1.5 min-w-0">
+              <Percent className="w-3.5 h-3.5 text-honey-400 shrink-0" />
+              <span className="truncate">{t('signals.balancePctLabel')}</span>
             </span>
-            <span className="text-sm font-mono font-bold text-honey-400">
+            <span className="text-sm font-mono font-bold text-honey-400 shrink-0">
               {balancePct}%
             </span>
           </div>
@@ -207,9 +212,9 @@ export function SignalSettingsCard({
             className="w-full accent-honey-500 h-2 bg-dark-800 rounded-lg cursor-pointer"
           />
 
-          <div className="flex justify-between items-center text-[11px] font-mono text-slate-400 pt-1">
+          <div className="flex justify-between items-center gap-2 text-[10px] font-mono text-slate-400">
             <span>5%</span>
-            <span className="text-slate-300 font-bold">
+            <span className="text-slate-300 font-bold text-center truncate">
               {t('signals.simulatedMargin', { margin: estimatedMargin, notional: estimatedNotional })}
             </span>
             <span>100%</span>
@@ -217,11 +222,11 @@ export function SignalSettingsCard({
         </div>
 
         {/* Telegram Alerts Block */}
-        <div className="bg-dark-950 border border-dark-800 rounded-xl p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Bell className="w-4 h-4 text-honey-400" />
-              <span className="text-xs font-bold text-white">
+        <div className="bg-dark-950 border border-dark-800 rounded-xl p-3 space-y-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <Bell className="w-3.5 h-3.5 text-honey-400 shrink-0" />
+              <span className="text-xs font-bold text-white truncate">
                 {t('signals.telegramAlertsTitle')}
               </span>
             </div>
@@ -234,10 +239,10 @@ export function SignalSettingsCard({
                 setAlertReadiness(val);
                 await saveSettings({ alert_readiness_enabled: val });
               }}
-              className="w-4 h-4 accent-honey-500 rounded cursor-pointer"
+              className="w-4 h-4 accent-honey-500 rounded cursor-pointer shrink-0"
             />
           </div>
-          <p className="text-[11px] text-slate-400 leading-normal">
+          <p className="text-[10px] text-slate-400 leading-normal line-clamp-2">
             {t('signals.telegramAlertsDesc')}
           </p>
 
@@ -245,14 +250,14 @@ export function SignalSettingsCard({
             <span className="text-[10px] uppercase font-mono text-slate-500 block mb-2">
               {t('signals.thresholdsLabel')}
             </span>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-1.5">
               {[70, 80, 90, 95].map((th) => {
                 const active = thresholds.includes(th);
                 return (
                   <button
                     key={th}
                     onClick={() => handleThresholdToggle(th)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-colors ${
+                    className={`px-2 py-1 rounded-lg text-[11px] font-mono font-bold transition-colors ${
                       active
                         ? 'bg-honey-500/20 text-honey-400 border border-honey-500/40'
                         : 'bg-dark-800 text-slate-400 border border-dark-700 hover:text-slate-200'
@@ -267,15 +272,13 @@ export function SignalSettingsCard({
         </div>
 
         {/* Panic Close Button */}
-        <div className="bg-dark-950 border border-dark-800 rounded-xl p-3 sm:p-3.5 flex items-center justify-between gap-2.5">
+        <div className="bg-dark-950 border border-dark-800 rounded-xl p-3 flex items-center justify-between gap-2.5">
           <div className="min-w-0 flex-1">
             <span className="text-xs font-bold text-rose-400 block truncate">
               {t('signals.panicCloseButton')}
             </span>
-            <span className="text-[11px] text-slate-400 block mt-0.5 line-clamp-1">
-              {strategySymbol === 'ETH'
-                ? 'Немедленно закрывает активную позицию ETH по рынку и выключает авто-торговлю.'
-                : t('signals.panicCloseDesc')}
+            <span className="text-[10px] text-slate-400 block mt-0.5 line-clamp-2">
+              {t('signals.panicCloseDesc').replace('XRP', strategySymbol)}
             </span>
           </div>
 

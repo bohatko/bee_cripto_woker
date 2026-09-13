@@ -225,10 +225,13 @@ function SignalsContent() {
           </h2>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {strategies.map((strat) => {
             const uSettings = userSettingsMap[strat.id];
             const isTradingOn = Boolean(uSettings?.is_enabled);
+            const hasOpen = positions.some(
+              (p) => p.status === 'open' && p.symbol?.toUpperCase() === strat.symbol?.toUpperCase()
+            );
 
             return (
               <StrategyCombinedCard
@@ -237,59 +240,32 @@ function SignalsContent() {
                 liveState={strat.live_state}
                 isTradingOn={isTradingOn}
                 hideDetailsLink={true}
+                settingsSlot={
+                  user ? (
+                    <SignalSettingsCard
+                      userId={user.id}
+                      strategyId={strat.id}
+                      strategySymbol={strat.symbol}
+                      leverage={Number(strat.leverage || 3.0)}
+                      initialSettings={uSettings}
+                      primaryAccount={primaryAccount}
+                      freeMargin={freeMargin}
+                      hasOpenPosition={hasOpen}
+                      embedded
+                      onSettingsUpdated={(newSet) => {
+                        setUserSettingsMap((prev) => ({
+                          ...prev,
+                          [strat.id]: newSet,
+                        }));
+                      }}
+                    />
+                  ) : null
+                }
               />
             );
           })}
         </div>
       </div>
-
-      {/* Trading Settings per Coin (Both XRP & ETH side-by-side) */}
-      {user && (
-        <div className="space-y-4">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-white">
-            {t('signals.settingsTitle')}
-          </h2>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {strategies.map((strat) => {
-              const uSettings = userSettingsMap[strat.id];
-              const hasOpen = positions.some(
-                (p) => p.status === 'open' && p.symbol?.toUpperCase() === strat.symbol?.toUpperCase()
-              );
-
-              return (
-                <div key={strat.id} className="space-y-2">
-                  <div className="flex items-center justify-between px-1">
-                    <span className="text-xs font-bold font-mono text-honey-400">
-                      {strat.symbol}/USDT ({strat.leverage}x Isolated)
-                    </span>
-                    <span className="text-[10px] font-mono text-slate-500">
-                      Trigger: Drop ≥ {strat.config?.drop_pct}% / {strat.config?.window_minutes < 60 ? `${strat.config?.window_minutes}m` : strat.config?.window_minutes === 60 ? '1h' : `${Math.round(strat.config?.window_minutes / 60)}h`}
-                    </span>
-                  </div>
-
-                  <SignalSettingsCard
-                    userId={user.id}
-                    strategyId={strat.id}
-                    strategySymbol={strat.symbol}
-                    leverage={Number(strat.leverage || 3.0)}
-                    initialSettings={uSettings}
-                    primaryAccount={primaryAccount}
-                    freeMargin={freeMargin}
-                    hasOpenPosition={hasOpen}
-                    onSettingsUpdated={(newSet) => {
-                      setUserSettingsMap((prev) => ({
-                        ...prev,
-                        [strat.id]: newSet,
-                      }));
-                    }}
-                  />
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* Coin Filter for History and Signal Events Tables */}
       <div className="flex items-center justify-between border-t border-dark-800 pt-6">
