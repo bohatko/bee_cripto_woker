@@ -31,7 +31,7 @@ export const ru = {
     signOut: 'Выйти',
   },
   sidebar: {
-    tradingSaas: 'TRADING SAAS',
+    tradingSaas: 'Крипто пчелка',
     logoutTitle: 'Выход из Bee Crypto Worker',
     logoutDescription:
       'Вы уверены, что хотите выйти из торговой сессии? Активные фоновые сделки продолжат безопасно исполняться на сервере.',
@@ -760,7 +760,11 @@ export const ru = {
     filterAll: 'Все монеты',
     performanceChartTitle: 'Динамика PnL по сигналам',
     performanceChartSubtitle: 'Кумулятивный чистый реализованный PnL ваших сделок по Dip-Buy сигналам',
+    backtestChartTitle: 'Эквити бэктеста Dip-Buy',
+    backtestChartSubtitle:
+      'Master paper бэктест от $10,000 на монету с полным реинвестом после каждой закрытой сделки',
     noChartData: 'График появится после закрытия первой сделки по сигналам.',
+    tableMasterPnl: 'Master PnL',
     strategiesOverview: 'Монитор сигнальных стратегий',
   },
 };

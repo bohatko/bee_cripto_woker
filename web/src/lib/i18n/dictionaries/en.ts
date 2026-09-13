@@ -29,7 +29,7 @@ export const en = {
     signOut: 'Sign Out',
   },
   sidebar: {
-    tradingSaas: 'TRADING SAAS',
+    tradingSaas: 'Crypto Bee',
     logoutTitle: 'Sign Out of Bee Crypto Worker',
     logoutDescription:
       'Are you sure you want to exit your trading session? Your active background trades will continue to run safely on the server.',
@@ -756,7 +756,11 @@ export const en = {
     filterAll: 'All Coins',
     performanceChartTitle: 'Signal PnL Growth Dynamics',
     performanceChartSubtitle: 'Cumulative net realized PnL of your personal Dip-Buy signal executions',
+    backtestChartTitle: 'Dip-Buy Backtest Equity',
+    backtestChartSubtitle:
+      'Master paper backtest from $10,000 per coin with full compounding after every closed trade',
     noChartData: 'Chart will appear after your first closed signal trade.',
+    tableMasterPnl: 'Master PnL',
     strategiesOverview: 'Signal Strategies Monitor',
   },
 } as const;

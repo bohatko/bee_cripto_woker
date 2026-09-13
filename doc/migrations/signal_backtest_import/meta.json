@@ -1,0 +1,23 @@
+{
+  "events": 293,
+  "positions": 293,
+  "batches": 8,
+  "start_equity_per_coin_usd": 10000,
+  "runs": [
+    {
+      "coin": "XRP",
+      "n_trades": 77,
+      "final_equity_usd": 5067175.783747155
+    },
+    {
+      "coin": "BTC",
+      "n_trades": 62,
+      "final_equity_usd": 270683.6150705536
+    },
+    {
+      "coin": "ETH",
+      "n_trades": 154,
+      "final_equity_usd": 68066.46977606388
+    }
+  ]
+}

@@ -21,10 +21,12 @@ function SignalsContent() {
   const [freeMargin, setFreeMargin] = useState<number>(0);
   const [events, setEvents] = useState<any[]>([]);
   const [positions, setPositions] = useState<any[]>([]);
+  const [masterPositions, setMasterPositions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Filter for history tables & chart (ALL, XRP, ETH)
+  // Filter for history tables & chart (ALL, XRP, ETH, BTC)
   const [historyCoinFilter, setHistoryCoinFilter] = useState<string>('ALL');
+  const SIGNAL_BACKTEST_START_USD = 10000;
 
   async function loadData() {
     try {
@@ -75,21 +77,30 @@ function SignalsContent() {
         setFreeMargin(Number(acc.free_balance_usd ?? acc.last_balance_usd ?? 0));
       }
 
-      // 4. Fetch global signal events (all strategies)
+      // 4. Fetch global signal events (backtest + live)
       const { data: evs } = await supabase
         .from('signal_events')
         .select('*')
-        .order('created_at', { ascending: false })
-        .limit(60);
+        .order('signal_bar_ts', { ascending: false })
+        .limit(500);
       if (evs) setEvents(evs);
 
-      // 5. Fetch user signal positions (both XRP and ETH)
+      // 5. Fetch user signal positions
       const { data: pos } = await supabase
         .from('signal_positions')
         .select('*')
         .eq('user_id', authUser.id)
         .order('opened_at', { ascending: false });
       if (pos) setPositions(pos);
+
+      // 6. Fetch master paper / historical backtest positions
+      const { data: masters } = await supabase
+        .from('signal_positions')
+        .select('*')
+        .eq('is_master', true)
+        .order('opened_at', { ascending: false })
+        .limit(500);
+      if (masters) setMasterPositions(masters);
     } catch (err: any) {
       console.error('Error loading signals data:', err?.message || err);
     } finally {
@@ -140,16 +151,36 @@ function SignalsContent() {
     return events.filter((e) => (e.symbol || '').toUpperCase() === historyCoinFilter);
   }, [events, historyCoinFilter]);
 
-  const closedPositionsForChart = useMemo(() => {
+  const filteredMasterPositions = useMemo(() => {
+    if (historyCoinFilter === 'ALL') return masterPositions;
+    return masterPositions.filter((p) => (p.symbol || '').toUpperCase() === historyCoinFilter);
+  }, [masterPositions, historyCoinFilter]);
+
+  const closedMasterForChart = useMemo(() => {
+    return filteredMasterPositions.filter((p) => p.status === 'closed');
+  }, [filteredMasterPositions]);
+
+  const closedUserForChart = useMemo(() => {
     return filteredPositions.filter((p) => p.status === 'closed');
   }, [filteredPositions]);
 
-  // Total Realized Net PnL of all user signal trades
-  const totalUserSignalPnl = useMemo(() => {
-    return filteredPositions
-      .filter((p) => p.status === 'closed')
-      .reduce((acc, p) => acc + Number(p.realized_pnl_usd || 0), 0);
-  }, [filteredPositions]);
+  const chartPositions = closedMasterForChart.length > 0 ? closedMasterForChart : closedUserForChart;
+  const chartStartingBalance =
+    closedMasterForChart.length > 0
+      ? historyCoinFilter === 'ALL'
+        ? SIGNAL_BACKTEST_START_USD *
+          Math.max(1, new Set(closedMasterForChart.map((p) => String(p.symbol || '').toUpperCase())).size)
+        : SIGNAL_BACKTEST_START_USD
+      : 0;
+
+  // Prefer master backtest PnL for the global headline; fallback to user PnL
+  const totalSignalPnl = useMemo(() => {
+    const source =
+      filteredMasterPositions.length > 0
+        ? filteredMasterPositions.filter((p) => p.status === 'closed')
+        : filteredPositions.filter((p) => p.status === 'closed');
+    return source.reduce((acc, p) => acc + Number(p.realized_pnl_usd || 0), 0);
+  }, [filteredMasterPositions, filteredPositions]);
 
   if (loading) {
     return (
@@ -175,28 +206,38 @@ function SignalsContent() {
           </p>
         </div>
 
-        {/* Global Signal PnL Pill (same style as in /history/bot) */}
+        {/* Global Signal PnL Pill (master backtest when available) */}
         <div className="bg-dark-900 border border-dark-800 px-4 py-2.5 rounded-xl flex items-center gap-3 shadow-lg shrink-0">
           <span className="text-xs text-slate-400 font-mono">{t('signals.realizedPnl')}</span>
           <span
             className={`font-mono font-black text-base ${
-              totalUserSignalPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'
+              totalSignalPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'
             }`}
           >
-            {totalUserSignalPnl >= 0
-              ? `+$${totalUserSignalPnl.toLocaleString(dateLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-              : `-$${Math.abs(totalUserSignalPnl).toLocaleString(dateLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            {totalSignalPnl >= 0
+              ? `+$${totalSignalPnl.toLocaleString(dateLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+              : `-$${Math.abs(totalSignalPnl).toLocaleString(dateLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           </span>
         </div>
       </div>
 
-      {/* User's Personal Signal Equity / PnL Growth Chart (shows if user has trades) */}
-      {closedPositionsForChart.length > 0 ? (
+      {/* Master backtest equity ($10k/coin, compounded) or user PnL fallback */}
+      {chartPositions.length > 0 ? (
         <EquityGrowthChart
-          positions={closedPositionsForChart}
-          mode="pnl"
-          title={t('signals.performanceChartTitle')}
-          subtitle={t('signals.performanceChartSubtitle')}
+          positions={chartPositions}
+          mode={closedMasterForChart.length > 0 ? 'equity' : 'pnl'}
+          startingBalance={chartStartingBalance}
+          isMaster={closedMasterForChart.length > 0}
+          title={
+            closedMasterForChart.length > 0
+              ? t('signals.backtestChartTitle')
+              : t('signals.performanceChartTitle')
+          }
+          subtitle={
+            closedMasterForChart.length > 0
+              ? t('signals.backtestChartSubtitle')
+              : t('signals.performanceChartSubtitle')
+          }
         />
       ) : (
         <div className="bg-dark-900 border border-dark-800 rounded-2xl p-6 text-center space-y-2">
@@ -210,8 +251,10 @@ function SignalsContent() {
         </div>
       )}
 
-      {/* Overall Performance Summary Cards */}
-      <SignalStatsCards positions={filteredPositions} />
+      {/* Overall Performance Summary Cards (master backtest preferred) */}
+      <SignalStatsCards
+        positions={filteredMasterPositions.length > 0 ? filteredMasterPositions : filteredPositions}
+      />
 
       {/* Active Open Positions across all signal strategies */}
       <SignalPositionsTable positions={positions} mode="open" />
@@ -294,11 +337,15 @@ function SignalsContent() {
         </div>
       </div>
 
-      {/* Closed Positions History (История моих сделок) */}
+      {/* Closed Positions History (personal executions) */}
       <SignalPositionsTable positions={filteredPositions} mode="closed" />
 
-      {/* Global Signal Events Log (Глобальный журнал сигналов) */}
-      <SignalEventsTable events={filteredEvents} userPositions={filteredPositions} />
+      {/* Global Signal Events Log (backtest + live master journal) */}
+      <SignalEventsTable
+        events={filteredEvents}
+        userPositions={filteredPositions}
+        masterPositions={filteredMasterPositions}
+      />
     </div>
   );
 }

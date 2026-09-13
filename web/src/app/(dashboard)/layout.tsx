@@ -10,7 +10,6 @@ import {
   TrendingUp,
   CreditCard,
   LogOut,
-  User,
   ShieldAlert,
   UserCog,
   Radar,
@@ -169,7 +168,6 @@ export default function DashboardLayout({
     },
     {
       items: [
-        { name: t('nav.profile'), href: '/settings/profile', icon: UserCog },
         { name: t('nav.exchangeKeys'), href: '/settings/exchange', icon: KeyRound },
         { name: t('nav.billing'), href: '/billing', icon: CreditCard },
       ],
@@ -189,14 +187,25 @@ export default function DashboardLayout({
           </div>
         </div>
 
-        <div className="p-4 mx-3 my-3 bg-dark-950/80 border border-dark-800 rounded-xl">
+        <Link
+          href="/settings/profile"
+          className={`p-4 mx-3 my-3 bg-dark-950/80 border rounded-xl transition-colors block ${
+            pathname === '/settings/profile' || pathname.startsWith('/settings/profile/')
+              ? 'border-honey-500/40 bg-honey-500/5'
+              : 'border-dark-800 hover:border-dark-700 hover:bg-dark-900/80'
+          }`}
+        >
           <div className="flex items-center gap-2 mb-1.5">
-            <User className="w-4 h-4 text-honey-400" />
+            <UserCog className="w-4 h-4 text-honey-400 shrink-0" />
             <span className="text-xs font-semibold text-white truncate">
               {profile?.full_name || user?.email?.split('@')[0] || t('common.trader')}
+              {profile?.role === 'admin' ? ' (Admin)' : ''}
+            </span>
+            <span className="ml-auto text-[10px] font-mono uppercase tracking-wide text-honey-400/80 shrink-0">
+              {t('nav.profile')}
             </span>
           </div>
-          <div className="flex items-center justify-between text-[11px] font-mono">
+          <div className="flex items-center justify-start gap-2 text-[11px] font-mono">
             <span className="text-slate-500">{t('common.status')}:</span>
             <span
               className={`px-1.5 py-0.5 rounded uppercase font-semibold ${
@@ -210,7 +219,7 @@ export default function DashboardLayout({
               {profile?.subscription_status || t('common.trial')}
             </span>
           </div>
-        </div>
+        </Link>
 
         <nav className="flex-1 px-3 py-2 space-y-3 overflow-y-auto">
           {navSections.map((section, sectionIdx) => (

@@ -101,7 +101,7 @@ export function EquityGrowthChart({
         fullDate: closedDate.toLocaleString(dateLocale),
         equity: Math.round(runningVal * 100) / 100,
         tradePnl: pnlUsd,
-        pair: pos.pair_symbol,
+        pair: pos.pair_symbol || pos.symbol,
         exitReason: pos.exit_reason,
       });
     });
