@@ -690,9 +690,9 @@ export const ru = {
     replaceFailedToast: 'Не удалось заменить пару',
   },
   signals: {
-    title: 'Сигналы: XRP Dip-Buy 24h',
-    subtitle: 'Автономный модуль выкупа проливов XRP с изолированным плечом 3x, TP +4% и SL -30%.',
-    readinessCardTitle: 'Готовность XRP Dip-Buy',
+    title: 'Сигналы: Dip-Buy Multi-Asset',
+    subtitle: 'Автономный модуль выкупа проливов XRP, ETH и BTC с изолированным плечом, TP и SL.',
+    readinessCardTitle: 'Готовность Dip-Buy',
     liveWorkerTicker: 'Тикер воркера 1m',
     currentPrice: 'Текущая цена',
     rollingMax: '24h максимум',

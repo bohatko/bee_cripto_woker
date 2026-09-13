@@ -47,9 +47,15 @@ export function SignalStrategyHeader({ strategy }: SignalStrategyHeaderProps) {
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 font-mono mt-0.5">
-                {strategy?.symbol === 'ETH'
-                  ? `ETH Dip-Buy • Drop ≥ ${config.drop_pct}% / ${config.window_minutes}m • TP +${config.tp_pct}% • SL -${config.sl_pct}%`
-                  : `XRP Dip-Buy • Drop ≥ ${config.drop_pct}% / 24h • TP +${config.tp_pct}% • SL -${config.sl_pct}%`}
+                {strategy?.symbol || 'Dip-Buy'} • Drop ≥ {config.drop_pct}% /{' '}
+                {config.window_minutes < 60
+                  ? `${config.window_minutes}m`
+                  : config.window_minutes === 60
+                    ? '1h'
+                    : config.window_minutes === 1440
+                      ? '24h'
+                      : `${Math.round(config.window_minutes / 60)}h`}{' '}
+                • TP +{config.tp_pct}% • SL -{config.sl_pct}%
               </p>
             </div>
           </div>

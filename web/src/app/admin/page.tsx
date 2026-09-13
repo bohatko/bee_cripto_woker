@@ -37,6 +37,7 @@ import { toast } from '@/components/ui/sonner';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { LanguageSwitcher } from '@/lib/i18n/LanguageSwitcher';
 import { isUnfilledSimulation, getDisplayPnlUsd } from '@/lib/positions';
+import { signalPriceDecimals } from '@/lib/signals';
 import { LineChart, Line } from 'recharts';
 
 export default function AdminDashboardPage() {
@@ -1544,10 +1545,10 @@ export default function AdminDashboardPage() {
                             -{Number(ev.drop_pct || 0).toFixed(2)}%
                           </td>
                           <td className="py-2.5 px-3 text-slate-300">
-                            ${Number(ev.signal_close || 0).toFixed(ev.symbol === 'ETH' ? 2 : 4)}
+                            ${Number(ev.signal_close || 0).toFixed(signalPriceDecimals(ev.symbol))}
                           </td>
                           <td className="py-2.5 px-3 text-slate-300">
-                            ${Number(ev.reference_entry_price || 0).toFixed(ev.symbol === 'ETH' ? 2 : 4)}
+                            ${Number(ev.reference_entry_price || 0).toFixed(signalPriceDecimals(ev.symbol))}
                           </td>
                           <td className="py-2.5 px-3">
                             <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">

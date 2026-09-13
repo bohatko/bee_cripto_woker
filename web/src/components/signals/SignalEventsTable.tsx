@@ -3,6 +3,7 @@
 import React from 'react';
 import { History, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { signalPriceDecimals } from '@/lib/signals';
 
 export interface SignalEventsTableProps {
   events: any[];
@@ -61,10 +62,10 @@ export function SignalEventsTable({ events, userPositions }: SignalEventsTablePr
                       -{Number(ev.drop_pct || 0).toFixed(2)}%
                     </td>
                     <td className="py-3 px-3 text-slate-300">
-                      ${Number(ev.signal_close || 0).toFixed(ev.symbol === 'ETH' ? 2 : 4)}
+                      ${Number(ev.signal_close || 0).toFixed(signalPriceDecimals(ev.symbol))}
                     </td>
                     <td className="py-3 px-3 text-slate-300">
-                      ${Number(ev.reference_entry_price || 0).toFixed(ev.symbol === 'ETH' ? 2 : 4)}
+                      ${Number(ev.reference_entry_price || 0).toFixed(signalPriceDecimals(ev.symbol))}
                     </td>
                     <td className="py-3 px-3">
                       <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">

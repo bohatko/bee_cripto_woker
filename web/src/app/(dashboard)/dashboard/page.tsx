@@ -47,6 +47,7 @@ export default function DashboardPage() {
   const [isToggleModalOpen, setIsToggleModalOpen] = useState(false);
   const [isPanicModalOpen, setIsPanicModalOpen] = useState(false);
   const [isMissingExchangeModalOpen, setIsMissingExchangeModalOpen] = useState(false);
+  const [signalStrategyIds, setSignalStrategyIds] = useState<string[]>([]);
 
   async function loadDashboardData() {
     const {
@@ -120,6 +121,23 @@ export default function DashboardPage() {
 
     if (basket) setActiveBasket(basket);
     if (mData) setMarketData(mData);
+
+    // 5. Enabled Dip-Buy signal strategies (dynamic: XRP / ETH / BTC / ...)
+    const { data: signalStrats } = await supabase
+      .from('signal_strategies')
+      .select('id, symbol, is_enabled')
+      .eq('is_enabled', true);
+
+    if (signalStrats && signalStrats.length > 0) {
+      const sorted = [...signalStrats].sort((a, b) => {
+        if (a.symbol === 'XRP') return -1;
+        if (b.symbol === 'XRP') return 1;
+        return String(a.symbol).localeCompare(String(b.symbol));
+      });
+      setSignalStrategyIds(sorted.map((s) => s.id));
+    } else {
+      setSignalStrategyIds([]);
+    }
 
     setLoading(false);
 
@@ -810,11 +828,14 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Dip-Buy Signal Readiness Cards (XRP & ETH) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <SignalReadinessCard userId={currentUser?.id} strategyId="xrp_dip_buy_v1" />
-        <SignalReadinessCard userId={currentUser?.id} strategyId="eth_dip_buy_v1" />
-      </div>
+      {/* Dip-Buy Signal Readiness Cards (all enabled strategies) */}
+      {signalStrategyIds.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+          {signalStrategyIds.map((strategyId) => (
+            <SignalReadinessCard key={strategyId} userId={currentUser?.id} strategyId={strategyId} />
+          ))}
+        </div>
+      )}
 
       <TradeReadinessMonitor
         marketData={marketData}

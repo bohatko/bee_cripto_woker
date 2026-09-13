@@ -1,5 +1,5 @@
 import type http from 'node:http';
-import { CONFIG } from './config.js';
+import { CONFIG, supabase } from './config.js';
 import { startInternalApiServer } from './api/internal-server.js';
 import { MarketScanner } from './engine/market-scanner.js';
 import { OrderRouter } from './engine/order-router.js';
@@ -11,6 +11,40 @@ import { pairRegistry } from './exchanges/pair-registry.js';
 import { DipBuyScanner } from './signals/dip-buy-scanner.js';
 import { DipBuyRouter } from './signals/dip-buy-router.js';
 import { DipBuyGuard } from './signals/dip-buy-guard.js';
+
+type DipBuyEngine = {
+  strategyId: string;
+  symbol: string;
+  scanner: DipBuyScanner;
+  guard: DipBuyGuard;
+};
+
+async function loadDipBuyEngines(dipRouter: DipBuyRouter): Promise<DipBuyEngine[]> {
+  const { data, error } = await supabase
+    .from('signal_strategies')
+    .select('id, symbol, is_enabled')
+    .eq('is_enabled', true);
+
+  if (error) {
+    throw new Error(`Failed to load signal_strategies: ${error.message}`);
+  }
+
+  const engines: DipBuyEngine[] = [];
+  for (const row of data || []) {
+    const strategyId = String(row.id);
+    const symbol = String(row.symbol || '').toUpperCase();
+    if (!strategyId || !symbol) continue;
+
+    const scanner = new DipBuyScanner(strategyId, symbol);
+    const guard = new DipBuyGuard(scanner.getBuffer(), strategyId, symbol, CONFIG.dipGuardIntervalMs);
+    scanner.onSignal(async (signalPayload) => {
+      await dipRouter.handleSignal(signalPayload);
+    });
+    engines.push({ strategyId, symbol, scanner, guard });
+  }
+
+  return engines;
+}
 
 async function main() {
   console.log('====================================================');
@@ -35,20 +69,9 @@ async function main() {
   const billingCron = new BillingCronJob(CONFIG.billingCronIntervalMs);
   const pairSelection = new PairSelectionJob(60_000);
 
-  // Dip-Buy Signals Engines (XRP 24h & ETH 1h)
-  const xrpScanner = new DipBuyScanner('xrp_dip_buy_v1', 'XRP');
-  const ethScanner = new DipBuyScanner('eth_dip_buy_v1', 'ETH');
+  // Dip-Buy Signals Engines (loaded from signal_strategies)
   const dipRouter = new DipBuyRouter();
-  const xrpGuard = new DipBuyGuard(xrpScanner.getBuffer(), 'xrp_dip_buy_v1', 'XRP', CONFIG.dipGuardIntervalMs);
-  const ethGuard = new DipBuyGuard(ethScanner.getBuffer(), 'eth_dip_buy_v1', 'ETH', CONFIG.dipGuardIntervalMs);
-
-  xrpScanner.onSignal(async (signalPayload) => {
-    await dipRouter.handleSignal(signalPayload);
-  });
-
-  ethScanner.onSignal(async (signalPayload) => {
-    await dipRouter.handleSignal(signalPayload);
-  });
+  let dipEngines: DipBuyEngine[] = [];
 
   // Wire signal listener to order router
   scanner.onSignal(async (signal) => {
@@ -64,8 +87,10 @@ async function main() {
 
     // 3. Pre-load 1m history for Dip-Buy Signals engines
     if (CONFIG.dipBuyEnabled) {
-      await xrpScanner.initHistory();
-      await ethScanner.initHistory();
+      dipEngines = await loadDipBuyEngines(dipRouter);
+      for (const engine of dipEngines) {
+        await engine.scanner.initHistory();
+      }
     }
 
     // 4. Perform initial scan
@@ -80,11 +105,12 @@ async function main() {
     pairSelection.start();
 
     if (CONFIG.dipBuyEnabled) {
-      xrpScanner.start();
-      ethScanner.start();
-      xrpGuard.start();
-      ethGuard.start();
-      console.log('📡 Dip-Buy Signals Engines started (XRP & ETH Scanners & Guards active).');
+      for (const engine of dipEngines) {
+        engine.scanner.start();
+        engine.guard.start();
+      }
+      const symbols = dipEngines.map((e) => e.symbol).join(', ') || 'none';
+      console.log(`📡 Dip-Buy Signals Engines started (${symbols}).`);
     }
 
     console.log('🚀 All worker modules initialized and running successfully.');
@@ -99,10 +125,10 @@ async function main() {
       pairSelection.stop();
       pairRegistry.stop();
       if (CONFIG.dipBuyEnabled) {
-        xrpScanner.stop();
-        ethScanner.stop();
-        xrpGuard.stop();
-        ethGuard.stop();
+        for (const engine of dipEngines) {
+          engine.scanner.stop();
+          engine.guard.stop();
+        }
       }
       if (apiServer) {
         apiServer.close(() => process.exit(0));

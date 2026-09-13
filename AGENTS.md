@@ -53,7 +53,7 @@ bee_cripto_woker/
     │   ├── security/          # Шифрование AES-256-GCM
 │   ├── exchanges/         # Фабрика CCXT, PairRegistry, маппинг тикеров
 │   ├── engine/            # Сканер рынка (EMA10), роутер ордеров и риск-гард
-│   ├── signals/           # Модуль сигналов Dip-Buy XRP 24h (буфер, сканер, роутер, гард, алерты)
+│   ├── signals/           # Модуль сигналов Dip-Buy (XRP/ETH/BTC: буфер, сканер, роутер, гард, алерты)
 │   ├── jobs/              # Health Check, Billing Cron, PairSelection (momentum)
 │   └── types/             # TypeScript-интерфейсы
     └── tsconfig.json
@@ -103,7 +103,7 @@ bee_cripto_woker/
 > **Аудит 2026-09-07:** динамический momentum-отбор walk-forward **хуже** статичной корзины (−806% vs −211% margin PnL) — гейт авторотации **FAIL**; держать `auto_rotation_enabled=false` до улучшения скринера.
 
 5. **Модуль сигналов Dip-Buy (`doc/07_SIGNALS_DIP_BUY_XRP.md`)**:
-   * Независимый торговый движок сигналов (XRP 24h: drop $\ge 15\%$, 3.0x, TP +4%, SL -30%; ETH 1h: drop $\ge 5\%$, 1.75x, TP +2%, SL -15%).
+   * Независимый торговый движок сигналов (XRP 24h: drop $\ge 15\%$, 3.0x, TP +4%, SL -30%; ETH 1h: drop $\ge 5\%$, 1.75x, TP +2%, SL -15%; BTC 7m: drop $\ge 3\%$, 3.0x, TP +3%, SL -12%).
    * Выходы: биржевые reduce-only ордера Take-Profit и Stop-Loss.
    * Master Paper Benchmark позиция открывается на каждый подтвержденный сигнал ($20k reference margin).
    * Fan-out исполнение сделок пользователям с включенным тумблером в `/signals`.

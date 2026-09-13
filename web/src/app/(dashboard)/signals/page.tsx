@@ -167,7 +167,7 @@ function SignalsContent() {
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
             {t('signals.title')}
             <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-honey-500/15 text-honey-400 border border-honey-500/30">
-              Multi-Asset (XRP + ETH)
+              Multi-Asset ({strategies.map((s) => s.symbol).join(' + ') || '—'})
             </span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">

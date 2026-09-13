@@ -61,6 +61,14 @@ VALUES (
     1.75,
     '{"drop_pct": 5, "window_minutes": 60, "tp_pct": 2, "sl_pct": 15, "reference_margin_usd": 20000}'::jsonb,
     true
+), (
+    'btc_dip_buy_v1',
+    'BTC Dip-Buy 7m',
+    'BTC',
+    'long',
+    3.0,
+    '{"drop_pct": 3, "window_minutes": 7, "tp_pct": 3, "sl_pct": 12, "reference_margin_usd": 20000}'::jsonb,
+    true
 )
 ON CONFLICT (id) DO NOTHING;
 

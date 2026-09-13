@@ -686,9 +686,9 @@ export const en = {
     replaceFailedToast: 'Failed to replace pair',
   },
   signals: {
-    title: 'Signals: XRP Dip-Buy 24h',
-    subtitle: 'Autonomous Dip-Buy engine on XRP with isolated 3x leverage, +4% Take Profit and -30% Stop Loss.',
-    readinessCardTitle: 'XRP Dip-Buy Readiness',
+    title: 'Signals: Dip-Buy Multi-Asset',
+    subtitle: 'Autonomous Dip-Buy engines on XRP, ETH and BTC with isolated leverage, Take Profit and Stop Loss.',
+    readinessCardTitle: 'Dip-Buy Readiness',
     liveWorkerTicker: 'Live 1m Ticker',
     currentPrice: 'Current Price',
     rollingMax: '24h High (Max)',

@@ -3,6 +3,7 @@
 import React from 'react';
 import { Layers, ArrowUpRight, TrendingUp, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { signalPriceDecimals } from '@/lib/signals';
 
 export interface SignalPositionsTableProps {
   positions: any[];
@@ -90,19 +91,19 @@ export function SignalPositionsTable({ positions, mode = 'all' }: SignalPosition
                     <div>
                       <span className="text-slate-500 block">{t('signals.entryPrice')}</span>
                       <span className="text-white font-bold">
-                        ${Number(pos.entry_price || 0).toFixed(pos.symbol === 'ETH' ? 2 : 4)}
+                        ${Number(pos.entry_price || 0).toFixed(signalPriceDecimals(pos.symbol))}
                       </span>
                     </div>
                     <div>
                       <span className="text-slate-500 block">{t('signals.tpPrice')}</span>
                       <span className="text-emerald-400 font-bold">
-                        ${Number(pos.tp_price || 0).toFixed(pos.symbol === 'ETH' ? 2 : 4)}
+                        ${Number(pos.tp_price || 0).toFixed(signalPriceDecimals(pos.symbol))}
                       </span>
                     </div>
                     <div>
                       <span className="text-slate-500 block">{t('signals.slPrice')}</span>
                       <span className="text-rose-400 font-bold">
-                        ${Number(pos.sl_price || 0).toFixed(pos.symbol === 'ETH' ? 2 : 4)}
+                        ${Number(pos.sl_price || 0).toFixed(signalPriceDecimals(pos.symbol))}
                       </span>
                     </div>
                   </div>
@@ -174,8 +175,8 @@ export function SignalPositionsTable({ positions, mode = 'all' }: SignalPosition
                           ${Number(pos.allocated_margin_usd || 0).toFixed(2)}
                         </td>
                         <td className="py-3 px-3 text-slate-300">
-                          ${Number(pos.entry_price || 0).toFixed(pos.symbol === 'ETH' ? 2 : 4)} ➔ $
-                          {Number(pos.exit_price || 0).toFixed(pos.symbol === 'ETH' ? 2 : 4)}
+                          ${Number(pos.entry_price || 0).toFixed(signalPriceDecimals(pos.symbol))} ➔ $
+                          {Number(pos.exit_price || 0).toFixed(signalPriceDecimals(pos.symbol))}
                         </td>
                         <td className="py-3 px-3">
                           {renderReasonBadge(pos.exit_reason)}

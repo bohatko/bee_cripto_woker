@@ -6,6 +6,7 @@ import { Radar, ArrowUpRight, ShieldAlert, Sparkles, AlertCircle } from 'lucide-
 import { supabase } from '@/lib/supabase/client';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { playWarningSound } from '@/lib/sound';
+import { signalPriceDecimals } from '@/lib/signals';
 
 export interface SignalReadinessCardProps {
   userId?: string;
@@ -185,7 +186,7 @@ export function SignalReadinessCard({
             {t('signals.currentPrice')}
           </span>
           <span className="text-sm font-bold font-mono text-white">
-            ${liveState.price > 0 ? liveState.price.toFixed(strategy?.symbol === 'ETH' ? 2 : 4) : '---'}
+            ${liveState.price > 0 ? liveState.price.toFixed(signalPriceDecimals(strategy?.symbol)) : '---'}
           </span>
         </div>
 
@@ -198,7 +199,7 @@ export function SignalReadinessCard({
               : `${Math.round((strategy?.config?.window_minutes || 1440) / 60)}h High`}
           </span>
           <span className="text-sm font-bold font-mono text-slate-300">
-            ${liveState.rolling_max > 0 ? liveState.rolling_max.toFixed(strategy?.symbol === 'ETH' ? 2 : 4) : '---'}
+            ${liveState.rolling_max > 0 ? liveState.rolling_max.toFixed(signalPriceDecimals(strategy?.symbol)) : '---'}
           </span>
         </div>
 

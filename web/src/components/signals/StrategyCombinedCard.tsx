@@ -4,6 +4,7 @@ import React from 'react';
 import { Radar, ArrowUpRight, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { signalPriceDecimals } from '@/lib/signals';
 
 export interface StrategyCombinedCardProps {
   strategy: any;
@@ -179,7 +180,7 @@ export function StrategyCombinedCard({
             {t('signals.currentPrice')}
           </span>
           <span className="text-sm font-bold font-mono text-white">
-            ${liveState?.price > 0 ? liveState.price.toFixed(symbol === 'ETH' ? 2 : 4) : '---'}
+            ${liveState?.price > 0 ? liveState.price.toFixed(signalPriceDecimals(symbol)) : '---'}
           </span>
         </div>
 
@@ -188,7 +189,7 @@ export function StrategyCombinedCard({
             {windowLabel} High
           </span>
           <span className="text-sm font-bold font-mono text-slate-300">
-            ${liveState?.rolling_max > 0 ? liveState.rolling_max.toFixed(symbol === 'ETH' ? 2 : 4) : '---'}
+            ${liveState?.rolling_max > 0 ? liveState.rolling_max.toFixed(signalPriceDecimals(symbol)) : '---'}
           </span>
         </div>
 
