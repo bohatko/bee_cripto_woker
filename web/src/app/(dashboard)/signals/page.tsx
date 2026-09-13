@@ -112,14 +112,14 @@ function SignalsContent() {
   }, [positions, historyCoinFilter]);
 
   const closedPositionsForChart = useMemo(() => {
-    return filteredPositions.filter((p) => p.status === 'closed');
-  }, [filteredPositions]);
+    return positions.filter((p) => p.status === 'closed');
+  }, [positions]);
 
   const totalUserSignalPnl = useMemo(() => {
-    return filteredPositions
+    return positions
       .filter((p) => p.status === 'closed')
       .reduce((acc, p) => acc + Number(p.realized_pnl_usd || 0), 0);
-  }, [filteredPositions]);
+  }, [positions]);
 
   if (loading) {
     return (
@@ -161,6 +161,27 @@ function SignalsContent() {
           </span>
         </div>
       </div>
+
+      {closedPositionsForChart.length > 0 ? (
+        <EquityGrowthChart
+          positions={closedPositionsForChart}
+          mode="pnl"
+          title={t('signals.performanceChartTitle')}
+          subtitle={t('signals.performanceChartSubtitle')}
+        />
+      ) : (
+        <div className="bg-dark-900 border border-dark-800 rounded-2xl p-6 text-center space-y-2">
+          <div className="w-10 h-10 rounded-xl bg-honey-500/10 border border-honey-500/25 flex items-center justify-center text-honey-400 mx-auto">
+            <Sparkles className="w-5 h-5" />
+          </div>
+          <h3 className="text-sm font-bold text-white">{t('signals.performanceChartTitle')}</h3>
+          <p className="text-xs font-mono text-slate-400 max-w-md mx-auto">
+            {t('signals.noChartData')}
+          </p>
+        </div>
+      )}
+
+      <SignalStatsCards positions={positions} />
 
       <div className="space-y-4">
         <div className="flex items-center gap-2">
@@ -213,27 +234,6 @@ function SignalsContent() {
       </div>
 
       <SignalPositionsTable positions={positions} mode="open" />
-
-      {closedPositionsForChart.length > 0 ? (
-        <EquityGrowthChart
-          positions={closedPositionsForChart}
-          mode="pnl"
-          title={t('signals.performanceChartTitle')}
-          subtitle={t('signals.performanceChartSubtitle')}
-        />
-      ) : (
-        <div className="bg-dark-900 border border-dark-800 rounded-2xl p-6 text-center space-y-2">
-          <div className="w-10 h-10 rounded-xl bg-honey-500/10 border border-honey-500/25 flex items-center justify-center text-honey-400 mx-auto">
-            <Sparkles className="w-5 h-5" />
-          </div>
-          <h3 className="text-sm font-bold text-white">{t('signals.performanceChartTitle')}</h3>
-          <p className="text-xs font-mono text-slate-400 max-w-md mx-auto">
-            {t('signals.noChartData')}
-          </p>
-        </div>
-      )}
-
-      <SignalStatsCards positions={filteredPositions} />
 
       <div className="flex items-center justify-between border-t border-dark-800 pt-6">
         <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
