@@ -20,6 +20,7 @@ export const en = {
     tradeHistory: 'Trade History',
     billing: 'Billing & Invoices',
     signals: 'Signals',
+    signalsBacktest: 'Dip-Buy Backtest',
     sectionSignals: 'Signals (Dip-Buy)',
     sectionPairTrading: 'Pair Trading',
     pairTrading: 'My Pair Trades',
@@ -759,6 +760,9 @@ export const en = {
     backtestChartTitle: 'Dip-Buy Backtest Equity',
     backtestChartSubtitle:
       'Master paper backtest from $10,000 per coin with full compounding after every closed trade',
+    backtestPageTitle: 'Dip-Buy Backtest',
+    backtestPageSubtitle:
+      'Historical master paper equity and the global signal journal for BTC, ETH and XRP.',
     noChartData: 'Chart will appear after your first closed signal trade.',
     tableMasterPnl: 'Master PnL',
     strategiesOverview: 'Signal Strategies Monitor',

@@ -22,6 +22,7 @@ export const ru = {
     tradeHistory: 'История сделок',
     billing: 'Оплата и инвойсы',
     signals: 'Сигналы',
+    signalsBacktest: 'Бэктест Dip-Buy',
     sectionSignals: 'Сигналы (Dip-Buy)',
     sectionPairTrading: 'Парный трейдинг',
     pairTrading: 'Мои сделки',
@@ -763,6 +764,9 @@ export const ru = {
     backtestChartTitle: 'Эквити бэктеста Dip-Buy',
     backtestChartSubtitle:
       'Master paper бэктест от $10,000 на монету с полным реинвестом после каждой закрытой сделки',
+    backtestPageTitle: 'Бэктест Dip-Buy',
+    backtestPageSubtitle:
+      'Историческая эквити master paper и глобальный журнал сигналов по BTC, ETH и XRP.',
     noChartData: 'График появится после закрытия первой сделки по сигналам.',
     tableMasterPnl: 'Master PnL',
     strategiesOverview: 'Монитор сигнальных стратегий',

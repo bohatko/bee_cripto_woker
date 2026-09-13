@@ -157,7 +157,10 @@ export default function DashboardLayout({
     },
     {
       label: t('nav.sectionSignals'),
-      items: [{ name: t('nav.signals'), href: '/signals', icon: Radar }],
+      items: [
+        { name: t('nav.signals'), href: '/signals', icon: Radar },
+        { name: t('nav.signalsBacktest'), href: '/signals/backtest', icon: TrendingUp },
+      ],
     },
     {
       label: t('nav.sectionPairTrading'),
@@ -232,8 +235,8 @@ export default function DashboardLayout({
               {section.items.map((item) => {
                 const Icon = item.icon;
                 const isActive =
-                  item.href === '/history'
-                    ? pathname === '/history'
+                  item.href === '/history' || item.href === '/signals'
+                    ? pathname === item.href
                     : pathname === item.href || pathname.startsWith(`${item.href}/`);
                 return (
                   <Link
