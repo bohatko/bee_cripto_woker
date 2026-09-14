@@ -217,22 +217,22 @@ export function SignalReadinessCard({
         </div>
       </div>
 
-      {/* Metrics */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 relative z-10">
-        <div className="bg-dark-950/70 border border-dark-800/80 rounded-xl p-2.5">
-          <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-mono">
-            {t('signals.currentPrice')}
+      {/* Metrics — always 2×2 on dashboard card; compact labels */}
+      <div className="grid grid-cols-2 gap-2 relative z-10">
+        <div className="bg-dark-950/70 border border-dark-800/80 rounded-lg px-2.5 py-2 min-w-0">
+          <span className="text-[9px] text-slate-500 uppercase tracking-wide block font-mono truncate">
+            {t('signals.metricPrice')}
           </span>
-          <span className="text-sm font-bold font-mono text-white">
+          <span className="text-xs sm:text-sm font-bold font-mono text-white tabular-nums">
             ${liveState.price > 0 ? liveState.price.toFixed(signalPriceDecimals(symbol)) : '---'}
           </span>
         </div>
 
-        <div className="bg-dark-950/70 border border-dark-800/80 rounded-xl p-2.5">
-          <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-mono">
-            {windowLabel} High
+        <div className="bg-dark-950/70 border border-dark-800/80 rounded-lg px-2.5 py-2 min-w-0">
+          <span className="text-[9px] text-slate-500 uppercase tracking-wide block font-mono truncate">
+            {t('signals.metricHigh', { window: windowLabel })}
           </span>
-          <span className="text-sm font-bold font-mono text-slate-300">
+          <span className="text-xs sm:text-sm font-bold font-mono text-slate-300 tabular-nums">
             $
             {liveState.rolling_max > 0
               ? liveState.rolling_max.toFixed(signalPriceDecimals(symbol))
@@ -240,27 +240,27 @@ export function SignalReadinessCard({
           </span>
         </div>
 
-        <div className="bg-dark-950/70 border border-dark-800/80 rounded-xl p-2.5">
-          <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-mono">
-            Drop ({windowLabel})
+        <div className="bg-dark-950/70 border border-dark-800/80 rounded-lg px-2.5 py-2 min-w-0">
+          <span className="text-[9px] text-slate-500 uppercase tracking-wide block font-mono truncate">
+            {t('signals.metricDrop', { window: windowLabel })}
           </span>
           <span
-            className={`text-sm font-bold font-mono ${
+            className={`text-xs sm:text-sm font-bold font-mono tabular-nums ${
               dropPct >= dropTarget * 0.7 ? 'text-rose-400' : 'text-slate-200'
             }`}
           >
-            -{dropPct.toFixed(2)}%{' '}
-            <span className="text-[10px] text-slate-500 font-normal">/ {dropTarget}%</span>
+            -{dropPct.toFixed(2)}%
+            <span className="text-[9px] text-slate-500 font-normal ml-1">/{dropTarget}%</span>
           </span>
         </div>
 
-        <div className="bg-dark-950/70 border border-dark-800/80 rounded-xl p-2.5 flex flex-col justify-between">
-          <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-mono">
-            {t('signals.myTradingStatus')}
+        <div className="bg-dark-950/70 border border-dark-800/80 rounded-lg px-2.5 py-2 min-w-0">
+          <span className="text-[9px] text-slate-500 uppercase tracking-wide block font-mono truncate">
+            {t('signals.metricTrading')}
           </span>
-          <span className="flex items-center gap-1.5">
+          <span className="flex items-center gap-1.5 mt-0.5">
             <span
-              className={`w-2 h-2 rounded-full ${
+              className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                 isTradingOn ? 'bg-emerald-400 shadow-sm shadow-emerald-400' : 'bg-slate-600'
               }`}
             />
