@@ -278,13 +278,27 @@ export function TradeReadinessMonitor({
           </div>
 
           {/* 4H Candle Countdown Pill */}
-          <div className="bg-dark-950 border border-dark-800 px-3.5 py-2 rounded-xl flex items-center gap-2.5">
-            <Clock className="w-4 h-4 text-slate-400" />
+          <div
+            className={`px-3.5 py-2 rounded-xl flex items-center gap-2.5 border ${
+              armedAwaitingPairs.length > 0
+                ? 'bg-honey-500/10 border-honey-500/40'
+                : 'bg-dark-950 border-dark-800'
+            }`}
+          >
+            <Clock
+              className={`w-4 h-4 shrink-0 ${
+                armedAwaitingPairs.length > 0 ? 'text-honey-400' : 'text-slate-400'
+              }`}
+            />
             <div className="text-left font-mono">
               <div className="text-[10px] text-slate-400 uppercase tracking-wider">
                 {t('readiness.candleClose')}
               </div>
-              <div className="text-xs font-bold text-slate-200" title={next4hUtcLabel}>
+              <div
+                className={`text-sm font-black tabular-nums tracking-wide ${
+                  armedAwaitingPairs.length > 0 ? 'text-honey-200' : 'text-slate-200'
+                }`}
+              >
                 {timeToNext4h}
               </div>
               <div className="text-[10px] text-slate-500">{next4hUtcLabel}</div>
@@ -508,10 +522,8 @@ export function TradeReadinessMonitor({
                   </div>
 
                   {/* Status Note & Gap Distance */}
-                  <div className="mt-2 flex items-center justify-between text-[10px] font-mono">
-                    <span className="text-slate-400 truncate max-w-[140px]" title={statusText}>
-                      {statusText}
-                    </span>
+                  <div className="mt-2 flex items-center justify-between gap-2 text-[10px] font-mono">
+                    <span className="text-slate-400 min-w-0">{statusText}</span>
                     <span
                       className={`font-semibold shrink-0 ${
                         gapPct >= 0 ? 'text-emerald-400' : 'text-slate-400'
@@ -524,6 +536,25 @@ export function TradeReadinessMonitor({
                         : t('readiness.toEma', { pct: gapPct.toFixed(2) })}
                     </span>
                   </div>
+
+                  {/* Live 4h close countdown — only when armed (99%) */}
+                  {!isOpen && readinessPct >= 99 && !hasInsufficientMargin && (
+                    <div className="mt-2.5 flex items-center gap-2 rounded-lg border border-honey-500/30 bg-honey-500/10 px-2.5 py-2">
+                      <Clock className="w-3.5 h-3.5 text-honey-400 shrink-0" />
+                      <div className="min-w-0 flex-1 font-mono">
+                        <div className="text-[10px] uppercase tracking-wider text-honey-400/80">
+                          {t('readiness.candleClose')}
+                        </div>
+                        <div className="text-sm font-black tabular-nums text-honey-200 tracking-wide">
+                          {timeToNext4h}
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right font-mono">
+                        <div className="text-[10px] text-slate-500">{t('readiness.entryAt')}</div>
+                        <div className="text-xs font-bold text-slate-200">{next4hUtcLabel}</div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Ratio & EMA10 Technical Data */}
@@ -558,13 +589,13 @@ export function TradeReadinessMonitor({
               </div>
 
               {/* Card Footer Note */}
-              <div className="mt-3 pt-2 text-[10px] font-mono text-slate-400 flex items-center justify-between">
+              <div className="mt-3 pt-2 text-[10px] font-mono text-slate-400 flex items-center justify-between gap-2">
                 <span>{t('readiness.slot')}</span>
                 {isOpen ? (
                   <span className="text-emerald-400 font-semibold">{t('readiness.guarded')}</span>
                 ) : readinessPct >= 99 ? (
-                  <span className="text-honey-300 font-semibold">
-                    {t('readiness.armed99', { time: timeToNext4h })}
+                  <span className="text-honey-300 font-semibold shrink-0 tabular-nums">
+                    {t('readiness.armed99Short')}
                   </span>
                 ) : (
                   <span>{t('readiness.waitingTrigger')}</span>

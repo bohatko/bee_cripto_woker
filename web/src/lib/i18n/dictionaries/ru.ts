@@ -534,7 +534,8 @@ export const ru = {
     approaching: 'Приближение к пробою',
     activeTrade: 'Активная сделка · выходы ATR SL / Trend Flip',
     readyAwaiting: '99% · Ожидание закрытия следующей 4h-свечи',
-    readyAwaitingCountdown: '99% · Вход через {time} ({at})',
+    readyAwaitingCountdown: 'Наготове · ждём закрытие 4h',
+    entryAt: 'Вход в',
     awaitingMargin: '99% наготове · Нет свободной маржи',
     readyIdle: '99% наготове · Бот в простое (запустите)',
     consolidating: 'Консолидация ниже EMA10',
@@ -547,6 +548,7 @@ export const ru = {
     guarded: 'Под охраной',
     ready100: '100% на рынке',
     armed99: '99% · вход через {time}',
+    armed99Short: '99% наготове',
     waitingTrigger: 'Ждём триггер',
     insufficientMarginAlert:
       'Сетап 99% ({pairs}), но вход пропущен: свободно ${free} USDT (требуется от ${min} USDT на слот).',

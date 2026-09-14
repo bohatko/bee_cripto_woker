@@ -530,7 +530,8 @@ export const en = {
     approaching: 'Approaching breakout',
     activeTrade: 'Active trade · exits via ATR SL / Trend Flip',
     readyAwaiting: '99% · Awaiting next 4h close',
-    readyAwaitingCountdown: '99% · Entry in {time} ({at})',
+    readyAwaitingCountdown: 'Armed · waiting 4h close',
+    entryAt: 'Entry at',
     awaitingMargin: '99% Armed · Low Free Margin',
     readyIdle: '99% Armed · Bot idle (Start to trade)',
     consolidating: 'Consolidating below EMA10',
@@ -543,6 +544,7 @@ export const en = {
     guarded: 'Guarded',
     ready100: '100% In Market',
     armed99: '99% · entry in {time}',
+    armed99Short: '99% armed',
     waitingTrigger: 'Waiting trigger',
     insufficientMarginAlert:
       'Setup 99% armed ({pairs}), but entry skipped: free ${free} USDT (minimum ${min} USDT per slot required).',
