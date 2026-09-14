@@ -99,25 +99,38 @@ export function TradeReadinessMonitor({
   const { t } = useLanguage();
   const [showFormulaInfo, setShowFormulaInfo] = useState(false);
   const [timeToNext4h, setTimeToNext4h] = useState<string>('--:--:--');
+  const [next4hUtcLabel, setNext4hUtcLabel] = useState<string>('--:00 UTC');
 
   // Real-time countdown to the next 4-hour candle close (00:00, 04:00, 08:00, 12:00, 16:00, 20:00 UTC)
   useEffect(() => {
     function updateCountdown() {
       const now = new Date();
-      const currentUtcHours = now.getUTCHours();
-      const currentUtcMinutes = now.getUTCMinutes();
-      const currentUtcSeconds = now.getUTCSeconds();
+      const next = new Date(now);
+      next.setUTCMinutes(0, 0, 0);
+      next.setUTCSeconds(0, 0);
+      next.setUTCMilliseconds(0);
+      const nextHour = (Math.floor(now.getUTCHours() / 4) + 1) * 4;
+      if (nextHour >= 24) {
+        next.setUTCDate(next.getUTCDate() + 1);
+        next.setUTCHours(0);
+      } else {
+        next.setUTCHours(nextHour);
+      }
 
-      const nextPeriodHour = (Math.floor(currentUtcHours / 4) + 1) * 4;
-      const hoursRemaining = nextPeriodHour - currentUtcHours - 1;
-      const minutesRemaining = 59 - currentUtcMinutes;
-      const secondsRemaining = 59 - currentUtcSeconds;
+      const diffMs = Math.max(0, next.getTime() - now.getTime());
+      const totalSec = Math.floor(diffMs / 1000);
+      const hoursRemaining = Math.floor(totalSec / 3600);
+      const minutesRemaining = Math.floor((totalSec % 3600) / 60);
+      const secondsRemaining = totalSec % 60;
 
       const h = hoursRemaining.toString().padStart(2, '0');
       const m = minutesRemaining.toString().padStart(2, '0');
       const s = secondsRemaining.toString().padStart(2, '0');
 
       setTimeToNext4h(`${h}h ${m}m ${s}s`);
+      setNext4hUtcLabel(
+        `${String(next.getUTCHours()).padStart(2, '0')}:00 UTC`
+      );
     }
 
     updateCountdown();
@@ -145,21 +158,25 @@ export function TradeReadinessMonitor({
     const isInTrend = Boolean(data?.is_in_trend);
     const longPrice = data ? Number(data.long_price) : 0;
     const shortPrice = data ? Number(data.short_price) : 0;
+    const isOpen = !!openPos;
 
     // Distance to EMA10 in percentage: positive = above EMA, negative = below EMA
     const gapPct = ema10 > 0 ? ((currentRatio - ema10) / ema10) * 100 : 0;
 
-    // Readiness calculation on 0-100% scale
-    // If Ratio >= EMA10, readiness is 100% (entry threshold met)
-    // If Ratio < EMA10, scale from 0% (at -3.0% gap) to 99% (at 0% gap)
+    // Readiness 0-100%:
+    // - Open position = 100% (already entered)
+    // - Ratio >= EMA10 but waiting for next 4h close = 99% (armed, not filled yet)
+    // - Below EMA10 = 0..98 by proximity
     let readinessPct = 0;
-    if (isInTrend || (currentRatio > 0 && ema10 > 0 && currentRatio >= ema10)) {
+    if (isOpen) {
       readinessPct = 100;
+    } else if (isInTrend || (currentRatio > 0 && ema10 > 0 && currentRatio >= ema10)) {
+      readinessPct = 99;
     } else if (currentRatio > 0 && ema10 > 0) {
-      const MAX_PULLBACK = 3.0; // 3% benchmark distance
+      const MAX_PULLBACK = 3.0;
       readinessPct = Math.max(
         0,
-        Math.min(99, Math.round(100 + (gapPct / MAX_PULLBACK) * 100))
+        Math.min(98, Math.round(100 + (gapPct / MAX_PULLBACK) * 100))
       );
     }
 
@@ -174,7 +191,8 @@ export function TradeReadinessMonitor({
       isInTrend,
       longPrice,
       shortPrice,
-      isOpen: !!openPos,
+      isOpen,
+      isArmedAwaiting4h: !isOpen && readinessPct >= 99,
     };
   });
 
@@ -186,7 +204,7 @@ export function TradeReadinessMonitor({
     unenteredPairs[0]
   );
 
-  const readyToEnterPairs = unenteredPairs.filter((p) => p.readinessPct >= 100);
+  const armedAwaitingPairs = unenteredPairs.filter((p) => p.isArmedAwaiting4h);
   const openCount = evaluatedPairs.filter((p) => p.isOpen).length;
 
   return (
@@ -221,19 +239,19 @@ export function TradeReadinessMonitor({
           <div className="bg-dark-950 border border-dark-800 px-3.5 py-2 rounded-xl flex items-center gap-2.5">
             <Zap
               className={`w-4 h-4 ${
-                readyToEnterPairs.length > 0
+                armedAwaitingPairs.length > 0
                   ? hasInsufficientMargin
                     ? 'text-amber-400 animate-pulse'
-                    : 'text-emerald-400 animate-pulse'
+                    : 'text-honey-400 animate-pulse'
                   : 'text-honey-400'
               }`}
             />
             <div className="text-left font-mono">
               <div className="text-[10px] text-slate-400 uppercase tracking-wider">
-                {readyToEnterPairs.length > 0
+                {armedAwaitingPairs.length > 0
                   ? hasInsufficientMargin
                     ? t('readiness.awaitingMargin')
-                    : t('readiness.signalReady')
+                    : t('readiness.signalArmed')
                   : t('readiness.closestSetup')}
               </div>
               <div className="text-xs font-bold text-white flex items-center gap-1.5">
@@ -242,10 +260,10 @@ export function TradeReadinessMonitor({
                     <span>{highestReadinessPair.meta.pairSymbol}</span>
                     <span
                       className={`text-[11px] px-1.5 py-0.2 rounded ${
-                        highestReadinessPair.readinessPct >= 100
+                        highestReadinessPair.readinessPct >= 99
                           ? hasInsufficientMargin
                             ? 'bg-amber-500/20 text-amber-300'
-                            : 'bg-emerald-500/20 text-emerald-400'
+                            : 'bg-honey-500/20 text-honey-300'
                           : 'bg-honey-500/15 text-honey-400'
                       }`}
                     >
@@ -266,9 +284,10 @@ export function TradeReadinessMonitor({
               <div className="text-[10px] text-slate-400 uppercase tracking-wider">
                 {t('readiness.candleClose')}
               </div>
-              <div className="text-xs font-bold text-slate-200" title="Candle close confirms 4h trend status">
+              <div className="text-xs font-bold text-slate-200" title={next4hUtcLabel}>
                 {timeToNext4h}
               </div>
+              <div className="text-[10px] text-slate-500">{next4hUtcLabel}</div>
             </div>
           </div>
 
@@ -309,14 +328,14 @@ export function TradeReadinessMonitor({
         </div>
       )}
 
-      {/* Insufficient Margin Warning when Signals Ready */}
-      {readyToEnterPairs.length > 0 && hasInsufficientMargin && isBotActive && (
+      {/* Insufficient Margin Warning when Signals Armed */}
+      {armedAwaitingPairs.length > 0 && hasInsufficientMargin && isBotActive && (
         <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in duration-200">
           <div className="flex items-center gap-2.5 text-xs">
             <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping shrink-0" />
             <span className="text-amber-200 font-medium">
               {t('readiness.insufficientMarginAlert', {
-                pairs: readyToEnterPairs.map((p) => p.meta.pairSymbol).join(', '),
+                pairs: armedAwaitingPairs.map((p) => p.meta.pairSymbol).join(', '),
                 free: Number(freeMargin || 0).toFixed(2),
                 min: '20.00',
               })}
@@ -331,19 +350,23 @@ export function TradeReadinessMonitor({
         </div>
       )}
 
-      {/* Quick Action Prompt if Signal Ready but Bot is Idle */}
-      {readyToEnterPairs.length > 0 && !isBotActive && !hasInsufficientMargin && (
-        <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {/* Quick Action Prompt if Signal Armed but Bot is Idle */}
+      {armedAwaitingPairs.length > 0 && !isBotActive && !hasInsufficientMargin && (
+        <div className="p-3.5 rounded-xl bg-honey-500/10 border border-honey-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 text-xs">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
-            <span className="text-emerald-300 font-medium">
-              {t('readiness.pairsReady', { count: readyToEnterPairs.length })}
+            <span className="w-2.5 h-2.5 rounded-full bg-honey-400 animate-ping" />
+            <span className="text-honey-200 font-medium">
+              {t('readiness.pairsArmed', {
+                count: armedAwaitingPairs.length,
+                time: timeToNext4h,
+                at: next4hUtcLabel,
+              })}
             </span>
           </div>
           {onStartBotClick && (
             <button
               onClick={onStartBotClick}
-              className="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-dark-950 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 shrink-0"
+              className="px-3.5 py-1.5 rounded-lg bg-honey-500 hover:bg-honey-400 text-dark-950 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-honey-500/20 shrink-0"
             >
               <Play className="w-3.5 h-3.5 fill-current" />
               {t('readiness.startNow')}
@@ -379,17 +402,22 @@ export function TradeReadinessMonitor({
             badgeBg = 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30';
             barBg = 'from-emerald-600 to-teal-400';
             statusText = t('readiness.activeTrade');
-          } else if (readinessPct >= 100 || isInTrend) {
+          } else if (readinessPct >= 99 || isInTrend) {
             if (hasInsufficientMargin) {
               badgeText = t('readiness.awaitingMargin');
               badgeBg = 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse';
               barBg = 'from-amber-600 to-yellow-400';
               statusText = t('readiness.awaitingMargin');
             } else {
-              badgeText = t('readiness.signalActive');
-              badgeBg = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 animate-pulse';
-              barBg = 'from-emerald-500 to-green-400';
-              statusText = isBotActive ? t('readiness.readyAwaiting') : t('readiness.readyIdle');
+              badgeText = t('readiness.signalArmedBadge');
+              badgeBg = 'bg-honey-500/20 text-honey-300 border-honey-500/40 animate-pulse';
+              barBg = 'from-honey-500 to-amber-400';
+              statusText = isBotActive
+                ? t('readiness.readyAwaitingCountdown', {
+                    time: timeToNext4h,
+                    at: next4hUtcLabel,
+                  })
+                : t('readiness.readyIdle');
             }
           } else if (readinessPct < 80) {
             badgeText = t('readiness.accumulating', { pct: readinessPct });
@@ -410,8 +438,8 @@ export function TradeReadinessMonitor({
               className={`bg-dark-950 border rounded-2xl p-4 flex flex-col justify-between transition-all ${
                 isOpen
                   ? 'border-emerald-500/40 shadow-lg shadow-emerald-500/5'
-                  : readinessPct >= 100
-                  ? 'border-emerald-500/30 bg-emerald-950/10'
+                  : readinessPct >= 99
+                  ? 'border-honey-500/35 bg-honey-950/10'
                   : 'border-dark-800 hover:border-dark-700'
               }`}
             >
@@ -460,8 +488,8 @@ export function TradeReadinessMonitor({
                       className={`text-sm font-black ${
                         isOpen
                           ? 'text-emerald-400'
-                          : readinessPct >= 100
-                          ? 'text-emerald-400'
+                          : readinessPct >= 99
+                          ? 'text-honey-300'
                           : readinessPct >= 80
                           ? 'text-honey-400'
                           : 'text-slate-400'
@@ -534,8 +562,10 @@ export function TradeReadinessMonitor({
                 <span>{t('readiness.slot')}</span>
                 {isOpen ? (
                   <span className="text-emerald-400 font-semibold">{t('readiness.guarded')}</span>
-                ) : readinessPct >= 100 ? (
-                  <span className="text-emerald-400 font-semibold">{t('readiness.ready100')}</span>
+                ) : readinessPct >= 99 ? (
+                  <span className="text-honey-300 font-semibold">
+                    {t('readiness.armed99', { time: timeToNext4h })}
+                  </span>
                 ) : (
                   <span>{t('readiness.waitingTrigger')}</span>
                 )}
