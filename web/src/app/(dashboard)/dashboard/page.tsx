@@ -60,7 +60,15 @@ export default function DashboardPage() {
 
   async function loadEngineRisk() {
     try {
-      const res = await fetch('/api/engine-config', { cache: 'no-store' });
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+
+      const res = await fetch('/api/engine-config', {
+        cache: 'no-store',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
       if (!res.ok) return;
       const cfg = await res.json();
       setEngineRisk({

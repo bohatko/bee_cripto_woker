@@ -122,7 +122,15 @@ export default function AdminDashboardPage() {
     setLockedPairs(new Set((openMaster || []).map((p: any) => String(p.pair_symbol))));
 
     try {
-      const res = await fetch('/api/admin/engine-config', { cache: 'no-store' });
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const res = await fetch('/api/admin/engine-config', {
+        cache: 'no-store',
+        headers: session?.access_token
+          ? { Authorization: `Bearer ${session.access_token}` }
+          : undefined,
+      });
       if (res.ok) {
         const payload = await res.json();
         setEngineConfig(payload);
