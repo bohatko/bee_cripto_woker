@@ -167,35 +167,110 @@ export class PositionGuard {
 
     if (!panicUsers || panicUsers.length === 0) return;
 
+    const { data: marketDataList } = await supabase.from('pair_market_data').select('*');
+    const marketMap = new Map<string, any>();
+    if (marketDataList) {
+      for (const m of marketDataList) marketMap.set(m.pair_symbol, m);
+    }
+
+    const getPrices = (pairSymbol: string, fallbackLong: number, fallbackShort: number) => {
+      const market = marketMap.get(pairSymbol);
+      return {
+        longP: market ? Number(market.long_price) : fallbackLong,
+        shortP: market ? Number(market.short_price) : fallbackShort,
+      };
+    };
+
     for (const row of panicUsers) {
-      // Find open positions for this user
-      const { data: positions } = await supabase
+      const { data: profile } = await supabase
+        .from('users_profile')
+        .select('email, role')
+        .eq('id', row.user_id)
+        .maybeSingle();
+
+      const isAdmin = profile?.role === 'admin';
+      console.log(
+        `🚨 [PANIC CLOSE] Triggered by ${profile?.email || row.user_id} (admin=${isAdmin})`
+      );
+
+      // 1) Always close this user's live exchange pair positions
+      const { data: userPositions } = await supabase
         .from('bot_positions')
         .select('*, exchange_accounts(*)')
         .eq('user_id', row.user_id)
         .eq('status', 'open');
 
-      if (positions && positions.length > 0) {
-        const { data: marketDataList } = await supabase.from('pair_market_data').select('*');
-        const marketMap = new Map<string, any>();
-        if (marketDataList) {
-          for (const m of marketDataList) marketMap.set(m.pair_symbol, m);
+      if (userPositions && userPositions.length > 0) {
+        for (const pos of userPositions as any[]) {
+          const { longP, shortP } = getPrices(pos.pair_symbol, pos.long_entry_price, pos.short_entry_price);
+          try {
+            await this.orderRouter.executePairExit(pos, pos.exchange_accounts, 'panic_close', longP, shortP);
+          } catch (err: any) {
+            console.error(`❌ [PANIC] Failed to close ${pos.pair_symbol} for user ${row.user_id}: ${err.message}`);
+          }
         }
-
-        for (const pos of positions as any[]) {
-          const market = marketMap.get(pos.pair_symbol);
-          const longP = market ? Number(market.long_price) : pos.long_entry_price;
-          const shortP = market ? Number(market.short_price) : pos.short_entry_price;
-
-          await this.orderRouter.executePairExit(pos, pos.exchange_accounts, 'panic_close', longP, shortP);
-        }
+      } else {
+        console.log(`ℹ️ [PANIC] No open user positions for ${profile?.email || row.user_id}`);
       }
 
-      // Reset panic trigger in settings
-      await supabase
-        .from('trading_settings')
-        .update({ panic_closed_at: null, is_bot_active: false })
-        .eq('user_id', row.user_id);
+      // 2) Admin panic = platform-wide: close MASTER paper + every live user account
+      if (isAdmin) {
+        const { data: masterPositions } = await supabase
+          .from('bot_positions')
+          .select('*')
+          .eq('is_master', true)
+          .eq('status', 'open');
+
+        if (masterPositions && masterPositions.length > 0) {
+          console.log(`🚨 [PANIC] Admin closing ${masterPositions.length} MASTER position(s)`);
+          for (const pos of masterPositions as BotPosition[]) {
+            const { longP, shortP } = getPrices(
+              pos.pair_symbol,
+              Number(pos.long_entry_price),
+              Number(pos.short_entry_price)
+            );
+            try {
+              await this.orderRouter.executeMasterExit(pos, 'panic_close', longP, shortP);
+            } catch (err: any) {
+              console.error(`❌ [PANIC] Failed to close MASTER ${pos.pair_symbol}: ${err.message}`);
+            }
+          }
+        }
+
+        const { data: allLivePositions } = await supabase
+          .from('bot_positions')
+          .select('*, exchange_accounts(*)')
+          .eq('is_master', false)
+          .eq('status', 'open')
+          .neq('user_id', row.user_id);
+
+        if (allLivePositions && allLivePositions.length > 0) {
+          console.log(
+            `🚨 [PANIC] Admin closing ${allLivePositions.length} live position(s) across other accounts`
+          );
+          for (const pos of allLivePositions as any[]) {
+            const { longP, shortP } = getPrices(pos.pair_symbol, pos.long_entry_price, pos.short_entry_price);
+            try {
+              await this.orderRouter.executePairExit(pos, pos.exchange_accounts, 'panic_close', longP, shortP);
+            } catch (err: any) {
+              console.error(
+                `❌ [PANIC] Failed to close ${pos.pair_symbol} for user ${pos.user_id}: ${err.message}`
+              );
+            }
+          }
+        }
+
+        // Pause every bot after platform-wide panic
+        await supabase
+          .from('trading_settings')
+          .update({ is_bot_active: false, panic_closed_at: null });
+      } else {
+        // Reset panic trigger for this user only
+        await supabase
+          .from('trading_settings')
+          .update({ panic_closed_at: null, is_bot_active: false })
+          .eq('user_id', row.user_id);
+      }
     }
   }
 

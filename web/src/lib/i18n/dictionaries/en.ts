@@ -228,7 +228,7 @@ export const en = {
     positionsValue: '{count} Pairs (Long/Short)',
     pnlLabel: 'Current Floating PnL:',
     warning:
-      'This will immediately transmit Market Sell and Market Buy orders to your exchange, terminating all open basket legs.',
+      'This will immediately transmit Market Sell and Market Buy orders to your exchange, terminating all open basket legs. Admins also close MASTER paper positions and every live account.',
     typeClose: 'Type',
     toConfirm: 'to confirm:',
     liquidate: 'Liquidate All Positions',

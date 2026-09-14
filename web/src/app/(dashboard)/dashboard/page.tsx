@@ -462,7 +462,7 @@ export default function DashboardPage() {
     if (!settings) return;
 
     try {
-      // Trigger panic signal in trading_settings
+      // Trigger panic signal in trading_settings (worker picks up within ~5s)
       const { error } = await supabase
         .from('trading_settings')
         .update({
@@ -473,10 +473,12 @@ export default function DashboardPage() {
 
       if (error) throw error;
 
+      setSettings({ ...settings, is_bot_active: false, panic_closed_at: new Date().toISOString() });
       setIsPanicModalOpen(false);
       toast.error(t('dashboard.toastPanic'));
-      // Reload positions after signal
-      setTimeout(loadDashboardData, 1500);
+      // Worker closes live + (admin) MASTER positions asynchronously
+      setTimeout(loadDashboardData, 2500);
+      setTimeout(loadDashboardData, 8000);
     } catch (err: any) {
       toast.error(err.message || 'Failed to trigger panic close');
     }
