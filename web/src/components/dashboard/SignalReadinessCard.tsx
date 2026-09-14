@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Radar, ArrowUpRight, ShieldAlert, Sparkles, AlertCircle } from 'lucide-react';
+import { Radar, ArrowUpRight, Sparkles } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { playWarningSound } from '@/lib/sound';
@@ -13,6 +13,43 @@ export interface SignalReadinessCardProps {
   strategyId?: string;
   strategyData?: any;
   hideDetailsLink?: boolean;
+}
+
+function getReadinessTone(r: number) {
+  if (r >= 90) {
+    return {
+      text: 'text-rose-400',
+      track: 'border-rose-500/25 bg-rose-500/5',
+      fill: 'from-rose-600 via-rose-400 to-amber-300',
+      glow: 'shadow-[0_0_14px_rgba(244,63,94,0.55)]',
+      pulse: true,
+    };
+  }
+  if (r >= 80) {
+    return {
+      text: 'text-amber-300',
+      track: 'border-amber-500/25 bg-amber-500/5',
+      fill: 'from-amber-600 via-amber-400 to-honey-300',
+      glow: 'shadow-[0_0_12px_rgba(251,191,36,0.45)]',
+      pulse: false,
+    };
+  }
+  if (r >= 50) {
+    return {
+      text: 'text-honey-400',
+      track: 'border-honey-500/20 bg-honey-500/5',
+      fill: 'from-honey-600 via-honey-500 to-amber-300',
+      glow: 'shadow-[0_0_10px_rgba(245,158,11,0.35)]',
+      pulse: false,
+    };
+  }
+  return {
+    text: 'text-sky-400',
+    track: 'border-sky-500/15 bg-sky-500/5',
+    fill: 'from-sky-700 via-sky-500 to-cyan-300',
+    glow: 'shadow-[0_0_8px_rgba(56,189,248,0.3)]',
+    pulse: false,
+  };
 }
 
 export function SignalReadinessCard({
@@ -34,7 +71,6 @@ export function SignalReadinessCard({
 
   useEffect(() => {
     async function loadData() {
-      // 1. Fetch signal strategy
       const { data: strat } = await supabase
         .from('signal_strategies')
         .select('*')
@@ -45,7 +81,6 @@ export function SignalReadinessCard({
         setStrategy(strat);
       }
 
-      // 2. Fetch user settings if logged in
       if (userId) {
         const { data: uSettings } = await supabase
           .from('user_signal_settings')
@@ -62,7 +97,6 @@ export function SignalReadinessCard({
 
     loadData();
 
-    // Subscribe to realtime updates for signal_strategies
     const stratChannel = supabase
       .channel(`realtime_signal_strategy_card_${strategyId}`)
       .on(
@@ -96,9 +130,21 @@ export function SignalReadinessCard({
 
   const readiness = Number(liveState.readiness_pct || 0);
   const dropPct = Number(liveState.drop_pct || 0);
+  const clampedReadiness = Math.min(100, Math.max(0, readiness));
   const isTradingOn = Boolean(userSettings?.is_enabled);
+  const tone = getReadinessTone(readiness);
+  const symbol = strategy?.symbol || 'XRP';
+  const leverage = strategy?.leverage || 3.0;
+  const dropTarget = strategy?.config?.drop_pct || 15;
+  const windowMinutes = strategy?.config?.window_minutes || 1440;
 
-  // Sound chime when readiness >= 80% once per episode
+  const windowLabel =
+    windowMinutes < 60
+      ? `${windowMinutes}m`
+      : windowMinutes === 60
+      ? '1h'
+      : `${Math.round(windowMinutes / 60)}h`;
+
   useEffect(() => {
     if (readiness >= 80 && !hasPlayedSound) {
       playWarningSound();
@@ -108,114 +154,103 @@ export function SignalReadinessCard({
     }
   }, [readiness, hasPlayedSound]);
 
-  // Color logic for readiness
-  const getProgressColor = (r: number) => {
-    if (r >= 90) return 'bg-rose-500 shadow-rose-500/50 animate-pulse';
-    if (r >= 80) return 'bg-amber-400 shadow-amber-400/50';
-    if (r >= 50) return 'bg-honey-500 shadow-honey-500/30';
-    return 'bg-slate-500';
-  };
-
   const getStatusBadge = () => {
     if (liveState.state === 'in_position') {
       return (
-        <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-honey-500/15 text-honey-400 border border-honey-500/30 flex items-center gap-1.5">
+        <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-honey-500/15 text-honey-400 border border-honey-500/30 flex items-center gap-1.5 shrink-0">
           <span className="w-1.5 h-1.5 rounded-full bg-honey-400 animate-ping" />
-          {t('signals.statusInPosition')}
+          {t('signals.statusInPositionShort')}
         </span>
       );
     }
     if (readiness >= 100) {
       return (
-        <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30 animate-pulse">
-          {t('signals.statusFired')}
+        <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30 animate-pulse shrink-0">
+          {t('signals.statusFiredShort')}
         </span>
       );
     }
     return (
-      <span className="px-2 py-0.5 rounded-full text-[11px] font-mono bg-dark-800 text-slate-400 border border-dark-700">
-        {t('signals.statusWaiting')}
+      <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-dark-800 text-slate-400 border border-dark-700 shrink-0">
+        {t('signals.statusWaitingShort')}
       </span>
     );
   };
 
   return (
-    <div className="bg-dark-900 border border-dark-800 rounded-2xl p-5 shadow-xl hover:border-dark-700 transition-all relative overflow-hidden group">
-      {/* Background radial glow */}
+    <div className="bg-dark-900 border border-dark-800 rounded-2xl p-4 sm:p-5 shadow-xl hover:border-dark-700 transition-all relative overflow-hidden group space-y-4">
       <div className="absolute top-0 right-0 w-64 h-64 bg-honey-500/5 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20 group-hover:bg-honey-500/10 transition-colors" />
 
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4 relative z-10">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-honey-500/10 border border-honey-500/25 flex items-center justify-center text-honey-400 shadow-sm">
+      {/* Header: stacks on narrow screens */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between relative z-10">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-9 h-9 rounded-xl bg-honey-500/10 border border-honey-500/25 flex items-center justify-center text-honey-400 shadow-sm shrink-0">
             <Radar className="w-5 h-5" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-bold text-white tracking-wide">
-                {strategy?.symbol || 'XRP'} / USDT{' '}
-                <span className="text-[11px] font-mono text-honey-400 font-normal">
-                  {strategy?.leverage || 3.0}x Isolated
-                </span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-sm font-bold text-white tracking-wide truncate">
+                {symbol} / USDT
               </h3>
+              <span className="text-[10px] font-mono text-honey-400 shrink-0">
+                {leverage}x Isolated
+              </span>
             </div>
-            <p className="text-[11px] text-slate-400 font-mono">
+            <p className="text-[11px] text-slate-400 font-mono truncate mt-0.5">
               {strategy?.name || t('signals.readinessCardTitle')}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0 self-end sm:self-start">
           {getStatusBadge()}
           {!hideDetailsLink && (
             <Link
               href="/signals"
-              className="text-xs text-honey-400 hover:text-honey-300 font-mono font-semibold flex items-center gap-0.5 bg-honey-500/10 hover:bg-honey-500/20 px-2.5 py-1 rounded-lg border border-honey-500/25 transition-all"
+              title={t('signals.viewDetails')}
+              aria-label={t('signals.viewDetails')}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-honey-400 bg-honey-500/10 hover:bg-honey-500/20 border border-honey-500/25 transition-all shrink-0"
             >
-              {t('signals.viewDetails')}
-              <ArrowUpRight className="w-3.5 h-3.5" />
+              <ArrowUpRight className="w-4 h-4" />
             </Link>
           )}
         </div>
       </div>
 
-      {/* Metrics Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4 relative z-10">
+      {/* Metrics */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 relative z-10">
         <div className="bg-dark-950/70 border border-dark-800/80 rounded-xl p-2.5">
           <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-mono">
             {t('signals.currentPrice')}
           </span>
           <span className="text-sm font-bold font-mono text-white">
-            ${liveState.price > 0 ? liveState.price.toFixed(signalPriceDecimals(strategy?.symbol)) : '---'}
+            ${liveState.price > 0 ? liveState.price.toFixed(signalPriceDecimals(symbol)) : '---'}
           </span>
         </div>
 
         <div className="bg-dark-950/70 border border-dark-800/80 rounded-xl p-2.5">
           <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-mono">
-            {strategy?.config?.window_minutes < 60
-              ? `${strategy?.config?.window_minutes}m High`
-              : strategy?.config?.window_minutes === 60
-              ? '1h High'
-              : `${Math.round((strategy?.config?.window_minutes || 1440) / 60)}h High`}
+            {windowLabel} High
           </span>
           <span className="text-sm font-bold font-mono text-slate-300">
-            ${liveState.rolling_max > 0 ? liveState.rolling_max.toFixed(signalPriceDecimals(strategy?.symbol)) : '---'}
+            $
+            {liveState.rolling_max > 0
+              ? liveState.rolling_max.toFixed(signalPriceDecimals(symbol))
+              : '---'}
           </span>
         </div>
 
         <div className="bg-dark-950/70 border border-dark-800/80 rounded-xl p-2.5">
           <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-mono">
-            {strategy?.config?.window_minutes < 60
-              ? `Drop (${strategy?.config?.window_minutes}m)`
-              : strategy?.config?.window_minutes === 60
-              ? 'Drop (1h)'
-              : `Drop (${Math.round((strategy?.config?.window_minutes || 1440) / 60)}h)`}
+            Drop ({windowLabel})
           </span>
-          <span className={`text-sm font-bold font-mono ${dropPct >= (strategy?.config?.drop_pct || 15) * 0.7 ? 'text-rose-400' : 'text-slate-200'}`}>
+          <span
+            className={`text-sm font-bold font-mono ${
+              dropPct >= dropTarget * 0.7 ? 'text-rose-400' : 'text-slate-200'
+            }`}
+          >
             -{dropPct.toFixed(2)}%{' '}
-            <span className="text-[10px] text-slate-500 font-normal">
-              / {strategy?.config?.drop_pct || 15}%
-            </span>
+            <span className="text-[10px] text-slate-500 font-normal">/ {dropTarget}%</span>
           </span>
         </div>
 
@@ -229,30 +264,54 @@ export function SignalReadinessCard({
                 isTradingOn ? 'bg-emerald-400 shadow-sm shadow-emerald-400' : 'bg-slate-600'
               }`}
             />
-            <span className={`text-xs font-bold font-mono ${isTradingOn ? 'text-emerald-400' : 'text-slate-400'}`}>
+            <span
+              className={`text-xs font-bold font-mono ${
+                isTradingOn ? 'text-emerald-400' : 'text-slate-400'
+              }`}
+            >
               {isTradingOn ? t('signals.on') : t('signals.off')}
             </span>
           </span>
         </div>
       </div>
 
-      {/* Progress Bar & Readiness */}
-      <div className="space-y-1.5 relative z-10">
-        <div className="flex justify-between items-center text-xs font-mono">
-          <span className="text-slate-400 flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-honey-400" />
-            {t('signals.readiness')}
+      {/* Signal readiness — same style as /signals StrategyCombinedCard */}
+      <div className={`relative z-10 rounded-xl border p-3 space-y-2.5 ${tone.track}`}>
+        <div className="flex justify-between items-center gap-3">
+          <span className="text-xs font-mono text-slate-300 flex items-center gap-1.5 min-w-0">
+            <span className="relative flex h-5 w-5 items-center justify-center rounded-md bg-dark-950/70 border border-dark-700/80 shrink-0">
+              <Sparkles className={`w-3 h-3 ${tone.text} ${tone.pulse ? 'animate-pulse' : ''}`} />
+            </span>
+            <span className="truncate">{t('signals.readiness')}</span>
           </span>
-          <span className={`font-bold ${readiness >= 80 ? 'text-rose-400 font-mono text-sm' : 'text-honey-400'}`}>
-            {readiness.toFixed(1)}%
+          <span
+            className={`font-mono text-sm font-black tracking-tight tabular-nums shrink-0 ${tone.text} ${
+              tone.pulse ? 'animate-pulse' : ''
+            }`}
+          >
+            {clampedReadiness.toFixed(1)}%
           </span>
         </div>
 
-        <div className="w-full bg-dark-950 h-2.5 rounded-full overflow-hidden p-0.5 border border-dark-800">
+        <div className="relative h-3 w-full rounded-full bg-dark-950/90 border border-dark-800/90 overflow-hidden shadow-inner">
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.03] to-transparent pointer-events-none" />
+          <div className="absolute inset-y-0 left-[80%] w-px bg-amber-400/25 pointer-events-none" />
+          <div className="absolute inset-y-0 left-[90%] w-px bg-rose-400/30 pointer-events-none" />
           <div
-            className={`h-full rounded-full transition-all duration-500 shadow-sm ${getProgressColor(readiness)}`}
-            style={{ width: `${Math.min(100, Math.max(0, readiness))}%` }}
-          />
+            className={`relative h-full rounded-full bg-gradient-to-r ${tone.fill} ${tone.glow} transition-all duration-700 ease-out ${
+              tone.pulse ? 'animate-pulse' : ''
+            }`}
+            style={{ width: `${clampedReadiness}%` }}
+          >
+            <div className="absolute inset-y-0 right-0 w-4 bg-gradient-to-l from-white/35 to-transparent rounded-full" />
+          </div>
+        </div>
+
+        <div className="flex justify-between text-[9px] font-mono text-slate-600 px-0.5">
+          <span>0%</span>
+          <span className="text-amber-500/50">80%</span>
+          <span className="text-rose-500/50">90%</span>
+          <span>100%</span>
         </div>
       </div>
     </div>
