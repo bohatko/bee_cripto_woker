@@ -46,6 +46,8 @@ export class OrderRouter {
   private lastQuietSkipLogAt = new Map<string, number>();
   private last4hCloseLogAt = new Map<string, number>();
   private inFlightEntries = new Set<string>();
+  /** Serialize live exchange entries per user so 4 basket pairs do not race margin/fills. */
+  private userEntryChains = new Map<string, Promise<void>>();
 
   constructor(scanner: MarketScanner | null = null) {
     this.scanner = scanner;
@@ -157,14 +159,18 @@ export class OrderRouter {
             return;
           }
 
-          // Execute order on user's exchange (do not block the scanner; the outer promise is fire-and-forget)
-          await this.executePairEntry(user, account, setting, signal)
-            .then(() => {
+          // Serialize live entries per user (4 pairs at the same 4h close must not race margin/fills).
+          const prevChain = this.userEntryChains.get(user.id) || Promise.resolve();
+          const chained = prevChain.catch(() => undefined).then(async () => {
+            try {
+              await this.executePairEntry(user, account, setting, signal);
               console.log(`✅ [ASYNC ENTRY COMPLETE] ${pairSymbol} for ${user.email}`);
-            })
-            .catch((err: any) => {
+            } catch (err: any) {
               console.error(`❌ [ASYNC ENTRY FAILED] ${pairSymbol} for ${user.email}: ${err.message}`);
-            });
+            }
+          });
+          this.userEntryChains.set(user.id, chained);
+          await chained;
         } finally {
           // Remove in-flight key on every path: guard rejection, existing position, or completed execution.
           this.inFlightEntries.delete(inFlightKey);

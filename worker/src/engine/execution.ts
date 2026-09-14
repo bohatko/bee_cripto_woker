@@ -30,7 +30,14 @@ export interface ExchangeClient {
     price?: number,
     params?: Record<string, any>
   ) => Promise<any>;
-  fetchOrder: (id: string, symbol: string) => Promise<any>;
+  fetchOrder: (id: string, symbol: string, params?: Record<string, any>) => Promise<any>;
+  fetchClosedOrder?: (id: string, symbol: string, params?: Record<string, any>) => Promise<any>;
+  fetchMyTrades?: (
+    symbol?: string,
+    since?: number,
+    limit?: number,
+    params?: Record<string, any>
+  ) => Promise<any[]>;
   cancelOrder: (id: string, symbol: string) => Promise<any>;
   fetchOrderBook: (symbol: string, limit?: number) => Promise<any>;
   createMarketBuyOrder: (symbol: string, amount: number, params?: Record<string, any>) => Promise<any>;
@@ -153,25 +160,94 @@ async function fetchOrderWithFallback(
   orderId: string,
   symbol: string
 ): Promise<any> {
-  if (!client.has['fetchOrder']) return null;
-  try {
-    return await client.fetchOrder(orderId, symbol);
-  } catch (err: any) {
-    console.warn(`⚠️ fetchOrder failed for ${symbol} (${orderId}): ${err.message}`);
+  if (!client.has['fetchOrder'] && !client.fetchClosedOrder && !client.fetchMyTrades) {
     return null;
   }
+
+  const bybitParams = { acknowledged: true };
+
+  // Brief settle delay — Bybit often returns createOrder before fill fields are queryable.
+  await sleep(400);
+
+  if (client.has['fetchOrder']) {
+    try {
+      return await client.fetchOrder(orderId, symbol, bybitParams);
+    } catch (err: any) {
+      console.warn(`⚠️ fetchOrder failed for ${symbol} (${orderId}): ${err.message}`);
+    }
+    // Retry once after another short delay.
+    await sleep(600);
+    try {
+      return await client.fetchOrder(orderId, symbol, bybitParams);
+    } catch (err: any) {
+      console.warn(`⚠️ fetchOrder retry failed for ${symbol} (${orderId}): ${err.message}`);
+    }
+  }
+
+  if (client.fetchClosedOrder) {
+    try {
+      return await client.fetchClosedOrder(orderId, symbol, bybitParams);
+    } catch (err: any) {
+      console.warn(`⚠️ fetchClosedOrder failed for ${symbol} (${orderId}): ${err.message}`);
+    }
+  }
+
+  if (client.fetchMyTrades) {
+    try {
+      const since = Date.now() - 5 * 60 * 1000;
+      const trades = await client.fetchMyTrades(symbol, since, 30, bybitParams);
+      const matched = (trades || []).filter(
+        (t: any) => String(t.order || t.info?.orderId || '') === String(orderId)
+      );
+      if (matched.length > 0) {
+        let qty = 0;
+        let notional = 0;
+        for (const t of matched) {
+          const tQty = Number(t.amount || 0);
+          const tPrice = Number(t.price || 0);
+          if (tQty > 0 && tPrice > 0) {
+            qty += tQty;
+            notional += tQty * tPrice;
+          }
+        }
+        if (qty > 0 && notional > 0) {
+          return {
+            id: orderId,
+            symbol,
+            status: 'closed',
+            filled: qty,
+            average: notional / qty,
+            amount: qty,
+            trades: matched,
+          };
+        }
+      }
+    } catch (err: any) {
+      console.warn(`⚠️ fetchMyTrades fallback failed for ${symbol} (${orderId}): ${err.message}`);
+    }
+  }
+
+  return null;
 }
 
 function getFillPrice(order: any): number {
-  const avg = order.average || order.price || 0;
-  if (avg > 0) return Number(avg);
+  const avg = Number(order.average || order.price || order.info?.avgPrice || order.info?.avgFillPrice || 0);
+  if (Number.isFinite(avg) && avg > 0) return avg;
   return 0;
 }
 
 function getFillQty(order: any): number {
-  // A filled=0 limit order is NOT filled; only fall back to amount when the order is closed.
-  if (Number.isFinite(Number(order.filled))) return Number(order.filled);
-  if (order.status === 'closed' && Number.isFinite(Number(order.amount))) return Number(order.amount);
+  // Prefer explicit filled qty. Fall back to amount only when the exchange marks the order closed.
+  const filled = Number(order.filled);
+  if (Number.isFinite(filled) && filled > 0) return filled;
+  const status = String(order.status || '').toLowerCase();
+  if (
+    (status === 'closed' || status === 'filled') &&
+    Number.isFinite(Number(order.amount)) &&
+    Number(order.amount) > 0
+  ) {
+    return Number(order.amount);
+  }
   return 0;
 }
 
@@ -372,10 +448,28 @@ export async function executePairMarket(
     throw new Error(reason);
   }
 
-  const longFill = await normalizeLegFill(longResult.value, client, longSym, longSide, false);
-  const shortFill = await normalizeLegFill(shortResult.value, client, shortSym, shortSide, false);
+  const longFill = await normalizeLegFill(
+    longResult.value,
+    client,
+    longSym,
+    longSide,
+    false,
+    ctx.longPrice,
+    longQty
+  );
+  const shortFill = await normalizeLegFill(
+    shortResult.value,
+    client,
+    shortSym,
+    shortSide,
+    false,
+    ctx.shortPrice,
+    shortQty
+  );
 
   if (!longFill.price || !longFill.qty || !shortFill.price || !shortFill.qty) {
+    // Both createOrder calls succeeded — legs are likely live on the exchange.
+    // Prefer recording with signal fallbacks over throwing (which orphans exchange positions).
     throw new Error('Exchange returned incomplete fill data for one or both legs');
   }
 
@@ -838,12 +932,26 @@ async function normalizeLegFill(
   client: ExchangeClient,
   symbol: string,
   side: 'buy' | 'sell',
-  isMaker: boolean
+  isMaker: boolean,
+  fallbackPrice = 0,
+  fallbackQty = 0
 ): Promise<LegFillResult> {
   const fill = await resolveFill(order, client, symbol);
   const activeOrder = fill.order;
-  const price = fill.price || activeOrder.price || 0;
-  const qty = fill.qty || activeOrder.amount || 0;
+  let price = fill.price || Number(activeOrder.price || 0);
+  let qty = fill.qty || 0;
+
+  // Bybit market createOrder often omits average/filled; use intended size + signal/mark price.
+  if ((!price || !qty) && (fallbackPrice > 0 || fallbackQty > 0)) {
+    if (!price && fallbackPrice > 0) price = fallbackPrice;
+    if (!qty && fallbackQty > 0) qty = fallbackQty;
+    console.warn(
+      `⚠️ No fill price/qty returned for ${symbol} order ${activeOrder.id}; using signal fallbacks price=${price} qty=${qty}`
+    );
+  } else if (!price || !qty) {
+    console.warn(`⚠️ No fill price/qty returned for ${symbol} order ${activeOrder.id}; no fallback available`);
+  }
+
   const notional = price * qty;
   let feeUsd = extractFeeUsd(activeOrder, symbol, price, qty, isMaker);
   if (feeUsd < 0) {
@@ -852,11 +960,6 @@ async function normalizeLegFill(
     console.warn(
       `⚠️ Unknown fee currency for ${symbol} order ${activeOrder.id}: fee ${JSON.stringify(activeOrder.fee)}. Estimated fee $${feeUsd}.`
     );
-  }
-
-  // Fallback if exchange still returned nothing
-  if (!price || !qty) {
-    console.warn(`⚠️ No fill price/qty returned for ${symbol} order ${activeOrder.id}; using signal values`);
   }
 
   return {
@@ -977,13 +1080,15 @@ export async function verifyLeverage(
 
   if (client.fetchPositions) {
     try {
-      const positions = await client.fetchPositions([longSym, shortSym]);
-      for (const p of positions) {
-        const sym = p.symbol || p.market?.symbol;
-        const lev = p.leverage || p.info?.leverage;
-        if (Number.isFinite(lev)) {
-          if (sym === longSym) actualLongLev = Number(lev);
-          if (sym === shortSym) actualShortLev = Number(lev);
+      // Bybit rejects multi-symbol arrays in fetchPositions — query one leg at a time.
+      for (const sym of [longSym, shortSym]) {
+        const positions = await client.fetchPositions([sym]);
+        for (const p of positions || []) {
+          const pSym = p.symbol || p.market?.symbol;
+          const lev = p.leverage || p.info?.leverage;
+          if (!Number.isFinite(Number(lev))) continue;
+          if (pSym === longSym) actualLongLev = Number(lev);
+          if (pSym === shortSym) actualShortLev = Number(lev);
         }
       }
     } catch (err: any) {
