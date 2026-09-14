@@ -219,7 +219,7 @@ export default function BotHistoryPage() {
           </div>
           <p className="text-xl font-black text-white font-mono mt-1">{winrate}%</p>
           <span className="text-[11px] text-slate-500 font-mono">
-            {tpCount} TP (+5%) • {slCount} SL (-1.5%)
+            {tpCount} TP • {slCount} SL
           </span>
         </div>
       </div>

@@ -49,6 +49,32 @@ export default function DashboardPage() {
   const [isPanicModalOpen, setIsPanicModalOpen] = useState(false);
   const [isMissingExchangeModalOpen, setIsMissingExchangeModalOpen] = useState(false);
   const [signalStrategyIds, setSignalStrategyIds] = useState<string[]>([]);
+  const [engineRisk, setEngineRisk] = useState({
+    defaultLeverage: 3,
+    tpDisabled: true,
+    takeProfitPct: 4.5,
+    stopLossPct: 2.5,
+    slAtrMult: 1.5,
+    slMaxMarginPct: 10,
+  });
+
+  async function loadEngineRisk() {
+    try {
+      const res = await fetch('/api/engine-config', { cache: 'no-store' });
+      if (!res.ok) return;
+      const cfg = await res.json();
+      setEngineRisk({
+        defaultLeverage: Number(cfg.defaultLeverage ?? 3),
+        tpDisabled: Boolean(cfg.tpDisabled),
+        takeProfitPct: Number(cfg.takeProfitPct ?? 4.5),
+        stopLossPct: Number(cfg.stopLossPct ?? 2.5),
+        slAtrMult: Number(cfg.slAtrMult ?? 1.5),
+        slMaxMarginPct: Number(cfg.slMaxMarginPct ?? 10),
+      });
+    } catch {
+      // Keep Scenario C defaults if worker config is unreachable.
+    }
+  }
 
   async function loadDashboardData() {
     try {
@@ -263,6 +289,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadDashboardData();
+    loadEngineRisk();
 
     // Auto-refresh market data + active basket every 10 seconds
     const marketInterval = setInterval(async () => {
@@ -588,7 +615,9 @@ export default function DashboardPage() {
                 : 'text-slate-400 bg-dark-800 border-dark-700'
             }`}
           >
-            {settings?.is_bot_active ? t('dashboard.active7x') : t('dashboard.idle')}
+            {settings?.is_bot_active
+              ? t('dashboard.activeWithLev', { leverage: engineRisk.defaultLeverage.toFixed(1) })
+              : t('dashboard.idle')}
           </span>
         </div>
       </div>
@@ -723,28 +752,45 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Target Risk Rules */}
+        {/* Target Risk Rules — live engine config (not legacy 5%/1.5%/7x) */}
         <div className="bg-dark-900 border border-dark-800 p-5 rounded-2xl shadow-xl">
           <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
             <span>{t('dashboard.activeRiskGuards')}</span>
             <ShieldCheck className="w-4 h-4 text-honey-400" />
           </div>
-          <div className="mt-3 flex items-center gap-4 font-mono">
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 font-mono">
             <div>
               <span className="text-xs text-slate-400">TP: </span>
-              <span className="text-base font-bold text-emerald-400">+5.0%</span>
+              <span
+                className={`text-base font-bold ${
+                  engineRisk.tpDisabled ? 'text-slate-400' : 'text-emerald-400'
+                }`}
+              >
+                {engineRisk.tpDisabled
+                  ? t('dashboard.tpOff')
+                  : `+${engineRisk.takeProfitPct.toFixed(1)}%`}
+              </span>
             </div>
             <div>
               <span className="text-xs text-slate-400">SL: </span>
-              <span className="text-base font-bold text-rose-400">-1.5%</span>
+              <span className="text-base font-bold text-rose-400">
+                {t('dashboard.slAtrLabel', {
+                  mult: engineRisk.slAtrMult.toFixed(1),
+                  cap: engineRisk.slMaxMarginPct.toFixed(0),
+                })}
+              </span>
             </div>
             <div>
               <span className="text-xs text-slate-400">Lev: </span>
-              <span className="text-base font-bold text-honey-400">7.0x</span>
+              <span className="text-base font-bold text-honey-400">
+                {engineRisk.defaultLeverage.toFixed(1)}x
+              </span>
             </div>
           </div>
           <p className="mt-2 text-[11px] text-slate-500 font-mono">
-            {t('dashboard.trendFlipFilter')}
+            {engineRisk.tpDisabled
+              ? t('dashboard.riskGuardHintTpOff')
+              : t('dashboard.trendFlipFilter')}
           </p>
         </div>
       </div>
@@ -915,18 +961,23 @@ export default function DashboardPage() {
                 {positions.map((p) => {
                   const pnl = Number(p.unrealized_pnl_usd) || 0;
                   const pnlPct = Number(p.pnl_pct) || 0;
-                  const tpTarget = Number(settings?.take_profit_pct) || 5.0;
-                  const slTarget = Number(settings?.stop_loss_pct) || 1.5;
+                  const leverage = engineRisk.defaultLeverage;
+                  const tpEnabled = !engineRisk.tpDisabled;
+                  const tpTarget = tpEnabled ? engineRisk.takeProfitPct : 0;
+                  const slTarget = engineRisk.slMaxMarginPct;
 
                   const isPositive = pnlPct >= 0;
-                  const tpProgress = Math.min(100, Math.max(0, (pnlPct / tpTarget) * 100));
+                  const tpProgress =
+                    tpEnabled && tpTarget > 0
+                      ? Math.min(100, Math.max(0, (pnlPct / tpTarget) * 100))
+                      : 0;
                   const slRisk = Math.min(100, Math.max(0, (Math.abs(Math.min(0, pnlPct)) / slTarget) * 100));
                   const bufferToSl = Math.max(0, slTarget + pnlPct);
-                  const remToTp = Math.max(0, tpTarget - pnlPct);
+                  const remToTp = tpEnabled ? Math.max(0, tpTarget - pnlPct) : 0;
 
                   const m = marketData.find((item) => item.pair_symbol === p.pair_symbol);
                   const isTrendSafe = m ? Boolean(m.is_in_trend) : true;
-                  const isNearTp = pnlPct >= tpTarget * 0.75;
+                  const isNearTp = tpEnabled && pnlPct >= tpTarget * 0.75;
                   const isNearSl = pnlPct <= -slTarget * 0.65;
                   return (
                     <tr key={p.id} className="hover:bg-dark-850/50 transition-colors">
@@ -963,14 +1014,18 @@ export default function DashboardPage() {
                           ${Number(p.total_position_volume_usd || 87500).toLocaleString(dateLocale, { minimumFractionDigits: 2 })}
                         </div>
                         <div className="text-[10px] text-slate-400">
-                          {t('dashboard.margin')} ${Number(p.allocated_margin_usd || 12500).toLocaleString(dateLocale, { minimumFractionDigits: 2 })} (7.0x)
+                          {t('dashboard.margin')} $
+                          {Number(p.allocated_margin_usd || 0).toLocaleString(dateLocale, {
+                            minimumFractionDigits: 2,
+                          })}{' '}
+                          ({leverage.toFixed(1)}x)
                         </div>
                       </td>
                       <td className="px-5 py-4 min-w-[210px]">
-                        <div className="flex items-center justify-between text-[11px] mb-1.5">
-                          <span className="text-rose-400 font-semibold flex items-center gap-1">
+                        <div className="flex items-center justify-between text-[11px] mb-1.5 gap-2">
+                          <span className="text-rose-400 font-semibold flex items-center gap-1 shrink-0">
                             <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                            SL -{slTarget.toFixed(1)}%
+                            SL ≤{slTarget.toFixed(0)}%
                           </span>
                           {isNearTp ? (
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 animate-pulse">
@@ -978,32 +1033,51 @@ export default function DashboardPage() {
                             </span>
                           ) : isNearSl ? (
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse">
-                              {t('dashboard.exitApproachingSl', { target: slTarget.toFixed(1) })}
+                              {t('dashboard.exitApproachingSl', { target: slTarget.toFixed(0) })}
                             </span>
                           ) : (
-                            <span className="text-[10px] text-slate-400 font-mono">
-                              {isPositive
-                                ? t('dashboard.exitToTpProgress', {
-                                    pct: tpProgress.toFixed(0),
-                                    rem: remToTp.toFixed(2),
-                                  })
-                                : t('dashboard.exitBufferToSl', {
-                                    rem: bufferToSl.toFixed(2),
-                                  })}
+                            <span className="text-[10px] text-slate-400 font-mono text-center">
+                              {tpEnabled
+                                ? isPositive
+                                  ? t('dashboard.exitToTpProgress', {
+                                      pct: tpProgress.toFixed(0),
+                                      rem: remToTp.toFixed(2),
+                                    })
+                                  : t('dashboard.exitBufferToSl', {
+                                      rem: bufferToSl.toFixed(2),
+                                    })
+                                : isPositive
+                                  ? t('dashboard.exitTpOffPositive')
+                                  : t('dashboard.exitBufferToSl', {
+                                      rem: bufferToSl.toFixed(2),
+                                    })}
                             </span>
                           )}
-                          <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                            TP +{tpTarget.toFixed(1)}%
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          <span className="text-emerald-400 font-semibold flex items-center gap-1 shrink-0">
+                            {tpEnabled ? (
+                              <>
+                                TP +{tpTarget.toFixed(1)}%
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                              </>
+                            ) : (
+                              <>
+                                {t('dashboard.exitTrendFlip')}
+                                <span className="w-1.5 h-1.5 rounded-full bg-honey-400" />
+                              </>
+                            )}
                           </span>
                         </div>
 
                         {/* Dual-Track Visual Progress Meter */}
                         <div
                           className="h-2 w-full bg-dark-950 rounded-full border border-dark-700/80 overflow-hidden flex relative"
-                          title={t('dashboard.exitAutoCloseInfo')}
+                          title={
+                            tpEnabled
+                              ? t('dashboard.exitAutoCloseInfo')
+                              : t('dashboard.exitAutoCloseInfoTpOff')
+                          }
                         >
-                          {/* Left Half (SL Danger Zone: -slTarget to 0) */}
+                          {/* Left Half (SL Danger Zone) */}
                           <div className="w-1/2 h-full flex justify-end bg-rose-950/25 border-r border-dark-700">
                             {!isPositive && (
                               <div
@@ -1012,12 +1086,18 @@ export default function DashboardPage() {
                               />
                             )}
                           </div>
-                          {/* Right Half (TP Target Zone: 0 to +tpTarget) */}
+                          {/* Right Half (TP or open profit when TP off) */}
                           <div className="w-1/2 h-full flex justify-start bg-emerald-950/25">
                             {isPositive && (
                               <div
                                 className="h-full bg-emerald-500 transition-all duration-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]"
-                                style={{ width: `${tpProgress}%` }}
+                                style={{
+                                  width: `${
+                                    tpEnabled
+                                      ? tpProgress
+                                      : Math.min(100, Math.max(0, (pnlPct / slTarget) * 100))
+                                  }%`,
+                                }}
                               />
                             )}
                           </div>

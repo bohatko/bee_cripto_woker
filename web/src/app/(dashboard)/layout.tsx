@@ -95,7 +95,7 @@ export default function DashboardLayout({
               description: t('dashboard.toastTradeOpenedDesc', {
                 long: longCoin || 'LONG',
                 short: shortCoin || 'SHORT',
-                leverage: '7.0',
+                leverage: '3.0',
               }),
               duration: 8000,
             }

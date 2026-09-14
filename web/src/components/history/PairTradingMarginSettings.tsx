@@ -5,6 +5,7 @@ import { Percent } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { toast } from '@/components/ui/sonner';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { Pulse, CardShell } from '@/components/ui/skeleton';
 
 export function PairTradingMarginSettings() {
   const { t } = useLanguage();
@@ -79,7 +80,20 @@ export function PairTradingMarginSettings() {
     }
   };
 
-  if (loading || !settingsId) return null;
+  if (loading) {
+    return (
+      <CardShell className="p-5 shadow-xl space-y-3">
+        <div className="flex justify-between items-center gap-3">
+          <Pulse className="h-4 w-48" />
+          <Pulse className="h-4 w-12" />
+        </div>
+        <Pulse className="h-2 w-full rounded-lg" />
+        <Pulse className="h-3 w-64 max-w-full" />
+      </CardShell>
+    );
+  }
+
+  if (!settingsId) return null;
 
   const budget = (freeMarginUsd * pairsBalancePct) / 100;
   const slot = budget / 4;

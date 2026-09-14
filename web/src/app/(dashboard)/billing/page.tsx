@@ -64,10 +64,6 @@ export default function BillingPage() {
 
   const activeInvoice = invoices.find((i) => ['issued', 'pending_review'].includes(i.status));
 
-  if (loading) {
-    return <BillingSkeleton />;
-  }
-
   const handleCopyWallet = () => {
     navigator.clipboard.writeText(walletAddresses[selectedNetwork]);
     setCopied(true);
@@ -100,6 +96,10 @@ export default function BillingPage() {
       loadBilling();
     }
   };
+
+  if (loading) {
+    return <BillingSkeleton />;
+  }
 
   return (
     <div className="p-4 sm:p-8 max-w-5xl space-y-8">
