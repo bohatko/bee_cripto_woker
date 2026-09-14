@@ -1,5 +1,5 @@
-/** Minimum USDT slot margin required to attempt a pair entry (25% of free × 7x). */
-export const MIN_SLOT_MARGIN_USD = 20;
+/** Minimum USDT slot margin required to attempt a pair entry (20% of free × leverage). */
+export const MIN_SLOT_MARGIN_USD = 10;
 
 export function extractUsdtBalance(balance: any): { free: number; total: number } {
   let free = 0;

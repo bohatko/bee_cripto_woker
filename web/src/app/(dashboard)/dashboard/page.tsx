@@ -188,7 +188,7 @@ export default function DashboardPage() {
         currentAccounts.find((a) => a.id === sett?.exchange_account_id) || currentAccounts[0];
       const isMarginLow =
         hasValidated &&
-        (freeMarginSum < 20 ||
+        (freeMarginSum < 50 ||
           Boolean(
             primAcc?.last_error_msg &&
               (primAcc.last_error_msg.toLowerCase().includes('insufficient free') ||
@@ -201,7 +201,7 @@ export default function DashboardPage() {
         toast.warning(t('dashboard.toastLowMarginTitle'), {
           description: t('dashboard.toastLowMarginDesc', {
             free: freeMarginSum.toFixed(2),
-            min: '20.00',
+            min: '10.00',
           }),
           duration: 9000,
         });
@@ -253,7 +253,7 @@ export default function DashboardPage() {
         const primAcc =
           data.accounts.find((a: any) => a.id === settings?.exchange_account_id) || data.accounts[0];
         const isMarginLow =
-          freeMarginSum < 20 ||
+          freeMarginSum < 50 ||
           Boolean(
             primAcc?.last_error_msg &&
               (primAcc.last_error_msg.toLowerCase().includes('insufficient free') ||
@@ -267,7 +267,7 @@ export default function DashboardPage() {
             toast.warning(t('dashboard.toastLowMarginTitle'), {
               description: t('dashboard.toastLowMarginDesc', {
                 free: freeMarginSum.toFixed(2),
-                min: '20.00',
+                min: '10.00',
               }),
               duration: 9000,
             });
@@ -415,7 +415,7 @@ export default function DashboardPage() {
   const hasInsufficientMargin =
     isBotActive &&
     hasValidatedAccount &&
-    (totalFreeMargin < 20 ||
+    (totalFreeMargin < 50 ||
       Boolean(
         primaryAccount?.last_error_msg &&
           (primaryAccount.last_error_msg.toLowerCase().includes('insufficient free') ||
@@ -652,8 +652,8 @@ export default function DashboardPage() {
                     exchange: (primaryAccount?.exchange || 'exchange').toUpperCase(),
                     free: totalFreeMargin.toFixed(2),
                     total: totalAggregatedEquity.toFixed(2),
-                    min: '20.00',
-                    minTotal: '80.00',
+                    min: '10.00',
+                    minTotal: '50.00',
                   })}
                 </p>
                 <p className="text-[11px] text-amber-400 font-medium">
@@ -714,12 +714,12 @@ export default function DashboardPage() {
               {t('dashboard.freeMargin')}:{' '}
               <span
                 className={`font-semibold ${
-                  totalFreeMargin < 20 ? 'text-rose-400 font-bold' : 'text-emerald-400'
+                  totalFreeMargin < 50 ? 'text-rose-400 font-bold' : 'text-emerald-400'
                 }`}
               >
                 ${totalFreeMargin.toLocaleString(dateLocale, { minimumFractionDigits: 2 })}
               </span>
-              {totalFreeMargin < 20 && (
+              {totalFreeMargin < 50 && (
                 <span className="ml-1 text-[9px] px-1 py-0.2 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">
                   {t('dashboard.lowMarginBadge')}
                 </span>
@@ -850,7 +850,7 @@ export default function DashboardPage() {
                     <span className="text-xs text-slate-600">•</span>
                     <p
                       className={`text-xs font-bold ${
-                        Number(acc.free_balance_usd ?? 0) < 20 ? 'text-rose-400' : 'text-emerald-400'
+                        Number(acc.free_balance_usd ?? 0) < 50 ? 'text-rose-400' : 'text-emerald-400'
                       }`}
                     >
                       {t('dashboard.freeMargin')}: $

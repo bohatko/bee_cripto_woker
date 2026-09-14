@@ -37,14 +37,17 @@ function isExternallyFlatPositionError(message: string): boolean {
   );
 }
 
+/** Share of the pair-trading budget allocated to each basket slot (4 slots → 80% max). */
+export const PAIR_SLOT_FRACTION = 0.2;
+
 export class OrderRouter {
-  private scanner: MarketScanner;
+  private scanner: MarketScanner | null;
   private lastSkipLogAt = new Map<string, number>();
   private lastQuietSkipLogAt = new Map<string, number>();
   private last4hCloseLogAt = new Map<string, number>();
   private inFlightEntries = new Set<string>();
 
-  constructor(scanner: MarketScanner) {
+  constructor(scanner: MarketScanner | null = null) {
     this.scanner = scanner;
   }
 
@@ -204,11 +207,11 @@ export class OrderRouter {
       return;
     }
 
-    // Master strategy uses $50,000 reference capital (4 pairs = $12,500 margin per slot, 7x = $87,500 volume)
-    const refMargin = 12500;
+    // Master strategy uses $50,000 reference capital (20% per slot = $10,000 margin)
+    const refMargin = 10000;
     const lev = CONFIG.defaultLeverage;
-    const vol = refMargin * lev; // 87,500 USDT
-    const legVol = vol / 2; // 43,750 USDT per leg
+    const vol = refMargin * lev;
+    const legVol = vol / 2;
 
     const longQty = Number((legVol / signal.longPrice).toFixed(8));
     const shortQty = Number((legVol / signal.shortPrice).toFixed(8));
@@ -372,8 +375,8 @@ export class OrderRouter {
         ? Math.min(100, Math.max(5, pairsBalancePctRaw))
         : 100;
       const pairTradingBudgetUsd = freeUsdt * (pairsBalancePct / 100);
-      // 4 pairs in basket => 25% of the pair-trading budget per pair
-      const slotMargin = pairTradingBudgetUsd * 0.25;
+      // 4 pairs in basket => 20% of the pair-trading budget per pair (20% free buffer)
+      const slotMargin = pairTradingBudgetUsd * PAIR_SLOT_FRACTION;
       if (!Number.isFinite(freeUsdt) || slotMargin < MIN_SLOT_MARGIN_USD) {
         await this.skipEntry(
           user,
@@ -735,7 +738,7 @@ export class OrderRouter {
     }
 
     // Require new 4h candle close since SL
-    if (CONFIG.reentryRequireNew4hClose) {
+    if (CONFIG.reentryRequireNew4hClose && this.scanner) {
       const lastClosedOpenTs = this.scanner.getLastClosedOpenTs(signal.pairConfig.pairSymbol);
       if (lastClosedOpenTs !== undefined) {
         // Need at least one 4h candle closed after the SL exit: lastClosedOpenTs + 4h > closed_at

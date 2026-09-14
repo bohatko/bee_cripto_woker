@@ -351,7 +351,7 @@ export function TradeReadinessMonitor({
               {t('readiness.insufficientMarginAlert', {
                 pairs: armedAwaitingPairs.map((p) => p.meta.pairSymbol).join(', '),
                 free: Number(freeMargin || 0).toFixed(2),
-                min: '20.00',
+                min: '10.00',
               })}
             </span>
           </div>

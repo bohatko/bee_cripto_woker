@@ -623,7 +623,7 @@ export default function ExchangeSettingsPage() {
                       <span className="text-[10px] text-slate-400 block">{t('dashboard.freeMargin')}:</span>
                       <p
                         className={`text-xl font-black ${
-                          Number(currentTabAccount.free_balance_usd ?? 0) < 20
+                          Number(currentTabAccount.free_balance_usd ?? 0) < 50
                             ? 'text-rose-400'
                             : 'text-emerald-400'
                         }`}
@@ -636,9 +636,9 @@ export default function ExchangeSettingsPage() {
                     </div>
                   </div>
 
-                  {Number(currentTabAccount.free_balance_usd ?? 0) < 20 && (
+                  {Number(currentTabAccount.free_balance_usd ?? 0) < 50 && (
                     <div className="mt-2 flex items-center gap-1.5 text-[10px] text-rose-300 bg-rose-500/10 px-2 py-1 rounded border border-rose-500/20 font-mono">
-                      <span>⚠️ {t('dashboard.toastLowMarginTitle')}: &lt; $20.00 USDT</span>
+                      <span>⚠️ {t('dashboard.toastLowMarginTitle')}: &lt; $10.00 USDT</span>
                     </div>
                   )}
 

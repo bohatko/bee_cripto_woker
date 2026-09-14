@@ -168,7 +168,7 @@ export function createExchangeInstance(account: {
 Когда `is_in_trend` становится `true`, а у пользователя слот свободен:
 1. Проверяется статус подписки: `subscription_status IN ('trial', 'active')` и `is_frozen = false`.
 2. Запрашивается баланс пользователя: `fetchBalance()`.
-3. Рассчитывается маржинальный слот (25% свободного баланса USDT).
+3. Рассчитывается маржинальный слот (20% свободного баланса USDT).
 4. Рассчитывается объем ног с плечом 7x:
    $$\text{Volume}_{\text{leg}} = \frac{\text{SlotMargin} \times 7}{2}$$
    $$\text{Qty}_{\text{Long}} = \frac{\text{Volume}_{\text{leg}}}{\text{Price}_{\text{Long}}}, \quad \text{Qty}_{\text{Short}} = \frac{\text{Volume}_{\text{leg}}}{\text{Price}_{\text{Short}}}$$

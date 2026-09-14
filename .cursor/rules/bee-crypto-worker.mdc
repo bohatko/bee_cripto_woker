@@ -25,7 +25,7 @@ Always consult the documentation in `doc/` before modifying architectural, datab
 - Daily momentum screener job (`pair-selection.ts`); auto-rotation gated by `engine_settings.auto_rotation_enabled` (keep `false` in prod until validation gate passes).
 - Removed pairs with open positions are managed to TP/SL/Trend-Flip; scanner unions active basket + open-position pairs.
 - Entry condition: `Ratio > EMA10` on 4h timeframe, and pair is in the active global basket.
-- Margin split: 25% of available free margin per pair.
+- Margin split: 20% of available free margin per pair (80% max across 4 slots, 20% buffer).
 - Leverage: 3.0x (hard cap via `MAX_LEVERAGE=3`).
 - Take Profit: disabled by default (`TP_DISABLED=true`).
 - Stop Loss: ATR-based (`SL_ATR_MULT=1.5`) capped by `SL_MAX_MARGIN_PCT=10`.

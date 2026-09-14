@@ -96,7 +96,8 @@ export function PairTradingMarginSettings() {
   if (!settingsId) return null;
 
   const budget = (freeMarginUsd * pairsBalancePct) / 100;
-  const slot = budget / 4;
+  // Engine allocates 20% of the pair-trading budget per basket slot.
+  const slot = budget * 0.2;
 
   return (
     <div className="bg-dark-900 border border-dark-800 rounded-2xl p-5 shadow-xl space-y-3">
