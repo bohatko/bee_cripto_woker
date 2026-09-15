@@ -10,6 +10,12 @@ export class PositionGuard {
   private timer: NodeJS.Timeout | null = null;
   private checkIntervalMs: number;
   private peakGrossPnlMap = new Map<string, number>();
+  /**
+   * Panic triggers already handled by this process (key: `user_id:panic_closed_at`).
+   * Safety net against a trigger that could not be cleared in the DB: without it, the
+   * 5s loop would re-close every position opened afterwards, forever.
+   */
+  private processedPanicKeys = new Set<string>();
 
   constructor(orderRouter: OrderRouter, scanner: MarketScanner, checkIntervalMs: number = 5000) {
     this.orderRouter = orderRouter;
@@ -182,6 +188,13 @@ export class PositionGuard {
     };
 
     for (const row of panicUsers) {
+      // A panic trigger is a one-shot signal. Once handled, never act on the same
+      // user+timestamp again: if the flag could not be cleared (DB rejected the update),
+      // re-processing it would liquidate every position opened afterwards.
+      const panicKey = `${row.user_id}:${row.panic_closed_at}`;
+      if (this.processedPanicKeys.has(panicKey)) continue;
+      this.processedPanicKeys.add(panicKey);
+
       const { data: profile } = await supabase
         .from('users_profile')
         .select('email, role')
@@ -260,16 +273,35 @@ export class PositionGuard {
           }
         }
 
-        // Pause every bot after platform-wide panic
-        await supabase
+        // Platform-wide panic: pause every bot and consume every pending panic trigger.
+        // PostgREST rejects UPDATE without a WHERE clause ("UPDATE requires a WHERE clause",
+        // code 21000), so each statement MUST carry an explicit filter. An unfiltered update
+        // silently failed here before and left panic_closed_at set forever, which made this
+        // 5s loop treat every newly opened position as a panic liquidation.
+        const { error: pauseAllError } = await supabase
           .from('trading_settings')
-          .update({ is_bot_active: false, panic_closed_at: null });
+          .update({ is_bot_active: false })
+          .eq('is_bot_active', true);
+        if (pauseAllError) {
+          console.error(`❌ [PANIC] Failed to pause all bots: ${pauseAllError.message}`);
+        }
+
+        const { error: clearPanicError } = await supabase
+          .from('trading_settings')
+          .update({ panic_closed_at: null })
+          .not('panic_closed_at', 'is', null);
+        if (clearPanicError) {
+          console.error(`❌ [PANIC] Failed to clear panic triggers: ${clearPanicError.message}`);
+        }
       } else {
         // Reset panic trigger for this user only
-        await supabase
+        const { error: resetPanicError } = await supabase
           .from('trading_settings')
           .update({ panic_closed_at: null, is_bot_active: false })
           .eq('user_id', row.user_id);
+        if (resetPanicError) {
+          console.error(`❌ [PANIC] Failed to reset panic trigger for ${row.user_id}: ${resetPanicError.message}`);
+        }
       }
     }
   }
