@@ -10,7 +10,7 @@
 Движок работает непрерывно 24/7 и решает 5 критические задачи:
 1. **Мастер-анализ рынка (Market Scanner)**: непрерывный расчет EMA 10 по **динамической** корзине из `strategy_pairs` (через `PairRegistry`) плюс пары с открытыми `bot_positions` (union), чтобы trend-flip работал после ротации.
 2. **Диспетчер сигналов (Master-Follower Dispatcher)**: при появлении сигнала на вход или выход — мгновенное зеркалирование ордеров на биржевых аккаунтах всех активных пользователей с масштабированием объемов под депозит каждого. Новые входы — только по активной глобальной корзине.
-3. **Мониторинг позиций и риска (Position Risk Guard)**: отслеживание плавающего PnL связок в режиме реального времени, исполнение тейк-профитов (+5.0%), стоп-лоссов (-1.5%) и аварийных выходов.
+3. **Мониторинг позиций и риска (Position Risk Guard)**: отслеживание плавающего PnL связок в режиме реального времени, исполнение ATR-стоп-лоссов, выходов по смене тренда и экстренных закрытий (фиксированный TP по умолчанию отключён).
 4. **Динамический подбор пар (Pair Selection Job)**: ежедневный momentum-скринер + опциональная авторотация корзины (см. §8).
 5. **Мониторинг здоровья (Health Ping)**: проверка доступности API бирж и отправка heartbeats в таблицу `system_health_logs` в Supabase.
 
@@ -169,8 +169,8 @@ export function createExchangeInstance(account: {
 1. Проверяется статус подписки: `subscription_status IN ('trial', 'active')` и `is_frozen = false`.
 2. Запрашивается баланс пользователя: `fetchBalance()`.
 3. Рассчитывается маржинальный слот (20% свободного баланса USDT).
-4. Рассчитывается объем ног с плечом 7x:
-   $$\text{Volume}_{\text{leg}} = \frac{\text{SlotMargin} \times 7}{2}$$
+4. Рассчитывается объем ног с плечом 3x (`MAX_LEVERAGE=3`):
+   $$\text{Volume}_{\text{leg}} = \frac{\text{SlotMargin} \times 3}{2}$$
    $$\text{Qty}_{\text{Long}} = \frac{\text{Volume}_{\text{leg}}}{\text{Price}_{\text{Long}}}, \quad \text{Qty}_{\text{Short}} = \frac{\text{Volume}_{\text{leg}}}{\text{Price}_{\text{Short}}}$$
 5. **Синхронный запуск двух ордеров**:
    * `createMarketBuyOrder(LongSymbol, QtyLong)`
@@ -181,17 +181,17 @@ export function createExchangeInstance(account: {
 Каждые 5 секунд воркер рассчитывает плавающий PnL связки:
 $$\text{NetPnL}_{\%} = \frac{\text{PnL}_{\text{Long}} + \text{PnL}_{\text{Short}}}{\text{Volume}_{\text{leg}}}$$
 
-* **Сценарий 1: Тейк-профит (+5.0%)**:
-  * Если $\text{NetPnL}_{\%} \ge +0.05$:
-  * Отправляются два ордера: `Market Sell` (закрытие лонга) и `Market Buy` (закрытие шорта).
-  * Статус позиции в БД обновляется на `closed`, `exit_reason = 'tp'`.
-* **Сценарий 2: Стоп-лосс (-1.5%)**:
-  * Если $\text{NetPnL}_{\%} \le -0.015$:
-  * Мгновенное закрытие обеих ног.
-  * Статус позиции обновляется на `closed`, `exit_reason = 'sl'`.
-* **Сценарий 3: Смена тренда (Trend Flip)**:
+> **Актуальная модель выходов (после аудита 2026-09-04).** Legacy-правила (TP +5.0% / SL -1.5% маржи при 7x) дали отрицательное матожидание и полную ликвидацию на честном 1m-бэктесте. Текущий дефолт: фиксированный TP **отключён** (`TP_DISABLED=true`), стоп-лосс динамический от волатильности, выход по смене тренда и panic close. Подробности — [`doc/02_STRATEGY_AND_BACKTESTS.md`](02_STRATEGY_AND_BACKTESTS.md) разделы 4–6.
+
+* **Сценарий 1: ATR-стоп-лосс**:
+  * Порог: $1.5 \times \text{ATR}_{14}$ (4h ratio, Wilder), с потолком `SL_MAX_MARGIN_PCT` (по умолчанию 10% маржи).
+  * Если убыток связки достигает порога — мгновенное закрытие обеих ног, `exit_reason = 'sl'`.
+* **Сценарий 2: Смена тренда (Trend Flip)**:
   * Если 4-часовая свеча соотношения закрылась ниже $\text{EMA}_{10}$:
   * Позиции закрываются по рынку, `exit_reason = 'trend_flip'`.
+* **Сценарий 3: Take-Profit (отключён по умолчанию)**:
+  * При `TP_DISABLED=true` фиксированный тейк-профит не выставляется: прибыль фиксируется выходом по смене тренда.
+  * Если оператор включит TP, порог интерпретируется согласно `RISK_MODE` (`margin` / `spread`).
 * **Сценарий 4: Экстренная кнопка пользователя (Panic Close)**:
   * Если пользователь нажал кнопку в кабинете, в базе выставляется флаг: воркер перехватывает сигнал за <1 секунды и закрывает связки.
 
@@ -230,12 +230,32 @@ bee_crypto_worker_engine/
 │   │   └── pair-registry.ts    # Кэш активной корзины из strategy_pairs
 │   ├── engine/
 │   │   ├── market-scanner.ts   # Ratio/EMA10: union(корзина ∪ open positions)
-│   │   ├── position-guard.ts   # Мониторинг TP (+5%), SL (-1.5%)
-│   │   └── order-router.ts     # Входы только по PairRegistry.isActivePair
+│   │   ├── position-guard.ts   # Мониторинг ATR-стоп-лосса, trend-flip и panic close
+│   │   ├── order-router.ts     # Входы только по PairRegistry.isActivePair
+│   │   ├── execution.ts        # Режимы market / maker_hedge, учет комиссий
+│   │   └── stats.ts            # Сводная статистика движка
+│   ├── signals/                # Dip-Buy ядро (XRP 24h / ETH 1h / BTC 7m)
+│   │   ├── candle-buffer.ts    # Буфер минутных свечей
+│   │   ├── dip-buy-scanner.ts  # Детектор просадок и генерация сигналов
+│   │   ├── dip-buy-router.ts   # Master paper + fan-out исполнение
+│   │   ├── dip-buy-guard.ts    # Сверка ордеров и закрытие по TP/SL/Panic
+│   │   ├── dip-buy-execution.ts
+│   │   └── readiness-alerter.ts # Telegram-алерты 80% / 90%
 │   ├── jobs/
 │   │   ├── health-check.ts     # Пинг бирж каждые 30 сек
-│   │   ├── billing-cron.ts     # Расчет недельного PnL и генерация инвойсов
-│   │   └── pair-selection.ts   # Momentum-скринер + авторотация
+│   │   ├── billing-cron.ts     # Недельный PnL (информационно) + инвойс $20
+│   │   ├── pair-selection.ts   # Momentum-скринер + авторотация
+│   │   ├── pair-selection-engine-aware.ts
+│   │   └── pair-simulator.ts   # Симуляция корзины
+│   ├── notifications/
+│   │   └── telegram.ts         # Telegram-уведомления
+│   ├── scripts/                # Ручные операционные утилиты (backfill, reconcile, one-shot)
+│   ├── exchanges/
+│   │   ├── exchange-factory.ts # Фабрика CCXT для 3 бирж
+│   │   ├── validator.ts        # Валидатор ключей (проверка прав и withdraw)
+│   │   ├── balance.ts          # Балансы через fetchBalance()
+│   │   ├── symbols.ts          # DEFAULT_STRATEGY_PAIRS + маппинг тикеров
+│   │   └── pair-registry.ts    # Кэш активной корзины из strategy_pairs
 │   └── types/
 │       └── index.ts            # TypeScript интерфейсы
 ```
