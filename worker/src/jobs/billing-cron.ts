@@ -71,9 +71,9 @@ export class BillingCronJob {
       .reduce((sum, p) => sum + (Number(p.realized_pnl_usd) || 0), 0);
 
     const baseFee = 20.0;
-    // 10% fee on net profit above HWM
-    const profitFee = realizedProfit > 0 ? Number((realizedProfit * 0.10).toFixed(2)) : 0;
-    const totalAmount = baseFee + profitFee;
+    // Flat weekly subscription only: no performance / profit share fee.
+    const profitFee = 0;
+    const totalAmount = baseFee;
 
     const invoiceNumber = `INV-${Date.now().toString(36).toUpperCase()}`;
 

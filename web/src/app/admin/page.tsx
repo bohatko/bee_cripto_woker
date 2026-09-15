@@ -962,8 +962,10 @@ export default function AdminDashboardPage() {
                               ${Number(inv.total_amount_usd).toFixed(2)} USDT
                             </div>
                             <div className="text-[10px] text-slate-500">
-                              Fixed: ${Number(inv.base_fee_usd).toFixed(0)} • Profit:{' '}
-                              ${Number(inv.profit_fee_usd).toFixed(2)}
+                              Fixed: ${Number(inv.base_fee_usd).toFixed(0)}
+                              {Number(inv.profit_fee_usd) > 0 && (
+                                <> • Profit: ${Number(inv.profit_fee_usd).toFixed(2)}</>
+                              )}
                             </div>
                           </td>
                           <td className="px-5 py-4">

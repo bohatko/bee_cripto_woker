@@ -12,6 +12,7 @@ coverage/
 out/
 build/
 dist/
+*.tsbuildinfo
 
 # Production
 /.vercel
@@ -43,8 +44,9 @@ Thumbs.db
 *.sln
 *.sw?
 
-# Research data cache (re-downloadable via research/*/download_data.py)
+# Research data cache & generated outputs (re-downloadable via research/*/download_data.py)
 research/data/
+research/*/out/
 
 # Vercel env pulls (may contain secrets)
 .env.vercel*

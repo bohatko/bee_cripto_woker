@@ -160,7 +160,7 @@ CREATE TABLE IF NOT EXISTS public.bot_positions (
 );
 
 -- ==============================================================================
--- ТАБЛИЦА 6: invoices (Биллинг: Абонплата $20/нед + 10% от чистой прибыли)
+-- ТАБЛИЦА 6: invoices (Биллинг: фиксированная абонплата $20/нед)
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.invoices (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

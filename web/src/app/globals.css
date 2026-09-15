@@ -14,6 +14,12 @@ body {
   overflow-x: hidden;
 }
 
+/* Anti-FOUC: keep the page hidden for the few milliseconds before the client
+   applies the locale stored in localStorage (see root layout init script). */
+html.i18n-pending body {
+  visibility: hidden;
+}
+
 /* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 6px;

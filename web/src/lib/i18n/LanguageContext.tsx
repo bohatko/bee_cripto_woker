@@ -5,6 +5,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useState,
 } from 'react';
@@ -12,8 +13,11 @@ import { en } from './dictionaries/en';
 import { ru } from './dictionaries/ru';
 import {
   DEFAULT_LOCALE,
+  I18N_PENDING_CLASS,
   LOCALE_STORAGE_KEY,
-  LOCALES,
+  isLocale,
+  normalizeLocale,
+  writeLocaleCookie,
   type Dictionary,
   type Locale,
   type TranslationVars,
@@ -21,6 +25,11 @@ import {
 import { formatDate, formatDateTime, formatTime } from '@/lib/datetime';
 
 const dictionaries: Record<Locale, Dictionary> = { en, ru };
+
+// Apply the stored locale before the browser paints on the client, but avoid the
+// "useLayoutEffect does nothing on the server" warning during SSR.
+const useIsomorphicLayoutEffect =
+  typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 type LanguageContextValue = {
   locale: Locale;
@@ -53,40 +62,47 @@ function interpolate(template: string, vars?: TranslationVars): string {
   );
 }
 
-function readStoredLocale(): Locale {
-  if (typeof window === 'undefined') return DEFAULT_LOCALE;
+function readStoredLocale(): Locale | null {
+  if (typeof window === 'undefined') return null;
   try {
     const stored = window.localStorage.getItem(LOCALE_STORAGE_KEY);
-    if (stored && LOCALES.includes(stored as Locale)) {
-      return stored as Locale;
-    }
+    return isLocale(stored) ? stored : null;
   } catch {
-    // ignore
+    return null;
   }
-  return DEFAULT_LOCALE;
 }
 
-export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(DEFAULT_LOCALE);
-  const [hydrated, setHydrated] = useState(false);
+export function LanguageProvider({
+  children,
+  initialLocale = DEFAULT_LOCALE,
+}: {
+  children: React.ReactNode;
+  initialLocale?: Locale;
+}) {
+  const [locale, setLocaleState] = useState<Locale>(() =>
+    normalizeLocale(initialLocale)
+  );
 
-  useEffect(() => {
-    setLocaleState(readStoredLocale());
-    setHydrated(true);
+  useIsomorphicLayoutEffect(() => {
+    const stored = readStoredLocale();
+    setLocaleState((current) =>
+      stored && stored !== current ? stored : current
+    );
+    document.documentElement.classList.remove(I18N_PENDING_CLASS);
   }, []);
 
   useEffect(() => {
-    if (!hydrated) return;
     document.documentElement.lang = locale;
+    writeLocaleCookie(locale);
     try {
       window.localStorage.setItem(LOCALE_STORAGE_KEY, locale);
     } catch {
       // ignore
     }
-  }, [locale, hydrated]);
+  }, [locale]);
 
   const setLocale = useCallback((next: Locale) => {
-    if (!LOCALES.includes(next)) return;
+    if (!isLocale(next)) return;
     setLocaleState(next);
   }, []);
 

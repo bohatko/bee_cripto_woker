@@ -13,12 +13,12 @@
 | Файл | Описание и что в нем искать |
 |---|---|
 | [`doc/README.md`](doc/README.md) | **Главный индекс документации** и быстрый путеводитель. |
-| [`doc/01_TECHNICAL_SPECIFICATION.md`](doc/01_TECHNICAL_SPECIFICATION.md) | **Полное техническое задание**: описание SaaS, бизнес-модель, триал 7 дней, $20/нед + 10% HWM, политика неоплаты (Вариант А), архитектура системы. |
+| [`doc/01_TECHNICAL_SPECIFICATION.md`](doc/01_TECHNICAL_SPECIFICATION.md) | **Полное техническое задание**: описание SaaS, бизнес-модель, триал 7 дней, $20/нед (без performance fee), политика неоплаты (Вариант А), архитектура системы. |
 | [`doc/02_STRATEGY_AND_BACKTESTS.md`](doc/02_STRATEGY_AND_BACKTESTS.md) | **Математика стратегии и честные бэктесты**: теория парного трейдинга, состав корзины, Scenario A/C (`research/backtest/`), коинтеграция (`research/cointegration/`), робастность и paper-trading config (раздел 6). |
-| [`doc/03_DATABASE_SCHEMA.sql`](doc/03_DATABASE_SCHEMA.sql) | **SQL-схема Supabase**: 11 таблиц (включая `strategy_pairs` / `pair_selection_runs` / `engine_settings`), ENUM-типы, RLS, Realtime. |
-| [`doc/04_WORKER_ENGINE_SPECIFICATION.md`](doc/04_WORKER_ENGINE_SPECIFICATION.md) | **Спецификация воркера на Railway**: 24/7 демон, статический Egress IP, шифрование ключей AES-256-GCM, CCXT-фабрика, логика расчета EMA 10 и риск-гарда (TP +5%, SL -1.5%). |
-| [`doc/05_FRONTEND_AND_UI_SPECIFICATION.md`](doc/05_FRONTEND_AND_UI_SPECIFICATION.md) | **Спецификация Next.js 15 UI/UX**: цветовая палитра Honey Amber, структура маршрутов App Router, модалки подтверждений, логика QR-оплаты. |
-| [`doc/06_IMPLEMENTATION_ROADMAP_AND_AGENTS_GUIDE.md`](doc/06_IMPLEMENTATION_ROADMAP_AND_AGENTS_GUIDE.md) | **Пошаговый план разработки**: задачи по этапам, чек-листы и правила валидации. |
+| [`doc/03_DATABASE_SCHEMA.sql`](doc/03_DATABASE_SCHEMA.sql) | **SQL-схема Supabase**: 15 таблиц (включая `strategy_pairs` / `pair_selection_runs` / `engine_settings` и 4 таблицы сигналов), ENUM-типы, RLS, Realtime. |
+| [`doc/04_WORKER_ENGINE_SPECIFICATION.md`](doc/04_WORKER_ENGINE_SPECIFICATION.md) | **Спецификация воркера на Railway**: 24/7 демон, статический Egress IP, шифрование ключей AES-256-GCM, CCXT-фабрика, логика расчета EMA 10, ATR-стоп-лосс (`SL_ATR_MULT=1.5`) и trend-flip выход. |
+| [`doc/05_FRONTEND_AND_UI_SPECIFICATION.md`](doc/05_FRONTEND_AND_UI_SPECIFICATION.md) | **Спецификация Next.js 15 UI/UX**: цветовая палитра Honey Amber, структура маршрутов App Router, модалки подтверждений, логика QR-оплаты, реализованный лендинг (§3.1). |
+| [`doc/06_IMPLEMENTATION_ROADMAP_AND_AGENTS_GUIDE.md`](doc/06_IMPLEMENTATION_ROADMAP_AND_AGENTS_GUIDE.md) | **Исторический план разработки** (архив, статус на 2026-09-15): этапы сборки проекта «с нуля», чек-листы. Не источник истины по текущим параметрам. |
 | [`research/README.md`](research/README.md) | **Количественные исследования**: честный 1m-бэктест (`research/backtest/`), аудит коинтеграции (`research/cointegration/`), воспроизводимые скрипты и RESULTS.md. |
 
 ---
@@ -33,29 +33,37 @@ bee_cripto_woker/
 ├── package.json               # Корневой манифест рабочих пространств (workspaces: web, worker)
 ├── railway.json               # Конфигурация деплоя воркера на платформе Railway
 ├── doc/                       # Исчерпывающая документация (ТЗ, математика, SQL, UI)
+│   ├── 01..07_*.md, README.md # Основной набор документов и главный индекс
+│   └── migrations/            # Применённые SQL-миграции по датам
+├── research/                  # Количественные исследования (бэктест, коинтеграция, отбор пар)
 ├── web/                       # Фронтенд-приложение на Next.js 15 (App Router)
 │   ├── src/
 │   │   ├── app/
-│   │   │   ├── (public)/      # Публичный лендинг с ROI-калькулятором
+│   │   │   ├── (public)/      # Публичный лендинг (Hero с интерактивной 3D-пчелой, продукты, калькулятор)
 │   │   │   ├── (auth)/        # Страницы /login и /register (Supabase Auth)
-│   │   │   └── (dashboard)/   # Личный кабинет (/dashboard, /settings/exchange, /billing, /history)
-│   │   ├── components/
-│   │   │   └── modals/        # Модалки подтверждения (ConfirmModal, PanicCloseModal)
-│   │   └── lib/
-│   │       └── supabase/      # Клиент Supabase Browser/SSR
+│   │   │   ├── (dashboard)/   # Личный кабинет (/dashboard, /signals, /settings, /billing, /history)
+│   │   │   ├── admin/         # Панель администратора
+│   │   │   └── api/           # Route Handlers (engine-config, exchange, settings, admin)
+│   │   ├── components/        # landing (BeeHeroScene, bee-scene), modals, dashboard, charts, ui
+│   │   └── lib/               # i18n (EN/RU), supabase (Browser/SSR)
 │   ├── tailwind.config.ts     # Палитра Dark + Honey Amber (#F59E0B)
 │   └── package.json
 └── worker/                    # Торговый Daemon 24/7 для деплоя на Railway
     ├── Dockerfile             # Multi-stage production build для Railway
+    ├── railway.json
+    ├── env.example            # Шаблон переменных окружения
     ├── src/
     │   ├── index.ts           # Точка входа воркера
     │   ├── config.ts          # Переменные окружения и Supabase Client
+    │   ├── api/               # internal-server: HTTP-эндпоинты воркера
     │   ├── security/          # Шифрование AES-256-GCM
-│   ├── exchanges/         # Фабрика CCXT, PairRegistry, маппинг тикеров
-│   ├── engine/            # Сканер рынка (EMA10), роутер ордеров и риск-гард
-│   ├── signals/           # Модуль сигналов Dip-Buy (XRP/ETH/BTC: буфер, сканер, роутер, гард, алерты)
-│   ├── jobs/              # Health Check, Billing Cron, PairSelection (momentum)
-│   └── types/             # TypeScript-интерфейсы
+    │   ├── exchanges/         # Фабрика CCXT, PairRegistry, маппинг тикеров, балансы, валидатор
+    │   ├── engine/            # Сканер рынка (EMA10), роутер ордеров, риск-гард, статистика
+    │   ├── signals/           # Dip-Buy (XRP/ETH/BTC): буфер свечей, сканер, роутер, гард, алерты
+    │   ├── jobs/              # Health Check, Billing Cron, PairSelection (+engine-aware), PairSimulator
+    │   ├── notifications/     # Telegram-уведомления
+    │   ├── scripts/           # Ручные операционные утилиты (backfill, reconcile, one-shot джобы)
+    │   └── types/             # TypeScript-интерфейсы
     └── tsconfig.json
 ```
 
@@ -67,7 +75,7 @@ bee_cripto_woker/
   * `SUPABASE_URL`: `https://uxsbjkymrqrmlcshizns.supabase.co`
   * Изоляция данных: **Row-Level Security (RLS)** активен на всех таблицах.
   * Обновление дашборда: **Supabase Realtime** (`supabase_realtime` публикация).
-* **Фронтенд**: **Next.js 15.1.7**, React 19, Tailwind CSS, Lucide Icons, Recharts, QRCode.
+* **Фронтенд**: **Next.js 15.1.7**, React 19, Tailwind CSS, Lucide Icons, Recharts, QRCode, **three** (интерактивный Hero-фон, грузится динамическим import).
 * **Торговое ядро**: **Node.js 22 LTS**, TypeScript, библиотека **CCXT** (`ccxt.binanceusdm`, `ccxt.okx`, `ccxt.bybit`), **ws**.
 * **Хостинг воркера**: **Railway** со статическим исходящим IP-шлюзом (Static Egress IP `54.198.120.45`).
 * **Репозиторий GitHub**: [https://github.com/bohatko/bee_cripto_woker](https://github.com/bohatko/bee_cripto_woker).

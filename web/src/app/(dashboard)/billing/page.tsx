@@ -137,13 +137,6 @@ export default function BillingPage() {
             </span>
           </div>
         </div>
-
-        <div className="text-right sm:border-l sm:border-dark-800 sm:pl-6">
-          <span className="text-xs text-slate-400 uppercase font-medium">{t('billing.hwm')}</span>
-          <p className="text-lg font-bold text-white font-mono mt-0.5">
-            ${Number(profile?.high_water_mark_equity || 0).toFixed(2)} USDT
-          </p>
-        </div>
       </div>
 
       {/* Active Invoice & Payment Screen */}
@@ -234,12 +227,14 @@ export default function BillingPage() {
                       +${Number(activeInvoice.net_profit_in_period).toFixed(2)}
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">{t('billing.profitFee')}</span>
-                    <span className="text-honey-400 font-semibold">
-                      ${Number(activeInvoice.profit_fee_usd).toFixed(2)}
-                    </span>
-                  </div>
+                  {Number(activeInvoice.profit_fee_usd) > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">{t('billing.profitFee')}</span>
+                      <span className="text-honey-400 font-semibold">
+                        ${Number(activeInvoice.profit_fee_usd).toFixed(2)}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-5">

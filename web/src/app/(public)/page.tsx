@@ -8,18 +8,12 @@ import {
   Boxes,
   CheckCircle2,
   ChevronRight,
-  CircleDollarSign,
   Layers,
-  LayoutDashboard,
-  LineChart,
   Lock,
   MousePointerClick,
   Move,
   Radio,
-  Receipt,
-  Send,
   Server,
-  Settings2,
   ShieldCheck,
   TrendingDown,
   Zap,
@@ -35,15 +29,6 @@ type PairMarketRow = {
   current_ratio: number | string | null;
   ema_10: number | string | null;
 };
-
-const PLATFORM_SURFACES = [
-  { key: 'landing.surfaceDashboard', icon: LayoutDashboard },
-  { key: 'landing.surfaceSignals', icon: Zap },
-  { key: 'landing.surfaceHistory', icon: LineChart },
-  { key: 'landing.surfaceBilling', icon: Receipt },
-  { key: 'landing.surfaceAdmin', icon: Settings2 },
-  { key: 'landing.surfaceTelegram', icon: Send },
-];
 
 const FEATURES = [
   'landing.planFeature1',
@@ -84,74 +69,211 @@ function SectionHeading({
   );
 }
 
-function FeeCalculator() {
-  const { t, dateLocale } = useLanguage();
-  const [weeklyProfit, setWeeklyProfit] = useState(500);
+function ProfitPanel({
+  whatIs,
+  prefix,
+  tone,
+  note,
+  caveat,
+}: {
+  whatIs: string;
+  prefix: 'pair' | 'signal';
+  tone: 'outcome' | 'payoff';
+  note: string;
+  caveat: string;
+}) {
+  const { t } = useLanguage();
 
-  const fixedFee = 20;
-  const profitFee = Math.round(weeklyProfit * 0.1 * 100) / 100;
-  const total = fixedFee + profitFee;
-  const effectiveRate = weeklyProfit > 0 ? (total / weeklyProfit) * 100 : 0;
+  return (
+    <div className="mt-7 rounded-xl border border-dark-800 bg-dark-950 p-5">
+      <p className="text-sm leading-relaxed text-slate-300">{whatIs}</p>
+      <div className="mt-5 grid grid-cols-1 gap-4 border-t border-dark-800 pt-4 sm:grid-cols-3">
+        {[1, 2, 3].map((index) => {
+          const value = t(`landing.${prefix}Stat${index}Value`);
+          const label = t(`landing.${prefix}Stat${index}Label`);
+          const valueClass =
+            tone === 'payoff'
+              ? 'text-slate-100'
+              : index === 3
+                ? 'text-rose-400'
+                : 'text-emerald-400';
+          return (
+            <div key={index}>
+              <span className={`block font-mono text-lg font-bold ${valueClass}`}>{value}</span>
+              <span className="mt-0.5 block text-[11px] leading-tight text-slate-500">{label}</span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-4 border-t border-dark-800 pt-3 text-[11px] leading-relaxed text-slate-500">{note}</p>
+      <p className="mt-2 text-[11px] leading-relaxed text-honey-400/70">{caveat}</p>
+    </div>
+  );
+}
+
+const CALC_MIN_BALANCE = 1200;
+const CALC_MAX_BALANCE = 500000;
+const CALC_SLIDER_STEPS = 1000;
+const CALC_SIX_MONTH_RETURN = 1.1;
+const CALC_WEEKLY_FEE = 20;
+const CALC_WEEKS_PER_MONTH = 4.345;
+const CALC_PRESETS = [1200, 5000, 20000, 100000, 500000];
+const CALC_HORIZONS = [
+  { months: 1, label: 'landing.calcHorizon1' },
+  { months: 3, label: 'landing.calcHorizon3' },
+  { months: 6, label: 'landing.calcHorizon6' },
+  { months: 12, label: 'landing.calcHorizon12' },
+  { months: 60, label: 'landing.calcHorizon60' },
+];
+
+function balanceToSlider(balance: number) {
+  return Math.round(
+    (CALC_SLIDER_STEPS * Math.log(balance / CALC_MIN_BALANCE)) /
+      Math.log(CALC_MAX_BALANCE / CALC_MIN_BALANCE)
+  );
+}
+
+function ProfitCalculator() {
+  const { t, dateLocale } = useLanguage();
+  const [sliderPosition, setSliderPosition] = useState(() => balanceToSlider(20000));
+  const [months, setMonths] = useState(60);
+
+  const rawBalance =
+    CALC_MIN_BALANCE *
+    Math.pow(CALC_MAX_BALANCE / CALC_MIN_BALANCE, sliderPosition / CALC_SLIDER_STEPS);
+  const balanceStep = rawBalance >= 100000 ? 1000 : rawBalance >= 10000 ? 100 : 50;
+  const balance = Math.round(rawBalance / balanceStep) * balanceStep;
+
+  const grossProfit = balance * (Math.pow(1 + CALC_SIX_MONTH_RETURN, months / 6) - 1);
+  const fixedFee = CALC_WEEKLY_FEE * months * CALC_WEEKS_PER_MONTH;
+  const netProfit = Math.max(grossProfit - fixedFee, -balance);
+  const finalBalance = balance + netProfit;
+  const effectiveRate = balance > 0 ? (netProfit / balance) * 100 : 0;
+
+  const formatUsd = (value: number) =>
+    `${value < 0 ? '-' : ''}$${Math.round(Math.abs(value)).toLocaleString(dateLocale)}`;
 
   return (
     <div className="rounded-2xl border border-dark-800 bg-dark-900 p-6 shadow-2xl sm:p-10">
       <div className="mb-8">
-        <div className="mb-3 flex items-center justify-between gap-4">
-          <label htmlFor="weekly-profit" className="text-sm font-medium text-slate-300">
-            {t('landing.calcProfitLabel')}
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <label htmlFor="starting-balance" className="text-sm font-medium text-slate-300">
+            {t('landing.calcBalanceLabel')}
           </label>
           <span className="font-mono text-2xl font-extrabold text-honey-400">
-            ${weeklyProfit.toLocaleString(dateLocale)}
+            {formatUsd(balance)}
           </span>
         </div>
         <input
-          id="weekly-profit"
+          id="starting-balance"
           type="range"
           min={0}
-          max={5000}
-          step={50}
-          value={weeklyProfit}
-          onChange={(event) => setWeeklyProfit(Number(event.target.value))}
+          max={CALC_SLIDER_STEPS}
+          step={1}
+          value={sliderPosition}
+          onChange={(event) => setSliderPosition(Number(event.target.value))}
           className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-dark-800 accent-honey-500"
         />
-        <p className="mt-3 text-xs text-slate-500">{t('landing.calcProfitHint')}</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {CALC_PRESETS.map((preset) => {
+            const isActive = balance === preset;
+            return (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => setSliderPosition(balanceToSlider(preset))}
+                className={`rounded-lg border px-3 py-1 font-mono text-xs transition-colors ${
+                  isActive
+                    ? 'border-honey-500/50 bg-honey-500/10 text-honey-400'
+                    : 'border-dark-800 bg-dark-950 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {`$${preset.toLocaleString(dateLocale)}`}
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-3 text-xs text-slate-500">{t('landing.calcBalanceHint')}</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 border-t border-dark-800 pt-6 md:grid-cols-2">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="rounded-xl border border-dark-800 bg-dark-950 p-5">
-            <span className="text-xs font-medium uppercase text-slate-400">{t('landing.calcFixedFee')}</span>
-            <p className="mt-1 font-mono text-xl font-bold text-slate-200">
-              ${fixedFee.toLocaleString(dateLocale)}
-            </p>
-          </div>
-          <div className="rounded-xl border border-dark-800 bg-dark-950 p-5">
-            <span className="text-xs font-medium uppercase text-slate-400">{t('landing.calcProfitFee')}</span>
-            <p className="mt-1 font-mono text-xl font-bold text-slate-200">
-              ${profitFee.toLocaleString(dateLocale)}
-            </p>
-          </div>
+      <div className="mb-6">
+        <span className="text-xs font-medium uppercase text-slate-400">
+          {t('landing.calcHorizonLabel')}
+        </span>
+        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
+          {CALC_HORIZONS.map((horizon) => (
+            <button
+              key={horizon.months}
+              type="button"
+              onClick={() => setMonths(horizon.months)}
+              className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${
+                months === horizon.months
+                  ? 'border-honey-500/50 bg-honey-500/10 text-honey-400'
+                  : 'border-dark-800 bg-dark-950 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              {t(horizon.label)}
+            </button>
+          ))}
         </div>
+      </div>
 
-        <div className="flex flex-col justify-between rounded-xl border border-honey-500/30 bg-honey-500/5 p-5">
-          <div>
-            <span className="text-xs font-medium uppercase text-honey-400/80">{t('landing.calcTotal')}</span>
-            <p className="mt-1 font-mono text-3xl font-black text-honey-400">
-              ${total.toLocaleString(dateLocale)}
-            </p>
-          </div>
-          <div className="mt-4 border-t border-honey-500/20 pt-3">
-            <span className="text-[11px] uppercase text-slate-400">{t('landing.calcEffective')}</span>
-            <p className="font-mono text-sm font-semibold text-emerald-400">
-              {effectiveRate.toFixed(1)}%
-            </p>
-          </div>
+      <div className="grid grid-cols-1 gap-4 border-t border-dark-800 pt-6 sm:grid-cols-3">
+        <div className="rounded-xl border border-dark-800 bg-dark-950 p-5">
+          <span className="text-xs font-medium uppercase text-slate-400">
+            {t('landing.calcGross')}
+          </span>
+          <p
+            className={`mt-1 font-mono text-xl font-bold ${
+              grossProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
+            }`}
+          >
+            {formatUsd(grossProfit)}
+          </p>
+        </div>
+        <div className="rounded-xl border border-dark-800 bg-dark-950 p-5">
+          <span className="text-xs font-medium uppercase text-slate-400">
+            {t('landing.calcFixedFee')}
+          </span>
+          <p className="mt-1 font-mono text-xl font-bold text-slate-200">{formatUsd(fixedFee)}</p>
+        </div>
+        <div className="rounded-xl border border-dark-800 bg-dark-950 p-5">
+          <span className="text-xs font-medium uppercase text-slate-400">
+            {t('landing.calcEffective')}
+          </span>
+          <p
+            className={`mt-1 font-mono text-xl font-bold ${
+              effectiveRate >= 0 ? 'text-emerald-400' : 'text-rose-400'
+            }`}
+          >
+            {effectiveRate.toFixed(1)}%
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-col gap-4 rounded-xl border border-honey-500/30 bg-honey-500/5 p-5 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <span className="text-xs font-medium uppercase text-honey-400/80">
+            {t('landing.calcNet')}
+          </span>
+          <p
+            className={`mt-1 font-mono text-3xl font-black ${
+              netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
+            }`}
+          >
+            {formatUsd(netProfit)}
+          </p>
+        </div>
+        <div className="sm:text-right">
+          <span className="text-[11px] uppercase text-slate-400">
+            {t('landing.calcFinalBalance')}
+          </span>
+          <p className="font-mono text-lg font-bold text-slate-100">{formatUsd(finalBalance)}</p>
         </div>
       </div>
 
       <div className="mt-6 space-y-2 text-xs leading-relaxed text-slate-500">
-        <p>{t('landing.calcHwmNote')}</p>
-        <p>{t('landing.calcTrialNote')}</p>
+        {netProfit < 0 && <p className="text-rose-400/80">{t('landing.calcFeeWarning')}</p>}
       </div>
     </div>
   );
@@ -198,9 +320,6 @@ export default function LandingPage() {
             <div className="flex items-baseline gap-1.5">
               <span className="text-lg font-extrabold tracking-tight text-white">
                 CRYPTO <span className="text-honey-400">B</span>
-              </span>
-              <span className="rounded border border-honey-500/20 bg-honey-500/10 px-2 py-0.5 font-mono text-xs text-honey-400">
-                {t('landing.brandTag')}
               </span>
             </div>
           </Link>
@@ -385,7 +504,7 @@ export default function LandingPage() {
               <h3 className="text-xl font-bold text-white">{t('landing.pairName')}</h3>
               <p className="mt-2 text-sm leading-relaxed text-slate-400">{t('landing.pairDesc')}</p>
               <ul className="mt-6 space-y-3 text-sm text-slate-300">
-                {['landing.pairPoint1', 'landing.pairPoint2', 'landing.pairPoint3', 'landing.pairPoint4'].map(
+                {['landing.pairGeneral1', 'landing.pairGeneral2', 'landing.pairGeneral3', 'landing.pairGeneral4'].map(
                   (key) => (
                     <li key={key} className="flex items-start gap-3">
                       <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-honey-500" />
@@ -394,6 +513,16 @@ export default function LandingPage() {
                   )
                 )}
               </ul>
+
+              <div className="mt-auto">
+                <ProfitPanel
+                  whatIs={t('landing.pairWhatIs')}
+                  prefix="pair"
+                  tone="outcome"
+                  note={t('landing.pairProfitNote')}
+                  caveat={t('landing.pairCaveat')}
+                />
+              </div>
             </article>
 
             <article className="flex flex-col rounded-2xl border border-dark-800 bg-dark-900 p-8 transition-colors hover:border-honey-500/40">
@@ -409,10 +538,10 @@ export default function LandingPage() {
               <p className="mt-2 text-sm leading-relaxed text-slate-400">{t('landing.signalDesc')}</p>
               <ul className="mt-6 space-y-3 text-sm text-slate-300">
                 {[
-                  'landing.signalPoint1',
-                  'landing.signalPoint2',
-                  'landing.signalPoint3',
-                  'landing.signalPoint4',
+                  'landing.signalGeneral1',
+                  'landing.signalGeneral2',
+                  'landing.signalGeneral3',
+                  'landing.signalGeneral4',
                 ].map((key) => (
                   <li key={key} className="flex items-start gap-3">
                     <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
@@ -420,6 +549,16 @@ export default function LandingPage() {
                   </li>
                 ))}
               </ul>
+
+              <div className="mt-auto">
+                <ProfitPanel
+                  whatIs={t('landing.signalWhatIs')}
+                  prefix="signal"
+                  tone="payoff"
+                  note={t('landing.signalProfitNote')}
+                  caveat={t('landing.signalCaveat')}
+                />
+              </div>
             </article>
           </div>
 
@@ -448,31 +587,14 @@ export default function LandingPage() {
               </div>
             ))}
           </div>
-
-          <div className="mt-12 rounded-2xl border border-dark-800 bg-dark-900/60 p-6 sm:p-8">
-            <h3 className="text-sm font-bold uppercase tracking-wide text-slate-400">
-              {t('landing.surfaceTitle')}
-            </h3>
-            <div className="mt-5 flex flex-wrap gap-3">
-              {PLATFORM_SURFACES.map((surface) => (
-                <span
-                  key={surface.key}
-                  className="inline-flex items-center gap-2 rounded-xl border border-dark-700 bg-dark-950 px-3.5 py-2 text-sm text-slate-300"
-                >
-                  <surface.icon className="h-4 w-4 text-honey-500" />
-                  {t(surface.key)}
-                </span>
-              ))}
-            </div>
-          </div>
         </div>
       </section>
 
-      {/* Fee calculator */}
+      {/* Profit calculator */}
       <section id="calculator" className="scroll-mt-20 py-20">
         <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
           <SectionHeading title={t('landing.calcTitle')} subtitle={t('landing.calcSubtitle')} />
-          <FeeCalculator />
+          <ProfitCalculator />
         </div>
       </section>
 
@@ -556,14 +678,6 @@ export default function LandingPage() {
                 <p className="mt-3 text-sm leading-relaxed text-slate-400">{t(item.a)}</p>
               </details>
             ))}
-          </div>
-
-          <div className="mt-10 flex gap-3 rounded-xl border border-dark-800 bg-dark-900/60 p-5">
-            <CircleDollarSign className="h-5 w-5 shrink-0 text-honey-500" />
-            <div>
-              <h4 className="text-sm font-bold text-white">{t('landing.riskTitle')}</h4>
-              <p className="mt-1 text-xs leading-relaxed text-slate-400">{t('landing.riskText')}</p>
-            </div>
           </div>
         </div>
       </section>

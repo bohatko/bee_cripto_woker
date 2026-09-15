@@ -121,4 +121,4 @@ Outputs: `research/backtest/out/summary.csv`, `grid_D.csv`, `per_pair_breakdown.
 | :--- | :--- |
 | [`doc/02_STRATEGY_AND_BACKTESTS.md`](../doc/02_STRATEGY_AND_BACKTESTS.md) | User-facing strategy doc; sections 4–6 summarize honest backtest and paper-trading config |
 | [`doc/04_WORKER_ENGINE_SPECIFICATION.md`](../doc/04_WORKER_ENGINE_SPECIFICATION.md) | Worker env vars (`RISK_MODE`, `TP_DISABLED`, execution modes) |
-| [`worker/src/scripts/seed-6m-history.ts`](../worker/src/scripts/seed-6m-history.ts) | **Synthetic** dashboard seed data — not a backtest |
+| *Deleted* — `worker/src/scripts/seed-6m-history.ts` | **Synthetic** dashboard seed data (removed 2026-09-15) — never was a backtest |
