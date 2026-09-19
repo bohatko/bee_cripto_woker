@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Sparkles,
   TrendingUp,
@@ -16,6 +17,7 @@ import { EquityGrowthChart } from '@/components/charts/EquityGrowthChart';
 import { HistorySkeleton } from '@/components/skeletons/PageSkeletons';
 
 export default function BotHistoryPage() {
+  const router = useRouter();
   const { t, dateLocale, formatDateTime } = useLanguage();
   const [selectedPair, setSelectedPair] = useState<string>('ALL');
   const [masterPositions, setMasterPositions] = useState<any[]>([]);
@@ -26,6 +28,15 @@ export default function BotHistoryPage() {
   useEffect(() => {
     async function loadMasterHistory() {
       setLoading(true);
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.replace('/login');
+        return;
+      }
+
       const { data: masterData } = await supabase
         .from('bot_positions')
         .select('*')
@@ -37,7 +48,7 @@ export default function BotHistoryPage() {
       setLoading(false);
     }
     loadMasterHistory();
-  }, []);
+  }, [router]);
 
   const pairFilterOptions = [
     'ALL',
@@ -327,6 +338,10 @@ export default function BotHistoryPage() {
                               ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
                               : pos.exit_reason === 'sl'
                               ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                              : pos.exit_reason === 'panic_close'
+                              ? 'bg-red-500/15 text-red-400 border border-red-500/30'
+                              : pos.exit_reason === 'admin_close'
+                              ? 'bg-slate-500/15 text-slate-300 border border-slate-500/30'
                               : 'bg-amber-500/15 text-honey-400 border border-honey-500/30'
                           }`}
                         >
@@ -334,6 +349,10 @@ export default function BotHistoryPage() {
                             ? t('history.takeProfit')
                             : pos.exit_reason === 'sl'
                             ? t('history.stopLoss')
+                            : pos.exit_reason === 'panic_close'
+                            ? t('history.panicClose')
+                            : pos.exit_reason === 'admin_close'
+                            ? t('history.adminClose')
                             : t('history.trendFlip')}
                         </span>
                       </td>

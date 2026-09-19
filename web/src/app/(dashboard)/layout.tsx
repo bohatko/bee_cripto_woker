@@ -31,28 +31,62 @@ export default function DashboardLayout({
   const { t } = useLanguage();
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
+
     async function loadUser() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.push('/login');
-        return;
-      }
-      setUser(user);
+      try {
+        const { data: { user }, error } = await supabase.auth.getUser();
+        if (!isMounted) return;
+        if (error || !user) {
+          router.replace('/login');
+          if (typeof window !== 'undefined') {
+            window.location.replace('/login');
+          }
+          return;
+        }
+        setUser(user);
 
-      const { data: prof } = await supabase
-        .from('users_profile')
-        .select('*')
-        .eq('id', user.id)
-        .single();
+        const { data: prof } = await supabase
+          .from('users_profile')
+          .select('*')
+          .eq('id', user.id)
+          .single();
 
-      if (prof) {
-        setProfile(prof);
+        if (isMounted && prof) {
+          setProfile(prof);
+        }
+      } catch {
+        if (isMounted) {
+          router.replace('/login');
+          if (typeof window !== 'undefined') {
+            window.location.replace('/login');
+          }
+        }
+      } finally {
+        if (isMounted) {
+          setIsCheckingAuth(false);
+        }
       }
     }
     loadUser();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
+        if (isMounted) {
+          setUser(null);
+          router.replace('/login');
+        }
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription?.unsubscribe();
+    };
   }, [router]);
 
   // Real-time listener for new trade executions with Sound & Sonner Toast
@@ -177,6 +211,20 @@ export default function DashboardLayout({
     },
   ];
 
+  if (isCheckingAuth || !user) {
+    return (
+      <div className="h-dvh bg-dark-950 flex flex-col items-center justify-center text-slate-100">
+        <div className="w-12 h-12 rounded-2xl bg-honey-500/10 border border-honey-500/30 flex items-center justify-center text-honey-500 font-bold text-2xl shadow-lg shadow-honey-500/20 animate-pulse mb-4">
+          🐝
+        </div>
+        <div className="flex items-center gap-2 text-sm text-slate-400 font-mono">
+          <div className="w-2 h-2 rounded-full bg-honey-500 animate-ping" />
+          <span>Authenticating...</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-dvh bg-dark-950 flex flex-col md:flex-row text-slate-100 overflow-hidden">
       <aside className="w-full md:w-64 md:h-full bg-dark-900 border-r border-dark-800 flex flex-col shrink-0">
@@ -185,8 +233,7 @@ export default function DashboardLayout({
             🐝
           </div>
           <div>
-            <h1 className="font-extrabold tracking-tight text-white text-base">BEE CRYPTO</h1>
-            <p className="text-[10px] font-mono text-slate-400">{t('sidebar.tradingSaas')}</p>
+            <h1 className="font-extrabold tracking-tight text-white text-base">CRYPTO BEE</h1>
           </div>
         </div>
 
@@ -203,9 +250,6 @@ export default function DashboardLayout({
             <span className="text-xs font-semibold text-white truncate">
               {profile?.full_name || user?.email?.split('@')[0] || t('common.trader')}
               {profile?.role === 'admin' ? ' (Admin)' : ''}
-            </span>
-            <span className="ml-auto text-[10px] font-mono uppercase tracking-wide text-honey-400/80 shrink-0">
-              {t('nav.profile')}
             </span>
           </div>
           <div className="flex items-center justify-start gap-2 text-[11px] font-mono">

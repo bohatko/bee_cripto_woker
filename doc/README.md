@@ -57,7 +57,7 @@ doc/
    * История изменений схемы — `doc/migrations/` (по датам применения).
 
 4. **`04_WORKER_ENGINE_SPECIFICATION.md`**:
-   * Архитектура круглосуточного сервиса на Railway со статическим исходящим IP (Static Egress IP `54.198.120.45`) для белых списков на биржах.
+   * Архитектура круглосуточного сервиса на Railway со статическим исходящим IP (Static Egress IPs EU West HA: `208.77.244.240`, `152.55.185.189`, `152.55.185.190`) для белых списков на биржах.
    * Код модуля шифрования AES-256-GCM для защиты API-ключей.
    * Фабрика CCXT для Binance, OKX, Bybit.
    * Алгоритм сканирования EMA 10, `PairRegistry`, momentum/engine-aware pair-selection job.

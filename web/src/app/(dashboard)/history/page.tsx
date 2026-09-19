@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   History,
   TrendingUp,
@@ -10,6 +11,9 @@ import {
   KeyRound,
   Wallet,
   Scale,
+  Play,
+  Pause,
+  AlertOctagon,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
@@ -17,56 +21,151 @@ import { isUnfilledSimulation, resolveRealizedPnl, getTotalFeesUsd, getGrossPnlU
 import { EquityGrowthChart } from '@/components/charts/EquityGrowthChart';
 import { PairTradingMarginSettings } from '@/components/history/PairTradingMarginSettings';
 import { HistorySkeleton } from '@/components/skeletons/PageSkeletons';
+import { ConfirmModal } from '@/components/modals/ConfirmModal';
+import { PanicCloseModal } from '@/components/modals/PanicCloseModal';
+import { toast } from '@/components/ui/sonner';
 
 export default function UserHistoryPage() {
+  const router = useRouter();
   const { t, dateLocale, formatDateTime } = useLanguage();
   const [selectedPair, setSelectedPair] = useState<string>('ALL');
   const [userPositions, setUserPositions] = useState<any[]>([]);
   const [userExchangeBalance, setUserExchangeBalance] = useState<number>(0);
   const [userAccountCount, setUserAccountCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
+  const [settings, setSettings] = useState<any>(null);
+  const [hasValidatedAccount, setHasValidatedAccount] = useState(false);
+  const [openPositions, setOpenPositions] = useState<any[]>([]);
+  const [isToggleModalOpen, setIsToggleModalOpen] = useState(false);
+  const [isPanicModalOpen, setIsPanicModalOpen] = useState(false);
+  const [isMissingExchangeModalOpen, setIsMissingExchangeModalOpen] = useState(false);
 
-  useEffect(() => {
-    async function loadUserHistory() {
-      setLoading(true);
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+  async function loadUserHistory() {
+    setLoading(true);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-      if (user) {
-        // Fetch User's personal exchange trades
-        const { data: userData } = await supabase
-          .from('bot_positions')
-          .select('*, exchange_accounts(exchange, account_name)')
-          .eq('user_id', user.id)
-          .eq('status', 'closed')
-          .order('closed_at', { ascending: false });
+    if (!user) {
+      router.replace('/login');
+      return;
+    }
 
-        if (userData) {
-          setUserPositions(userData.filter((p) => !isUnfilledSimulation(p)));
-        }
+    const { data: sett } = await supabase
+      .from('trading_settings')
+      .select('*')
+      .eq('user_id', user.id)
+      .single();
+    if (sett) setSettings(sett);
 
-        // Fetch user's active exchange accounts for balance display
-        const { data: userAccounts } = await supabase
-          .from('exchange_accounts')
-          .select('last_balance_usd, is_active')
-          .eq('user_id', user.id)
-          .eq('is_active', true);
+      // Fetch User's personal exchange trades
+      const { data: userData } = await supabase
+        .from('bot_positions')
+        .select('*, exchange_accounts(exchange, account_name)')
+        .eq('user_id', user.id)
+        .eq('status', 'closed')
+        .order('closed_at', { ascending: false });
 
-        if (userAccounts && userAccounts.length > 0) {
-          const totalBal = userAccounts.reduce(
-            (acc, a) => acc + (Number(a.last_balance_usd) || 0),
-            0
-          );
-          setUserExchangeBalance(totalBal);
-          setUserAccountCount(userAccounts.length);
-        }
+      if (userData) {
+        setUserPositions(userData.filter((p) => !isUnfilledSimulation(p)));
       }
 
-      setLoading(false);
-    }
+      const { data: openPos } = await supabase
+        .from('bot_positions')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'open');
+      setOpenPositions((openPos || []).filter((p) => !isUnfilledSimulation(p)));
+
+      // Fetch user's active exchange accounts for balance display
+      const { data: userAccounts } = await supabase
+        .from('exchange_accounts')
+        .select('last_balance_usd, is_active, is_validated')
+        .eq('user_id', user.id)
+        .eq('is_active', true);
+
+      if (userAccounts && userAccounts.length > 0) {
+        const totalBal = userAccounts.reduce(
+          (acc, a) => acc + (Number(a.last_balance_usd) || 0),
+          0
+        );
+        setUserExchangeBalance(totalBal);
+        setUserAccountCount(userAccounts.length);
+        setHasValidatedAccount(userAccounts.some((a) => a.is_validated));
+      } else {
+        setUserExchangeBalance(0);
+        setUserAccountCount(0);
+        setHasValidatedAccount(false);
+      }
+
+    setLoading(false);
+  }
+
+  useEffect(() => {
     loadUserHistory();
   }, []);
+
+  const totalUnrealizedPnl = openPositions.reduce(
+    (acc, p) => acc + (Number(p.unrealized_pnl_usd) || 0),
+    0
+  );
+
+  const handleToggleBot = async () => {
+    if (!settings) return;
+
+    if (!hasValidatedAccount) {
+      setIsToggleModalOpen(false);
+      setIsMissingExchangeModalOpen(true);
+      toast.error(t('dashboard.toastConnectFirst'));
+      return;
+    }
+
+    const nextState = !settings.is_bot_active;
+
+    try {
+      const { error } = await supabase
+        .from('trading_settings')
+        .update({ is_bot_active: nextState })
+        .eq('id', settings.id);
+
+      if (error) throw error;
+
+      setSettings({ ...settings, is_bot_active: nextState });
+      setIsToggleModalOpen(false);
+
+      if (nextState) {
+        toast.success(t('dashboard.toastBotStarted'));
+      } else {
+        toast.info(t('dashboard.toastBotPaused'));
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update trading bot status');
+    }
+  };
+
+  const handlePanicClose = async () => {
+    if (!settings) return;
+
+    try {
+      const { error } = await supabase
+        .from('trading_settings')
+        .update({
+          panic_closed_at: new Date().toISOString(),
+          is_bot_active: false,
+        })
+        .eq('id', settings.id);
+
+      if (error) throw error;
+
+      setSettings({ ...settings, is_bot_active: false, panic_closed_at: new Date().toISOString() });
+      setIsPanicModalOpen(false);
+      toast.error(t('dashboard.toastPanic'));
+      setTimeout(loadUserHistory, 2500);
+      setTimeout(loadUserHistory, 8000);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to trigger panic close');
+    }
+  };
 
   // Filter by pair
   const pairFilterOptions = [
@@ -151,18 +250,58 @@ export default function UserHistoryPage() {
           </p>
         </div>
 
-        {/* Global PnL Pill */}
-        <div className="bg-dark-900 border border-dark-800 px-4 py-2.5 rounded-xl flex items-center gap-3 shadow-lg shrink-0">
-          <span className="text-xs text-slate-400 font-mono">{t('history.realizedPnl')}</span>
-          <span
-            className={`font-mono font-black text-base ${
-              totalRealizedPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'
-            }`}
-          >
-            {totalRealizedPnl >= 0
-              ? `+$${totalRealizedPnl.toLocaleString(dateLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-              : `-$${Math.abs(totalRealizedPnl).toLocaleString(dateLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-          </span>
+        {/* Controls + Global PnL Pill */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                if (!settings?.is_bot_active && !hasValidatedAccount) {
+                  setIsMissingExchangeModalOpen(true);
+                } else {
+                  setIsToggleModalOpen(true);
+                }
+              }}
+              className={`px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg transition-all ${
+                settings?.is_bot_active
+                  ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30 hover:bg-amber-500/25'
+                  : 'bg-emerald-500 text-dark-950 hover:bg-emerald-400 shadow-emerald-500/20'
+              }`}
+            >
+              {settings?.is_bot_active ? (
+                <>
+                  <Pause className="w-4 h-4" /> {t('dashboard.pauseTrading')}
+                </>
+              ) : (
+                <>
+                  <Play className="w-4 h-4 fill-current" /> {t('dashboard.startTrading')}
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsPanicModalOpen(true)}
+              disabled={openPositions.length === 0}
+              className="px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider bg-rose-600/15 text-rose-400 border border-rose-600/30 hover:bg-rose-600/25 transition-all flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <AlertOctagon className="w-4 h-4" />
+              {t('dashboard.panicCloseAll')}
+            </button>
+          </div>
+
+          <div className="bg-dark-900 border border-dark-800 px-4 py-2.5 rounded-xl flex items-center gap-3 shadow-lg">
+            <span className="text-xs text-slate-400 font-mono">{t('history.realizedPnl')}</span>
+            <span
+              className={`font-mono font-black text-base ${
+                totalRealizedPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'
+              }`}
+            >
+              {totalRealizedPnl >= 0
+                ? `+$${totalRealizedPnl.toLocaleString(dateLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                : `-$${Math.abs(totalRealizedPnl).toLocaleString(dateLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -386,6 +525,10 @@ export default function UserHistoryPage() {
                               ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
                               : pos.exit_reason === 'sl'
                               ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                              : pos.exit_reason === 'panic_close'
+                              ? 'bg-red-500/15 text-red-400 border border-red-500/30'
+                              : pos.exit_reason === 'admin_close'
+                              ? 'bg-slate-500/15 text-slate-300 border border-slate-500/30'
                               : 'bg-amber-500/15 text-honey-400 border border-honey-500/30'
                           }`}
                         >
@@ -393,6 +536,10 @@ export default function UserHistoryPage() {
                             ? t('history.takeProfit')
                             : pos.exit_reason === 'sl'
                             ? t('history.stopLoss')
+                            : pos.exit_reason === 'panic_close'
+                            ? t('history.panicClose')
+                            : pos.exit_reason === 'admin_close'
+                            ? t('history.adminClose')
                             : t('history.trendFlip')}
                         </span>
                       </td>
@@ -472,6 +619,39 @@ export default function UserHistoryPage() {
           </div>
         )}
       </div>
+
+      <ConfirmModal
+        isOpen={isToggleModalOpen}
+        onCancel={() => setIsToggleModalOpen(false)}
+        onConfirm={handleToggleBot}
+        title={settings?.is_bot_active ? t('dashboard.pauseTitle') : t('dashboard.startTitle')}
+        description={
+          settings?.is_bot_active ? t('dashboard.pauseDesc') : t('dashboard.startDesc')
+        }
+        confirmText={
+          settings?.is_bot_active ? t('dashboard.pauseConfirm') : t('dashboard.startConfirm')
+        }
+      />
+
+      <PanicCloseModal
+        isOpen={isPanicModalOpen}
+        onCancel={() => setIsPanicModalOpen(false)}
+        onConfirm={handlePanicClose}
+        openPositionsCount={openPositions.length}
+        unrealizedPnl={totalUnrealizedPnl}
+      />
+
+      <ConfirmModal
+        isOpen={isMissingExchangeModalOpen}
+        onCancel={() => setIsMissingExchangeModalOpen(false)}
+        onConfirm={() => {
+          setIsMissingExchangeModalOpen(false);
+          window.location.href = '/settings/exchange';
+        }}
+        title={t('dashboard.exchangeRequiredTitle')}
+        description={t('dashboard.exchangeRequiredDesc')}
+        confirmText={t('dashboard.connectExchange')}
+      />
     </div>
   );
 }

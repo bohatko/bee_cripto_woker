@@ -16,10 +16,48 @@ CREATE TYPE exchange_type AS ENUM ('binance', 'okx', 'bybit');
 CREATE TYPE position_status AS ENUM ('open', 'closing', 'closed', 'cancelled', 'error');
 CREATE TYPE exit_reason_type AS ENUM ('tp', 'sl', 'trend_flip', 'panic_close', 'admin_close');
 CREATE TYPE invoice_status AS ENUM ('issued', 'pending_review', 'paid', 'frozen', 'cancelled');
-CREATE TYPE crypto_network AS ENUM ('TRC20', 'BEP20', 'TON');
+CREATE TYPE crypto_network AS ENUM ('TRC20', 'BEP20', 'TON', 'APTOS');
 CREATE TYPE component_health_status AS ENUM ('healthy', 'degraded', 'down');
 CREATE TYPE signal_position_status AS ENUM ('open', 'closed', 'error');
 CREATE TYPE signal_exit_reason AS ENUM ('tp', 'sl', 'panic_close', 'admin_close', 'external_flat');
+
+-- 3. Генераторы 7-значного платёжного ID (Bee ID)
+--    external_uid_for() — детерминированное значение из UUID пользователя
+--    (та же формула в web/src/lib/externalUid.ts)
+CREATE OR REPLACE FUNCTION public.external_uid_for(p_user_id UUID)
+RETURNS TEXT
+LANGUAGE sql
+IMMUTABLE
+AS $$
+    SELECT (
+        (((('x' || substr(replace(p_user_id::text, '-', ''), 1, 8))::bit(32)::bigint) % 9000000) + 1000000)
+    )::TEXT;
+$$;
+
+--    generate_external_uid() — случайный fallback при коллизии
+CREATE OR REPLACE FUNCTION public.generate_external_uid()
+RETURNS TEXT
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+    candidate TEXT;
+    attempts  INT := 0;
+BEGIN
+    LOOP
+        candidate := (FLOOR(RANDOM() * 9000000) + 1000000)::BIGINT::TEXT;
+        EXIT WHEN NOT EXISTS (
+            SELECT 1 FROM public.users_profile WHERE external_uid = candidate
+        );
+        attempts := attempts + 1;
+        IF attempts > 200 THEN
+            RAISE EXCEPTION 'Could not generate a unique external_uid after % attempts', attempts;
+        END IF;
+    END LOOP;
+    RETURN candidate;
+END;
+$$;
 
 -- ==============================================================================
 -- ТАБЛИЦА 1: users_profile (Профиль пользователя и подписка)
@@ -35,6 +73,10 @@ CREATE TABLE IF NOT EXISTS public.users_profile (
     subscription_paid_until TIMESTAMPTZ,
     high_water_mark_equity NUMERIC(18, 4) DEFAULT 0.0000 NOT NULL,
     is_frozen BOOLEAN DEFAULT FALSE NOT NULL,
+    -- Unique 7-digit payment identifier (payment reference). Deterministic from the
+    -- user UUID, auto-filled on insert by trg_users_profile_external_uid.
+    external_uid TEXT NOT NULL UNIQUE
+        CONSTRAINT users_profile_external_uid_format CHECK (external_uid ~ '^[0-9]{7}$'),
     -- Per-user Telegram (bot token AES-256-GCM encrypted as iv:tag:ciphertext)
     telegram_bot_token_enc TEXT,
     telegram_chat_id TEXT,
@@ -454,6 +496,29 @@ BEGIN
     CREATE TRIGGER trg_user_signal_settings_upd BEFORE UPDATE ON public.user_signal_settings FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
+
+-- Автозаполнение Bee ID (external_uid) при создании профиля
+CREATE OR REPLACE FUNCTION public.set_external_uid()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+    IF NEW.external_uid IS NULL OR NEW.external_uid = '' THEN
+        NEW.external_uid := public.external_uid_for(NEW.id);
+        IF EXISTS (SELECT 1 FROM public.users_profile WHERE external_uid = NEW.external_uid) THEN
+            NEW.external_uid := public.generate_external_uid();
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_users_profile_external_uid ON public.users_profile;
+CREATE TRIGGER trg_users_profile_external_uid
+    BEFORE INSERT ON public.users_profile
+    FOR EACH ROW EXECUTE FUNCTION public.set_external_uid();
 
 -- ==============================================================================
 -- ТРИГГЕР: Создание профиля и настроек при регистрации через Supabase Auth

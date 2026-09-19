@@ -13,29 +13,65 @@ export class BillingCronJob {
     console.log('💳 [BILLING] Running billing audit cycle...');
     const now = new Date();
 
-    // 1. Check expired trials
-    const { data: usersToCharge } = await supabase
+    // 1. Check expired trials (subscription_status === 'trial' and trial_end_at <= now)
+    const { data: expiredTrialUsers } = await supabase
       .from('users_profile')
       .select('*, exchange_accounts(*)')
       .eq('subscription_status', 'trial')
       .lte('trial_end_at', now.toISOString());
 
-    if (usersToCharge && usersToCharge.length > 0) {
-      for (const u of usersToCharge) {
-        await this.generateWeeklyInvoice(u);
+    if (expiredTrialUsers && expiredTrialUsers.length > 0) {
+      for (const u of expiredTrialUsers) {
+        // Prevent duplicate invoices if user already has an issued or pending_review invoice
+        const { data: openInvs } = await supabase
+          .from('invoices')
+          .select('id')
+          .eq('user_id', u.id)
+          .in('status', ['issued', 'pending_review'])
+          .limit(1);
+
+        if (!openInvs || openInvs.length === 0) {
+          await this.generateWeeklyInvoice(u);
+        }
       }
     }
 
-    // 2. Check overdue invoices and apply Variant A safe freeze
+    // 2. Check expired active subscriptions (subscription_status === 'active' and subscription_paid_until <= now)
+    const { data: expiredActiveUsers } = await supabase
+      .from('users_profile')
+      .select('*, exchange_accounts(*)')
+      .eq('subscription_status', 'active')
+      .eq('is_frozen', false)
+      .not('subscription_paid_until', 'is', null)
+      .lte('subscription_paid_until', now.toISOString());
+
+    if (expiredActiveUsers && expiredActiveUsers.length > 0) {
+      for (const u of expiredActiveUsers) {
+        // Prevent duplicate invoices if user already has an issued or pending_review invoice
+        const { data: openInvs } = await supabase
+          .from('invoices')
+          .select('id')
+          .eq('user_id', u.id)
+          .in('status', ['issued', 'pending_review'])
+          .limit(1);
+
+        if (!openInvs || openInvs.length === 0) {
+          await this.generateWeeklyInvoice(u);
+        }
+      }
+    }
+
+    // 3. Check overdue invoices and apply Variant A safe freeze
+    // An invoice is overdue if status is 'issued' and due_date <= now
     const { data: overdueInvoices } = await supabase
       .from('invoices')
-      .select('id, user_id')
+      .select('id, user_id, invoice_number')
       .eq('status', 'issued')
       .lte('due_date', now.toISOString());
 
     if (overdueInvoices && overdueInvoices.length > 0) {
       for (const inv of overdueInvoices) {
-        console.warn(`❄️ [BILLING FREEZE] Invoice ${inv.id} overdue. Freezing user ${inv.user_id} (Variant A: no new entries)`);
+        console.warn(`❄️ [BILLING FREEZE] Invoice ${inv.invoice_number} overdue. Freezing user ${inv.user_id} (Variant A: no new entries)`);
         await supabase
           .from('users_profile')
           .update({ is_frozen: true, subscription_status: 'frozen' })
@@ -77,7 +113,7 @@ export class BillingCronJob {
 
     const invoiceNumber = `INV-${Date.now().toString(36).toUpperCase()}`;
 
-    const { error } = await supabase.from('invoices').insert({
+    const invoicePayload: Record<string, any> = {
       user_id: user.id,
       invoice_number: invoiceNumber,
       period_start: periodStart.toISOString(),
@@ -86,21 +122,33 @@ export class BillingCronJob {
       profit_fee_usd: profitFee,
       total_amount_usd: totalAmount,
       net_profit_in_period: realizedProfit,
-      hwm_before: user.high_water_mark_equity,
-      hwm_after: user.high_water_mark_equity + Math.max(0, realizedProfit),
+      hwm_before: user.high_water_mark_equity || 0,
+      hwm_after: (user.high_water_mark_equity || 0) + Math.max(0, realizedProfit),
       status: 'issued',
-      payment_network: 'TRC20',
-      payment_wallet_address: CONFIG.adminTrc20Wallet,
+      payment_wallet_address: CONFIG.adminAptosWallet,
       due_date: dueDate.toISOString(),
+      user_notes: 'Payment network: USDT on Aptos (OKX)',
+    };
+
+    // Defensively try inserting with payment_network: 'APTOS'.
+    // If the DB enum does not include 'APTOS' yet, fall back to 'TRC20'.
+    let { error } = await supabase.from('invoices').insert({
+      ...invoicePayload,
+      payment_network: 'APTOS',
     });
 
+    if (error && error.message?.includes('crypto_network')) {
+      const fallback = await supabase.from('invoices').insert({
+        ...invoicePayload,
+        payment_network: 'TRC20',
+      });
+      error = fallback.error;
+    }
+
     if (!error) {
-      console.log(`🧾 [INVOICE GENERATED] ${invoiceNumber} for user ${user.email} (Total: $${totalAmount.toFixed(2)})`);
-      // Update subscription status to active waiting for payment
-      await supabase
-        .from('users_profile')
-        .update({ subscription_status: 'active' })
-        .eq('id', user.id);
+      console.log(`🧾 [INVOICE GENERATED] ${invoiceNumber} for user ${user.email} (Total: $${totalAmount.toFixed(2)} USDT on Aptos)`);
+    } else {
+      console.error(`❌ [INVOICE ERROR] Failed to generate invoice for ${user.email}:`, error.message);
     }
   }
 

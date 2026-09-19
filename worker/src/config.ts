@@ -91,6 +91,7 @@ export const CONFIG = {
   liveDemotionPf: Number(process.env.LIVE_DEMOTION_PF || 0.8),
   adminTrc20Wallet: process.env.ADMIN_TRC20_WALLET || 'TFakeWalletAddressForTRC20USDTRechargeXXXX',
   adminBep20Wallet: process.env.ADMIN_BEP20_WALLET || '0xFakeWalletAddressForBEP20USDTRechargeXXXX',
+  adminAptosWallet: process.env.ADMIN_APTOS_WALLET || '0xccabbae52a975c1cb682643d13b970e95997e539e5c9c9443e922ba406f401e7',
   // Telegram is per-user (users_profile.telegram_*). TELEGRAM_* env vars are deprecated.
   // Internal HTTP API for Next.js → worker exchange validate/sync (static egress IP)
   internalApiEnabled: parseBool(process.env.INTERNAL_API_ENABLED, true),

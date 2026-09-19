@@ -113,12 +113,15 @@ export class PositionGuard {
 
       // Optional ATR-based stop: SL threshold in spread terms = SL_ATR_MULT * ATR14%,
       // converted to margin PnL% via leverage, capped by SL_MAX_MARGIN_PCT.
+      // The ATR stop can only TIGHTEN the configured SL, never widen it: the user's
+      // configured STOP_LOSS_PCT (1.5%) must always be respected. When SL_ATR_MULT=0
+      // (default) the ATR stop is disabled and the SL is exactly the configured value.
       if (CONFIG.slAtrMult > 0) {
         const atrPct = this.scanner.getAtrPct(position.pair_symbol);
         if (atrPct !== undefined) {
           const atrSlMarginPct = CONFIG.slAtrMult * atrPct * effectiveLeverage;
-          // Use the more conservative (larger) of the configured SL and the ATR-based SL
-          slMarginPct = Math.max(slMarginPct, atrSlMarginPct);
+          // Use the tighter (smaller) of the configured SL and the ATR-based SL.
+          slMarginPct = Math.min(slMarginPct, atrSlMarginPct);
         }
       }
       slMarginPct = Math.min(slMarginPct, CONFIG.slMaxMarginPct);

@@ -1,3 +1,4 @@
+import { createServerClient, parseCookieHeader } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl =
@@ -24,17 +25,22 @@ export async function getAuthenticatedUser(request: Request) {
     }
   }
 
-  // Fallback to cookie check
+  // Fallback to cookie check via @supabase/ssr
   const cookieHeader = request.headers.get('cookie');
   if (cookieHeader) {
-    const cookieClient = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: { persistSession: false },
-      global: { headers: { Cookie: cookieHeader } },
+    const cookieClient = createServerClient(supabaseUrl, supabaseAnonKey, {
+      cookies: {
+        getAll() {
+          return parseCookieHeader(cookieHeader);
+        },
+        setAll() {},
+      },
     });
     const {
       data: { user },
+      error,
     } = await cookieClient.auth.getUser();
-    if (user) {
+    if (!error && user) {
       return { user, supabase: cookieClient };
     }
   }

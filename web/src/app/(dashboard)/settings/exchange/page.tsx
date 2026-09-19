@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   KeyRound,
   ShieldAlert,
@@ -44,6 +45,7 @@ interface TradingSettingsItem {
 }
 
 export default function ExchangeSettingsPage() {
+  const router = useRouter();
   const { t, dateLocale, formatDateTime } = useLanguage();
   const [selectedExchange, setSelectedExchange] = useState<'binance' | 'okx' | 'bybit'>('binance');
   const [apiKey, setApiKey] = useState('');
@@ -67,7 +69,14 @@ export default function ExchangeSettingsPage() {
   const [targetPrimaryAccount, setTargetPrimaryAccount] = useState<ExchangeAccountItem | null>(null);
   const [isSwitchPrimaryModalOpen, setIsSwitchPrimaryModalOpen] = useState(false);
 
-  const railwayStaticIp = process.env.NEXT_PUBLIC_RAILWAY_EGRESS_IP || '54.198.120.45';
+  const railwayStaticIps = (
+    process.env.NEXT_PUBLIC_RAILWAY_EGRESS_IP ||
+    '208.77.244.240,152.55.185.189,152.55.185.190'
+  )
+    .split(/[,\s]+/)
+    .map((ip) => ip.trim())
+    .filter(Boolean);
+  const railwayStaticIpLabel = railwayStaticIps.join(', ');
   const hasAutoSyncedRef = useRef(false);
 
   async function loadAccountsAndSettings() {
@@ -75,7 +84,10 @@ export default function ExchangeSettingsPage() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        router.replace('/login');
+        return;
+      }
 
       // 1. Fetch exchange accounts
       const { data: accData } = await supabase
@@ -131,7 +143,7 @@ export default function ExchangeSettingsPage() {
   }, [selectedExchange, tradingSettings, accounts]);
 
   const handleCopyIp = () => {
-    navigator.clipboard.writeText(railwayStaticIp);
+    navigator.clipboard.writeText(railwayStaticIps.join('\n'));
     setCopied(true);
     toast.success(t('exchange.ipCopied'));
     setTimeout(() => setCopied(false), 2000);
@@ -413,13 +425,15 @@ export default function ExchangeSettingsPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <code className="px-3.5 py-2 bg-dark-950 border border-dark-700 rounded-xl font-mono text-sm text-honey-400 font-bold">
-              {railwayStaticIp}
-            </code>
+            <div className="px-3.5 py-2 bg-dark-950 border border-dark-700 rounded-xl font-mono text-sm text-honey-400 font-bold space-y-1">
+              {railwayStaticIps.map((ip) => (
+                <div key={ip}>{ip}</div>
+              ))}
+            </div>
             <button
               onClick={handleCopyIp}
               className="p-2.5 bg-dark-800 hover:bg-dark-700 border border-dark-700 rounded-xl text-slate-300 hover:text-white transition-colors"
-              title="Copy IP"
+              title="Copy IPs"
             >
               {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
             </button>
@@ -784,7 +798,7 @@ export default function ExchangeSettingsPage() {
                   <ul className="list-disc list-inside space-y-1 font-mono text-[11px]">
                     <li>{t('exchange.enableFutures')}</li>
                     <li>{t('exchange.doNotWithdraw')}</li>
-                    <li>{t('exchange.addIp')} <span className="text-honey-400 font-bold">{railwayStaticIp}</span></li>
+                    <li>{t('exchange.addIp')} <span className="text-honey-400 font-bold">{railwayStaticIpLabel}</span></li>
                   </ul>
                 </div>
 

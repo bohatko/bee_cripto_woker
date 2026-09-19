@@ -117,10 +117,16 @@ export function getNetPnlUsd(pos: BotPositionPnlFields): number {
   return Number((gross - fees).toFixed(2));
 }
 
+/** Unrealized PnL for open positions (zero when not open or not recorded). */
+export function getUnrealizedPnlUsd(pos: BotPositionPnlFields): number {
+  if (pos.status !== 'open') return 0;
+  return parseUsd(pos.unrealized_pnl_usd) ?? 0;
+}
+
 /** Net PnL for display: unrealized when open, net realized when closed. */
 export function getDisplayPnlUsd(pos: BotPositionPnlFields): number {
   if (pos.status === 'open') {
-    return parseUsd(pos.unrealized_pnl_usd) ?? 0;
+    return getUnrealizedPnlUsd(pos);
   }
   return getNetPnlUsd(pos);
 }

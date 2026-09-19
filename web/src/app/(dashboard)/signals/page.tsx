@@ -1,6 +1,7 @@
 'use client';
 
 import React, { Suspense, useEffect, useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { SignalSettingsCard } from '@/components/signals/SignalSettingsCard';
@@ -12,6 +13,7 @@ import { SignalsSkeleton } from '@/components/skeletons/PageSkeletons';
 import { Compass, Sparkles, Filter } from 'lucide-react';
 
 function SignalsContent() {
+  const router = useRouter();
   const { t, dateLocale } = useLanguage();
 
   const [strategies, setStrategies] = useState<any[]>([]);
@@ -28,7 +30,10 @@ function SignalsContent() {
       const {
         data: { user: authUser },
       } = await supabase.auth.getUser();
-      if (!authUser) return;
+      if (!authUser) {
+        router.replace('/login');
+        return;
+      }
       setUser(authUser);
 
       const { data: strats } = await supabase

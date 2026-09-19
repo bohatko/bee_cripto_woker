@@ -32,8 +32,14 @@ export default function LoginPage() {
       toast.error(error.message);
       setLoading(false);
     } else {
+      const redirectTo =
+        typeof window !== 'undefined'
+          ? new URLSearchParams(window.location.search).get('redirectTo')
+          : null;
+      const targetUrl = redirectTo && redirectTo.startsWith('/') ? redirectTo : '/dashboard';
       toast.success(t('auth.signedInSuccess'));
-      router.push('/dashboard');
+      router.replace(targetUrl);
+      router.refresh();
     }
   };
 

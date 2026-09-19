@@ -9,11 +9,26 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized. Please sign in.' }, { status: 401 });
     }
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('users_profile')
-      .select('full_name, email, telegram_chat_id, telegram_enabled, telegram_bot_token_enc')
+      .select(
+        'full_name, email, telegram_chat_id, telegram_enabled, telegram_bot_token_enc, subscription_status, external_uid'
+      )
       .eq('id', user.id)
       .maybeSingle();
+
+    // Graceful fallback while the external_uid migration has not been applied yet.
+    if (error && error.message?.includes('external_uid')) {
+      const fallback = await supabase
+        .from('users_profile')
+        .select(
+          'full_name, email, telegram_chat_id, telegram_enabled, telegram_bot_token_enc, subscription_status'
+        )
+        .eq('id', user.id)
+        .maybeSingle();
+      data = fallback.data as unknown as typeof data;
+      error = fallback.error;
+    }
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -25,6 +40,8 @@ export async function GET(request: Request) {
       telegram_chat_id: data?.telegram_chat_id || '',
       telegram_enabled: Boolean(data?.telegram_enabled),
       has_telegram_token: Boolean(data?.telegram_bot_token_enc),
+      subscription_status: data?.subscription_status || 'trial',
+      external_uid: data?.external_uid || '',
     });
   } catch (err: any) {
     return NextResponse.json(

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Filter, Sparkles } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
@@ -12,6 +13,7 @@ import { SignalsBacktestSkeleton } from '@/components/skeletons/PageSkeletons';
 const SIGNAL_BACKTEST_START_USD = 10000;
 
 export default function SignalsBacktestPage() {
+  const router = useRouter();
   const { t, dateLocale } = useLanguage();
   const [events, setEvents] = useState<any[]>([]);
   const [masterPositions, setMasterPositions] = useState<any[]>([]);
@@ -25,7 +27,10 @@ export default function SignalsBacktestPage() {
         const {
           data: { user },
         } = await supabase.auth.getUser();
-        if (!user) return;
+        if (!user) {
+          router.replace('/login');
+          return;
+        }
 
         const [{ data: evs }, { data: masters }, { data: userPos }] = await Promise.all([
           supabase

@@ -28,6 +28,7 @@ import {
 import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { PairSelectionTraceDrawer } from '@/components/admin/PairSelectionTraceDrawer';
+import { UserDetailDrawer } from '@/components/admin/UserDetailDrawer';
 import {
   ReplacePairModal,
   type BasketPairRow,
@@ -38,6 +39,7 @@ import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { LanguageSwitcher } from '@/lib/i18n/LanguageSwitcher';
 import { isUnfilledSimulation, getDisplayPnlUsd } from '@/lib/positions';
 import { signalPriceDecimals } from '@/lib/signals';
+import { resolveExternalUid } from '@/lib/externalUid';
 import { AdminSkeleton } from '@/components/skeletons/PageSkeletons';
 import { LineChart, Line } from 'recharts';
 
@@ -54,6 +56,7 @@ export default function AdminDashboardPage() {
   const [positions, setPositions] = useState<any[]>([]);
   const [healthLogs, setHealthLogs] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedUser, setSelectedUser] = useState<any | null>(null);
 
   // Signals state
   const [signalStrategies, setSignalStrategies] = useState<any[]>([]);
@@ -145,7 +148,7 @@ export default function AdminDashboardPage() {
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
-      router.push('/login');
+      router.replace('/login');
       return;
     }
 
@@ -157,24 +160,36 @@ export default function AdminDashboardPage() {
       .single();
 
     if (prof?.role !== 'admin') {
-      router.push('/dashboard');
+      router.replace('/dashboard');
       return;
     }
 
     setIsAdmin(true);
 
     // Load all users with their connected exchanges and trading settings
+    // Only expose non-secret exchange columns (encrypted keys never reach the browser).
     const { data: allUsers } = await supabase
       .from('users_profile')
-      .select('*, exchange_accounts(*), trading_settings(*)');
+      .select(
+        '*, exchange_accounts(id, exchange, account_name, is_active, is_validated, can_withdraw, can_trade_futures, last_balance_usd, last_error_msg, last_sync_at, created_at, updated_at), trading_settings(*)'
+      );
 
     if (allUsers) setUsers(allUsers);
 
     // Load all invoices
-    const { data: allInvoices } = await supabase
+    let { data: allInvoices, error: invoicesError } = await supabase
       .from('invoices')
-      .select('*, users_profile:users_profile!invoices_user_id_fkey(email, full_name)')
+      .select('*, users_profile:users_profile!invoices_user_id_fkey(email, full_name, external_uid)')
       .order('created_at', { ascending: false });
+
+    // Graceful fallback while the external_uid migration has not been applied yet.
+    if (invoicesError && invoicesError.message?.includes('external_uid')) {
+      const fallback = await supabase
+        .from('invoices')
+        .select('*, users_profile:users_profile!invoices_user_id_fkey(email, full_name)')
+        .order('created_at', { ascending: false });
+      allInvoices = fallback.data as unknown as typeof allInvoices;
+    }
 
     if (allInvoices) setInvoices(allInvoices);
 
@@ -300,14 +315,20 @@ export default function AdminDashboardPage() {
           .eq('id', selectedInvoice.id);
 
         // 2. Extend subscription for user by 7 days and unfreeze if frozen
-        const newPaidUntil = new Date(Date.now() + 7 * 86400000).toISOString();
+        const currentPaidUntil = selectedInvoice.users_profile?.subscription_paid_until;
+        const baseDate =
+          currentPaidUntil && new Date(currentPaidUntil).getTime() > Date.now()
+            ? new Date(currentPaidUntil).getTime()
+            : Date.now();
+        const newPaidUntil = new Date(baseDate + 7 * 86400000).toISOString();
+
         await supabase
           .from('users_profile')
           .update({
             subscription_status: 'active',
             is_frozen: false,
             subscription_paid_until: newPaidUntil,
-            high_water_mark_equity: selectedInvoice.hwm_after,
+            high_water_mark_equity: selectedInvoice.hwm_after || 0,
           })
           .eq('id', selectedInvoice.user_id);
 
@@ -717,6 +738,64 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
+        {/* Exchange Health Pings — always visible above the tabs */}
+        <div className="bg-dark-900 border border-dark-800 rounded-2xl shadow-xl p-5">
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <div className="flex items-center gap-2">
+              <Activity className="w-4 h-4 text-honey-400" />
+              <h2 className="text-sm font-bold text-white">{t('admin.healthLogs')}</h2>
+            </div>
+            <span className="text-[11px] font-mono text-slate-500">{t('admin.pingCycles')}</span>
+          </div>
+
+          {healthLogs.length === 0 ? (
+            <div className="py-6 text-center text-xs font-mono text-slate-500">
+              {t('admin.noHealthLogs')}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {healthLogs.map((log) => (
+                <div
+                  key={log.id}
+                  className="bg-dark-950/60 border border-dark-800 rounded-xl px-4 py-3"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-white uppercase text-xs font-mono truncate">
+                      {log.component}
+                    </span>
+                    <span
+                      className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                        log.status === 'healthy'
+                          ? 'bg-emerald-400 animate-pulse'
+                          : log.status === 'degraded'
+                          ? 'bg-amber-400'
+                          : 'bg-rose-500'
+                      }`}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between mt-2 text-[11px] font-mono">
+                    <span
+                      className={`font-bold uppercase ${
+                        log.status === 'healthy'
+                          ? 'text-emerald-400'
+                          : log.status === 'degraded'
+                          ? 'text-amber-400'
+                          : 'text-rose-400'
+                      }`}
+                    >
+                      {log.status}
+                    </span>
+                    <span className="text-honey-400 font-bold">{log.latency_ms} ms</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-mono mt-1 truncate text-right">
+                    {formatDateTime(log.pinged_at)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Navigation Tabs */}
         <div className="flex border-b border-dark-800 gap-2 font-mono text-xs font-semibold uppercase">
           <button
@@ -774,16 +853,6 @@ export default function AdminDashboardPage() {
           >
             Signals
           </button>
-          <button
-            onClick={() => setActiveTab('health')}
-            className={`pb-3 px-4 border-b-2 transition-colors ${
-              activeTab === 'health'
-                ? 'border-honey-500 text-honey-400 font-bold'
-                : 'border-transparent text-slate-400 hover:text-white'
-            }`}
-          >
-            {t('admin.healthPings')}
-          </button>
         </div>
 
         {/* TAB 1: USERS DIRECTORY */}
@@ -823,7 +892,12 @@ export default function AdminDashboardPage() {
                     const exchangeAcc = u.exchange_accounts?.[0];
                     const tradingSet = u.trading_settings?.[0];
                     return (
-                      <tr key={u.id} className="hover:bg-dark-850/50 transition-colors">
+                      <tr
+                        key={u.id}
+                        onClick={() => setSelectedUser(u)}
+                        title={t('admin.userDetail.openHint')}
+                        className="hover:bg-dark-850/50 transition-colors cursor-pointer"
+                      >
                         <td className="px-5 py-4">
                           <div className="font-bold text-white">{u.full_name || t('common.trader')}</div>
                           <div className="text-slate-400 text-[11px]">{u.email}</div>
@@ -885,7 +959,8 @@ export default function AdminDashboardPage() {
                         <td className="px-5 py-4 text-center">
                           {u.role !== 'admin' && (
                             <button
-                              onClick={async () => {
+                              onClick={async (e) => {
+                                e.stopPropagation();
                                 const nextFrozen = !u.is_frozen;
                                 await supabase
                                   .from('users_profile')
@@ -940,10 +1015,15 @@ export default function AdminDashboardPage() {
                   <tbody className="divide-y divide-dark-800 font-mono text-xs">
                     {invoices.map((inv) => {
                       const isPending = inv.status === 'pending_review';
-                      const explorerUrl =
-                        inv.payment_network === 'TRC20'
-                          ? `https://tronscan.org/#/transaction/${inv.tx_hash}`
-                          : `https://bscscan.com/tx/${inv.tx_hash}`;
+                      const isAptos =
+                        inv.payment_network === 'APTOS' ||
+                        inv.user_notes?.toLowerCase().includes('aptos') ||
+                        inv.payment_wallet_address?.startsWith('0x');
+                      const explorerUrl = isAptos
+                        ? `https://explorer.aptoslabs.com/txn/${inv.tx_hash}`
+                        : inv.payment_network === 'TRC20'
+                        ? `https://tronscan.org/#/transaction/${inv.tx_hash}`
+                        : `https://bscscan.com/tx/${inv.tx_hash}`;
 
                       return (
                         <tr key={inv.id} className="hover:bg-dark-850/50 transition-colors">
@@ -952,6 +1032,16 @@ export default function AdminDashboardPage() {
                             <div className="text-slate-400 text-[11px]">
                               {inv.users_profile?.email || inv.user_id}
                             </div>
+                            {resolveExternalUid(inv.user_id, inv.users_profile?.external_uid) && (
+                              <div className="text-honey-400 text-[11px] font-bold mt-0.5">
+                                Bee ID: {resolveExternalUid(inv.user_id, inv.users_profile?.external_uid)}
+                              </div>
+                            )}
+                            {inv.user_notes && (
+                              <div className="text-slate-500 text-[10px] mt-0.5 max-w-[220px] truncate" title={inv.user_notes}>
+                                {inv.user_notes}
+                              </div>
+                            )}
                           </td>
                           <td className="px-5 py-4 text-slate-400 text-[11px]">
                             {formatDate(inv.period_start)} –{' '}
@@ -1572,50 +1662,6 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
-        {/* TAB 6: SYSTEM HEALTH PINGS */}
-        {activeTab === 'health' && (
-          <div className="bg-dark-900 border border-dark-800 rounded-2xl shadow-xl overflow-hidden">
-            <div className="p-5 border-b border-dark-800 flex justify-between items-center">
-              <h2 className="text-base font-bold text-white">{t('admin.healthLogs')}</h2>
-              <span className="text-xs font-mono text-slate-400">{t('admin.pingCycles')}</span>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-dark-950/60 text-[11px] uppercase tracking-wider text-slate-400 font-mono border-b border-dark-800">
-                  <tr>
-                    <th className="px-5 py-3">{t('admin.colComponent')}</th>
-                    <th className="px-5 py-3">{t('admin.colHealth')}</th>
-                    <th className="px-5 py-3">{t('admin.colLatency')}</th>
-                    <th className="px-5 py-3 text-right">{t('admin.colPing')}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-dark-800 font-mono text-xs">
-                  {healthLogs.map((log) => (
-                    <tr key={log.id} className="hover:bg-dark-850/50 transition-colors">
-                      <td className="px-5 py-4 font-bold text-white uppercase">{log.component}</td>
-                      <td className="px-5 py-4">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold ${
-                            log.status === 'healthy'
-                              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                              : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
-                          }`}
-                        >
-                          {log.status}
-                        </span>
-                      </td>
-                      <td className="px-5 py-4 text-honey-400 font-bold">{log.latency_ms} ms</td>
-                      <td className="px-5 py-4 text-right text-slate-400 text-[11px]">
-                        {formatDateTime(log.pinged_at)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
       </main>
 
       {/* Confirmation Modal for Invoices */}
@@ -1667,6 +1713,12 @@ export default function AdminDashboardPage() {
         isOpen={!!traceRunId}
         run={tracedRun}
         onClose={() => setTraceRunId(null)}
+      />
+
+      <UserDetailDrawer
+        isOpen={!!selectedUser}
+        user={selectedUser}
+        onClose={() => setSelectedUser(null)}
       />
 
       <ReplacePairModal

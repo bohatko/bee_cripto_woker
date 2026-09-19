@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   User,
   Bot,
@@ -12,8 +13,12 @@ import {
   Bell,
   BellOff,
   Mail,
+  Copy,
+  Check,
+  Hash,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
+import { resolveExternalUid } from '@/lib/externalUid';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { toast } from '@/components/ui/sonner';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
@@ -25,9 +30,12 @@ interface ProfileResponse {
   telegram_chat_id: string;
   telegram_enabled: boolean;
   has_telegram_token: boolean;
+  subscription_status: string;
+  external_uid: string;
 }
 
 export default function ProfileSettingsPage() {
+  const router = useRouter();
   const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -40,6 +48,17 @@ export default function ProfileSettingsPage() {
   const [botToken, setBotToken] = useState('');
   const [enabled, setEnabled] = useState(false);
   const [hasToken, setHasToken] = useState(false);
+  const [subscriptionStatus, setSubscriptionStatus] = useState('trial');
+  const [externalUid, setExternalUid] = useState('');
+  const [uidCopied, setUidCopied] = useState(false);
+
+  const handleCopyUid = () => {
+    if (!externalUid) return;
+    navigator.clipboard.writeText(externalUid);
+    setUidCopied(true);
+    toast.success(t('profile.paymentIdCopied'));
+    setTimeout(() => setUidCopied(false), 2000);
+  };
 
   async function authHeaders(): Promise<HeadersInit> {
     const {
@@ -54,6 +73,12 @@ export default function ProfileSettingsPage() {
   async function loadProfile() {
     setLoading(true);
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.replace('/login');
+        return;
+      }
+
       const res = await fetch('/api/settings/profile', {
         headers: await authHeaders(),
         cache: 'no-store',
@@ -67,6 +92,8 @@ export default function ProfileSettingsPage() {
       setChatId(data.telegram_chat_id || '');
       setEnabled(Boolean(data.telegram_enabled));
       setHasToken(Boolean(data.has_telegram_token));
+      setSubscriptionStatus(data.subscription_status || 'trial');
+      setExternalUid(resolveExternalUid(user.id, data.external_uid));
       setBotToken('');
     } catch (err: any) {
       toast.error(err.message || t('profile.loadError'));
@@ -200,8 +227,16 @@ export default function ProfileSettingsPage() {
             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
               {t('profile.identity')}
             </span>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded border uppercase text-emerald-400 bg-emerald-500/10 border-emerald-500/20">
-              {t('common.status')}
+            <span
+              className={`text-[10px] font-mono px-2 py-0.5 rounded border uppercase ${
+                subscriptionStatus === 'trial'
+                  ? 'text-honey-400 bg-honey-500/10 border-honey-500/20'
+                  : subscriptionStatus === 'active'
+                    ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                    : 'text-rose-400 bg-rose-500/10 border-rose-500/20'
+              }`}
+            >
+              {subscriptionStatus || t('common.trial')}
             </span>
           </div>
 
@@ -239,6 +274,34 @@ export default function ProfileSettingsPage() {
             </p>
           </div>
         </div>
+      </div>
+
+      {/* Payment ID (external_uid) — required reference for OKX internal transfers */}
+      <div className="bg-dark-900 border border-honey-500/30 rounded-2xl p-5 sm:p-6 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="p-3 rounded-xl bg-honey-500/10 border border-honey-500/30 text-honey-400 shrink-0">
+            <Hash className="w-6 h-6" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+              {t('profile.paymentId')}
+            </p>
+            <p className="text-2xl sm:text-3xl font-black text-honey-400 font-mono tracking-[0.35em] mt-1">
+              {externalUid || '•••••••'}
+            </p>
+            <p className="text-[11px] text-slate-400 mt-1.5">{t('profile.paymentIdHint')}</p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleCopyUid}
+          disabled={!externalUid}
+          className="px-4 py-2.5 rounded-xl text-xs font-bold bg-honey-500 hover:bg-honey-400 text-dark-950 flex items-center gap-2 transition-all shadow-lg shadow-honey-500/20 disabled:opacity-40 self-start sm:self-auto shrink-0"
+        >
+          {uidCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+          {uidCopied ? t('profile.paymentIdCopied') : t('profile.copyPaymentId')}
+        </button>
       </div>
 
       <div className="bg-dark-900 border border-dark-800 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-6">

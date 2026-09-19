@@ -2,10 +2,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
-  Play,
-  Pause,
-  AlertOctagon,
   TrendingUp,
   Wallet,
   Activity,
@@ -21,7 +19,6 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
-import { PanicCloseModal } from '@/components/modals/PanicCloseModal';
 import { TradeReadinessMonitor } from '@/components/dashboard/TradeReadinessMonitor';
 import { SignalReadinessCard } from '@/components/dashboard/SignalReadinessCard';
 import { DashboardSkeleton } from '@/components/dashboard/DashboardSkeleton';
@@ -31,6 +28,7 @@ import { isUnfilledSimulation } from '@/lib/positions';
 import { playWarningSound } from '@/lib/sound';
 
 export default function DashboardPage() {
+  const router = useRouter();
   const { t, dateLocale, formatDateTime } = useLanguage();
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [positions, setPositions] = useState<any[]>([]);
@@ -46,7 +44,6 @@ export default function DashboardPage() {
 
   // Modals state
   const [isToggleModalOpen, setIsToggleModalOpen] = useState(false);
-  const [isPanicModalOpen, setIsPanicModalOpen] = useState(false);
   const [isMissingExchangeModalOpen, setIsMissingExchangeModalOpen] = useState(false);
   const [signalStrategyIds, setSignalStrategyIds] = useState<string[]>([]);
   const [engineRisk, setEngineRisk] = useState({
@@ -89,7 +86,10 @@ export default function DashboardPage() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        router.replace('/login');
+        return;
+      }
       setCurrentUser(user);
 
       // 1. Fetch user trading settings
@@ -458,32 +458,6 @@ export default function DashboardPage() {
     }
   };
 
-  const handlePanicClose = async () => {
-    if (!settings) return;
-
-    try {
-      // Trigger panic signal in trading_settings (worker picks up within ~5s)
-      const { error } = await supabase
-        .from('trading_settings')
-        .update({
-          panic_closed_at: new Date().toISOString(),
-          is_bot_active: false,
-        })
-        .eq('id', settings.id);
-
-      if (error) throw error;
-
-      setSettings({ ...settings, is_bot_active: false, panic_closed_at: new Date().toISOString() });
-      setIsPanicModalOpen(false);
-      toast.error(t('dashboard.toastPanic'));
-      // Worker closes live + (admin) MASTER positions asynchronously
-      setTimeout(loadDashboardData, 2500);
-      setTimeout(loadDashboardData, 8000);
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to trigger panic close');
-    }
-  };
-
   if (loading) {
     return <DashboardSkeleton />;
   }
@@ -514,40 +488,6 @@ export default function DashboardPage() {
               <span className="hidden sm:inline">{syncing ? t('dashboard.syncing') : t('dashboard.syncBalances')}</span>
             </button>
           )}
-
-          <button
-            onClick={() => {
-              if (!settings?.is_bot_active && !hasValidatedAccount) {
-                setIsMissingExchangeModalOpen(true);
-              } else {
-                setIsToggleModalOpen(true);
-              }
-            }}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg transition-all ${
-              settings?.is_bot_active
-                ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30 hover:bg-amber-500/25'
-                : 'bg-emerald-500 text-dark-950 hover:bg-emerald-400 shadow-emerald-500/20'
-            }`}
-          >
-            {settings?.is_bot_active ? (
-              <>
-                <Pause className="w-4 h-4" /> {t('dashboard.pauseTrading')}
-              </>
-            ) : (
-              <>
-                <Play className="w-4 h-4 fill-current" /> {t('dashboard.startTrading')}
-              </>
-            )}
-          </button>
-
-          <button
-            onClick={() => setIsPanicModalOpen(true)}
-            disabled={positions.length === 0}
-            className="px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider bg-rose-600/15 text-rose-400 border border-rose-600/30 hover:bg-rose-600/25 transition-all flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <AlertOctagon className="w-4 h-4" />
-            {t('dashboard.panicCloseAll')}
-          </button>
         </div>
       </div>
 
@@ -1165,14 +1105,6 @@ export default function DashboardPage() {
             : t('dashboard.startDesc')
         }
         confirmText={settings?.is_bot_active ? t('dashboard.pauseConfirm') : t('dashboard.startConfirm')}
-      />
-
-      <PanicCloseModal
-        isOpen={isPanicModalOpen}
-        onCancel={() => setIsPanicModalOpen(false)}
-        onConfirm={handlePanicClose}
-        openPositionsCount={positions.length}
-        unrealizedPnl={totalUnrealizedPnl}
       />
 
       {/* Modal: Missing Exchange Account */}

@@ -649,7 +649,11 @@ export default function LandingPage() {
               <Server className="mx-auto mb-3 h-8 w-8 text-honey-400" />
               <h4 className="mb-1 font-bold text-white">{t('landing.staticIpTitle')}</h4>
               <p className="text-xs leading-relaxed text-slate-400">{t('landing.staticIpDesc')}</p>
-              <p className="mt-3 font-mono text-xs text-honey-400">54.198.120.45</p>
+              <p className="mt-3 space-y-1 font-mono text-xs text-honey-400">
+                <span className="block">208.77.244.240</span>
+                <span className="block">152.55.185.189</span>
+                <span className="block">152.55.185.190</span>
+              </p>
             </div>
             <div className="rounded-2xl border border-dark-800 bg-dark-900 p-6 text-center">
               <ShieldCheck className="mx-auto mb-3 h-8 w-8 text-honey-400" />

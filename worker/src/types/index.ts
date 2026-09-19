@@ -4,7 +4,7 @@ export type ExchangeType = 'binance' | 'okx' | 'bybit';
 export type PositionStatus = 'open' | 'closing' | 'closed' | 'cancelled' | 'error';
 export type ExitReasonType = 'tp' | 'sl' | 'trend_flip' | 'panic_close' | 'admin_close';
 export type InvoiceStatus = 'issued' | 'pending_review' | 'paid' | 'frozen' | 'cancelled';
-export type CryptoNetwork = 'TRC20' | 'BEP20' | 'TON';
+export type CryptoNetwork = 'TRC20' | 'BEP20' | 'TON' | 'APTOS';
 export type ComponentHealthStatus = 'healthy' | 'degraded' | 'down';
 export type ExecutionMode = 'market' | 'maker_hedge';
 export type RiskMode = 'margin' | 'spread';
@@ -14,6 +14,8 @@ export interface UserProfile {
   email: string;
   full_name: string | null;
   role: UserRole;
+  /** Unique 7-digit payment reference shown to the user for OKX internal transfers. */
+  external_uid: string;
   subscription_status: SubscriptionStatus;
   trial_start_at: string;
   trial_end_at: string;
