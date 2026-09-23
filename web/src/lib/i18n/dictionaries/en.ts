@@ -176,6 +176,10 @@ export const en = {
     planFeature4: 'Live PnL, readiness and health dashboard',
     planFeature5: 'Invoices by QR with USDT TRC-20 or BEP-20',
     planFeature6: 'Telegram alerts for signals and closed trades',
+    referralTitle: 'Invite traders, earn 10%',
+    referralSubtitle:
+      'Every account has a personal referral link. When an invited trader activates and makes a positive realised profit, you earn 10% of that profit — credited weekly to your referral balance.',
+    referralCta: 'Create account and get your link',
     securityTitle: 'Security Model',
     securitySubtitle: 'Three hard rules the worker enforces on every account.',
     noWithdrawTitle: 'No Withdrawal Permissions',
@@ -203,6 +207,9 @@ export const en = {
     faqQ5: 'Can I control a position manually?',
     faqA5:
       'Yes. Every position is visible in the dashboard, and panic close liquidates all legs at market after typed confirmation.',
+    faqQ6: 'Is there a referral program?',
+    faqA6:
+      'Yes. Share your personal referral code or link from the dashboard. You earn 10% of each activated invitee\'s positive realised trading profit, paid weekly to your referral balance.',
     footer: '© 2026 Crypto B. Autonomous quantitative trading platform. All rights reserved.',
   },
   dashboard: {

@@ -16,6 +16,7 @@ import {
   Server,
   ShieldCheck,
   TrendingDown,
+  UsersRound,
   Zap,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
@@ -52,6 +53,7 @@ const FAQ_ITEMS = [
   { q: 'landing.faqQ3', a: 'landing.faqA3' },
   { q: 'landing.faqQ4', a: 'landing.faqA4' },
   { q: 'landing.faqQ5', a: 'landing.faqA5' },
+  { q: 'landing.faqQ6', a: 'landing.faqA6' },
 ];
 
 function SectionHeading({
@@ -629,6 +631,23 @@ export default function LandingPage() {
               className="mt-10 block w-full rounded-xl bg-honey-500 py-4 text-base font-bold text-dark-950 shadow-xl shadow-honey-500/20 transition-all hover:bg-honey-400"
             >
               {t('landing.getStarted')}
+            </Link>
+          </div>
+
+          <div className="mx-auto mt-8 flex max-w-3xl flex-col items-center gap-4 rounded-2xl border border-honey-500/25 bg-honey-500/5 px-6 py-8 text-center sm:px-10">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-honey-500/10 text-honey-400">
+              <UsersRound className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-white">{t('landing.referralTitle')}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-slate-400">{t('landing.referralSubtitle')}</p>
+            </div>
+            <Link
+              href="/register"
+              className="inline-flex items-center gap-2 text-sm font-semibold text-honey-400 transition-colors hover:text-honey-300"
+            >
+              {t('landing.referralCta')}
+              <ChevronRight className="h-4 w-4" />
             </Link>
           </div>
         </div>
