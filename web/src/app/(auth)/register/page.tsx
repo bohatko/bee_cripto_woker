@@ -33,7 +33,7 @@ export default function RegisterPage() {
 
     const normalizedReferralCode = referralCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (normalizedReferralCode && normalizedReferralCode.length !== 10) {
-      const message = 'Referral code must contain 10 letters or digits.';
+      const message = t('auth.referralCodeInvalid');
       setErrorMsg(message);
       toast.error(message);
       setLoading(false);
@@ -150,7 +150,8 @@ export default function RegisterPage() {
 
             <div>
               <label className="block text-xs font-medium text-slate-300 uppercase mb-1.5">
-                Referral code <span className="normal-case text-slate-500">(optional)</span>
+                {t('auth.referralCode')}{' '}
+                <span className="normal-case text-slate-500">{t('auth.referralCodeOptional')}</span>
               </label>
               <input
                 type="text"

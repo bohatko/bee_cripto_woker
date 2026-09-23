@@ -208,7 +208,7 @@ export default function DashboardLayout({
       items: [
         { name: t('nav.exchangeKeys'), href: '/settings/exchange', icon: KeyRound },
         { name: t('nav.billing'), href: '/billing', icon: CreditCard },
-        { name: 'Referrals', href: '/referrals', icon: UsersRound },
+        { name: t('nav.referrals'), href: '/referrals', icon: UsersRound },
       ],
     },
   ];
