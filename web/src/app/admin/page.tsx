@@ -662,6 +662,13 @@ export default function AdminDashboardPage() {
               {t('admin.userDashboard')}
             </Link>
 
+            <Link
+              href="/admin/referrals"
+              className="p-2 rounded-xl bg-dark-800 hover:bg-dark-700 text-slate-300 hover:text-white transition-colors flex items-center gap-1.5 text-xs font-semibold"
+            >
+              Referral payouts
+            </Link>
+
             <div className="h-5 w-px bg-dark-800" />
 
             <div className="flex items-center gap-2">

@@ -13,6 +13,7 @@ import {
   ShieldAlert,
   UserCog,
   Radar,
+  UsersRound,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
@@ -207,6 +208,7 @@ export default function DashboardLayout({
       items: [
         { name: t('nav.exchangeKeys'), href: '/settings/exchange', icon: KeyRound },
         { name: t('nav.billing'), href: '/billing', icon: CreditCard },
+        { name: 'Referrals', href: '/referrals', icon: UsersRound },
       ],
     },
   ];

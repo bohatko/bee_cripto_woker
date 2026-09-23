@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
@@ -15,13 +15,30 @@ export default function RegisterPage() {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [referralCode, setReferralCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get('ref');
+    if (code) {
+      setReferralCode(code.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10));
+    }
+  }, []);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setErrorMsg(null);
+
+    const normalizedReferralCode = referralCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (normalizedReferralCode && normalizedReferralCode.length !== 10) {
+      const message = 'Referral code must contain 10 letters or digits.';
+      setErrorMsg(message);
+      toast.error(message);
+      setLoading(false);
+      return;
+    }
 
     const { error } = await supabase.auth.signUp({
       email,
@@ -29,6 +46,7 @@ export default function RegisterPage() {
       options: {
         data: {
           full_name: fullName,
+          referral_code: normalizedReferralCode,
         },
       },
     });
@@ -128,6 +146,22 @@ export default function RegisterPage() {
                   className="w-full pl-10 pr-4 py-2.5 bg-dark-950 border border-dark-700 rounded-xl text-white text-sm outline-none focus:border-honey-500 transition-colors"
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-300 uppercase mb-1.5">
+                Referral code <span className="normal-case text-slate-500">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={referralCode}
+                onChange={(e) =>
+                  setReferralCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))
+                }
+                placeholder="XXXXXXXXXX"
+                maxLength={10}
+                className="w-full px-4 py-2.5 bg-dark-950 border border-dark-700 rounded-xl text-white text-sm font-mono tracking-[0.2em] outline-none focus:border-honey-500 transition-colors"
+              />
             </div>
 
             <button
