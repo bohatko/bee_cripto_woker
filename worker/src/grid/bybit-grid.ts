@@ -1,5 +1,4 @@
 import crypto from 'node:crypto';
-import { formatPx } from './prices.js';
 import type { GridBotSnapshot, GridOrderParams } from './okx-grid.js';
 
 const BYBIT_BASE = 'https://api.bybit.com';
@@ -47,18 +46,20 @@ export async function createBybitGrid(
   creds: { apiKey: string; secret: string },
   params: GridOrderParams
 ): Promise<string> {
+  const symbol = `${params.baseAsset}USDT`;
+  const px = await bybitPrice(symbol);
   const body = {
-    symbol: `${params.baseAsset}USDT`,
+    symbol,
     grid_mode: params.direction === 'long' ? 2 : params.direction === 'short' ? 3 : 1,
-    min_price: formatPx(params.lowerPrice),
-    max_price: formatPx(params.upperPrice),
+    min_price: px(params.lowerPrice),
+    max_price: px(params.upperPrice),
     cell_number: params.gridCount,
-    leverage: String(params.leverage),
+    leverage: String(Math.round(params.leverage)),
     grid_type: params.spacing === 'geometric' ? 2 : 1,
     total_investment: params.marginUsdt.toFixed(2),
     tp_sl_type: 2,
-    stop_loss_price: formatPx(params.stopPrice),
-    take_profit_price: formatPx(params.takeProfitPrice),
+    stop_loss_price: px(params.stopPrice),
+    take_profit_price: px(params.takeProfitPrice),
   };
   const validated = await bybitRequest(creds, 'POST', '/v5/fgridbot/validate', {}, {
     symbol: body.symbol,
@@ -68,16 +69,78 @@ export async function createBybitGrid(
     cell_number: body.cell_number,
     leverage: body.leverage,
     grid_type: body.grid_type,
-    total_investment: body.total_investment,
+    init_margin: body.total_investment,
+    tp_sl_type: body.tp_sl_type,
+    stop_loss_price: body.stop_loss_price,
+    take_profit_price: body.take_profit_price,
   });
-  const checkCode = String(validated.check_code || '');
-  if (checkCode && !checkCode.includes('SUCCESS')) {
-    throw new Error(checkCode);
-  }
+  assertBybitGridCheck(validated, 'validate');
   const created = await bybitRequest(creds, 'POST', '/v5/fgridbot/create', {}, body);
   const botId = created.bot_id ?? created.botId;
-  if (!botId) throw new Error(created.debug_msg || 'Bybit did not return a grid bot id');
-  return String(botId);
+  if (botId && isBybitGridOk(String(created.check_code || ''))) return String(botId);
+  assertBybitGridCheck(created, 'create');
+  throw new Error(created.debug_msg || 'Bybit did not return a grid bot id');
+}
+
+const tickCache = new Map<string, { tick: number; decimals: number }>();
+
+async function bybitPrice(symbol: string): Promise<(price: number) => string> {
+  let spec = tickCache.get(symbol);
+  if (!spec) {
+    const response = await fetch(`${BYBIT_BASE}/v5/market/instruments-info?category=linear&symbol=${symbol}`);
+    const json = (await response.json().catch(() => ({}))) as {
+      result?: { list?: Array<{ priceFilter?: { tickSize?: string } }> };
+    };
+    const tickSize = json.result?.list?.[0]?.priceFilter?.tickSize || '0.01';
+    const tick = Number(tickSize);
+    spec = {
+      tick: Number.isFinite(tick) && tick > 0 ? tick : 0.01,
+      decimals: (tickSize.split('.')[1] || '').length,
+    };
+    tickCache.set(symbol, spec);
+  }
+  const { tick, decimals } = spec;
+  return (price: number) => (Math.round(price / tick) * tick).toFixed(decimals);
+}
+
+/** Bybit leaves check_code as UNSPECIFIED on a valid response. Only named codes are failures. */
+function isBybitGridOk(code: string): boolean {
+  return code === '' || code === 'FGRID_CHECK_CODE_SUCCESS' || code === 'FGRID_CHECK_CODE_UNSPECIFIED';
+}
+
+function assertBybitGridCheck(result: Record<string, any>, stage: string): void {
+  const status = Number(result.status_code ?? 0);
+  if (status === 421) {
+    throw new Error(String(result.ban_reason_text || 'Bybit account cannot create a futures grid'));
+  }
+  if (status !== 0 && status !== 200) {
+    throw new Error(String(result.debug_msg || `Bybit grid ${stage} status ${status}`));
+  }
+  const code = String(result.check_code || '');
+  if (isBybitGridOk(code)) return;
+  const hint = bybitRangeHint(code, result);
+  throw new Error(hint ? `Bybit grid ${stage}: ${code} (${hint})` : `Bybit grid ${stage}: ${code}`);
+}
+
+function bybitRangeHint(code: string, result: Record<string, any>): string {
+  const field = code.includes('INVESTMENT')
+    ? 'investment'
+    : code.includes('LOW_PRICE')
+      ? 'min_price'
+      : code.includes('HIGH_PRICE')
+        ? 'max_price'
+        : code.includes('GRID_NO')
+          ? 'cell_number'
+          : code.includes('LEVERAGE')
+            ? 'leverage'
+            : code.includes('_TP_')
+              ? 'take_profit_price'
+              : code.includes('_SL_')
+                ? 'stop_loss_price'
+                : '';
+  const band = field ? result[field] : null;
+  if (!band || band.from == null || band.to == null) return '';
+  return `allowed ${band.from}-${band.to}`;
 }
 
 export async function stopBybitGrid(creds: { apiKey: string; secret: string }, botId: string): Promise<void> {
