@@ -11,6 +11,7 @@ import { pairRegistry } from './exchanges/pair-registry.js';
 import { DipBuyScanner } from './signals/dip-buy-scanner.js';
 import { DipBuyRouter } from './signals/dip-buy-router.js';
 import { DipBuyGuard } from './signals/dip-buy-guard.js';
+import { GridSupervisor } from './grid/supervisor.js';
 
 type DipBuyEngine = {
   strategyId: string;
@@ -68,6 +69,7 @@ async function main() {
   const healthCheck = new HealthCheckJob(CONFIG.healthPingIntervalMs);
   const billingCron = new BillingCronJob(CONFIG.billingCronIntervalMs);
   const pairSelection = new PairSelectionJob(60_000);
+  const gridSupervisor = new GridSupervisor(30_000);
 
   // Dip-Buy Signals Engines (loaded from signal_strategies)
   const dipRouter = new DipBuyRouter();
@@ -103,6 +105,7 @@ async function main() {
     healthCheck.start();
     billingCron.start();
     pairSelection.start();
+    gridSupervisor.start();
 
     if (CONFIG.dipBuyEnabled) {
       for (const engine of dipEngines) {
@@ -123,6 +126,7 @@ async function main() {
       healthCheck.stop();
       billingCron.stop();
       pairSelection.stop();
+      gridSupervisor.stop();
       pairRegistry.stop();
       if (CONFIG.dipBuyEnabled) {
         for (const engine of dipEngines) {

@@ -14,6 +14,7 @@ import {
   UserCog,
   Radar,
   Wallet,
+  Grid3x3,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
@@ -195,6 +196,7 @@ export default function DashboardLayout({
       label: t('nav.sectionSignals'),
       items: [
         { name: t('nav.signals'), href: '/signals', icon: Radar },
+        { name: t('nav.grid'), href: '/grid', icon: Grid3x3 },
         { name: t('nav.pairTrading'), href: '/history', icon: History },
       ],
     },
@@ -328,6 +330,17 @@ export default function DashboardLayout({
               >
                 <Wallet className="w-4 h-4 text-honey-400" />
                 {t('nav.partnerPayouts')}
+              </Link>
+              <Link
+                href="/admin/grid"
+                className={`flex items-center gap-3 px-3 py-2.5 mt-1 rounded-xl text-sm font-medium transition-colors ${
+                  pathname.startsWith('/admin/grid')
+                    ? 'bg-amber-500/20 text-honey-400 border border-honey-500/30 font-bold shadow-md shadow-honey-500/10'
+                    : 'text-honey-400/80 hover:text-honey-300 hover:bg-dark-850'
+                }`}
+              >
+                <Grid3x3 className="w-4 h-4 text-honey-400" />
+                {t('nav.adminGrid')}
               </Link>
             </div>
           )}
