@@ -24,6 +24,8 @@ export interface UserProfile {
   trial_start_at: string;
   trial_end_at: string;
   subscription_paid_until: string | null;
+  billing_notice_24h_for?: string | null;
+  billing_notice_12h_for?: string | null;
   high_water_mark_equity: number;
   is_frozen: boolean;
   created_at: string;

@@ -4,7 +4,8 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
-import { ArrowRight, Lock, Mail, User, CheckCircle2 } from 'lucide-react';
+import { ArrowRight, Lock, Mail, User, CheckCircle2, Send } from 'lucide-react';
+import { SUPPORT_TELEGRAM_URL } from '@/lib/support';
 import { toast } from '@/components/ui/sonner';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { LanguageSwitcher } from '@/lib/i18n/LanguageSwitcher';
@@ -173,6 +174,15 @@ export default function RegisterPage() {
               {t('auth.signIn')}
             </Link>
           </p>
+          <a
+            href={SUPPORT_TELEGRAM_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-4 flex items-center justify-center gap-1.5 text-xs font-medium text-slate-400 hover:text-honey-300"
+          >
+            <Send className="h-3.5 w-3.5" />
+            {t('auth.support')}
+          </a>
         </div>
       </div>
     </div>

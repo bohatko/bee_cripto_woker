@@ -894,6 +894,8 @@ export default function DashboardPage() {
       </div>
 
       {/* Active Basket Positions Table */}
+      <div className="relative overflow-hidden rounded-2xl">
+        <div className={proModules ? undefined : 'pointer-events-none select-none blur-lg'} aria-hidden={proModules ? undefined : true}>
       <div className="bg-dark-900 border border-dark-800 rounded-2xl shadow-2xl overflow-hidden">
         <div className="p-5 border-b border-dark-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center gap-2.5">
@@ -1125,6 +1127,18 @@ export default function DashboardPage() {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+      </div>
+        </div>
+        {!proModules && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-dark-950/35 p-4">
+            <Link
+              href="/billing"
+              className="rounded-xl bg-honey-500 px-5 py-2.5 text-sm font-bold text-dark-950 shadow-lg shadow-honey-500/30"
+            >
+              {t('dashboard.goToPro')}
+            </Link>
           </div>
         )}
       </div>

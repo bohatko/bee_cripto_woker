@@ -89,6 +89,9 @@ CREATE TABLE IF NOT EXISTS public.users_profile (
     telegram_bot_token_enc TEXT,
     telegram_chat_id TEXT,
     telegram_enabled BOOLEAN DEFAULT FALSE NOT NULL,
+    -- Period-end timestamp already covered by the 24h / 12h payment reminder.
+    billing_notice_24h_for TIMESTAMPTZ,
+    billing_notice_12h_for TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );

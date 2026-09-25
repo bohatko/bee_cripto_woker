@@ -14,6 +14,7 @@ import {
   Move,
   Radio,
   Server,
+  Send,
   ShieldCheck,
   TrendingDown,
   Zap,
@@ -22,6 +23,7 @@ import { supabase } from '@/lib/supabase/client';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { LanguageSwitcher } from '@/lib/i18n/LanguageSwitcher';
 import { BeeHeroScene } from '@/components/landing/BeeHeroScene';
+import { SUPPORT_TELEGRAM_URL } from '@/lib/support';
 
 type PairMarketRow = {
   pair_symbol: string;
@@ -332,6 +334,14 @@ export default function LandingPage() {
             </a>
             <a href="#faq" className="transition-colors hover:text-honey-400">
               {t('landing.navFaq')}
+            </a>
+            <a
+              href={SUPPORT_TELEGRAM_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="transition-colors hover:text-honey-400"
+            >
+              {t('landing.navSupport')}
             </a>
           </nav>
 
@@ -703,6 +713,15 @@ export default function LandingPage() {
       {/* Footer */}
       <footer className="mt-auto border-t border-dark-800 py-8 text-center font-mono text-xs text-slate-500">
         <p>{t('landing.footer')}</p>
+        <a
+          href={SUPPORT_TELEGRAM_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-3 inline-flex items-center gap-1.5 text-honey-400 hover:text-honey-300"
+        >
+          <Send className="h-3.5 w-3.5" />
+          {t('landing.navSupport')}
+        </a>
       </footer>
     </div>
   );

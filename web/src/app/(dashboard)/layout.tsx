@@ -10,6 +10,7 @@ import {
   CreditCard,
   Gift,
   LogOut,
+  Send,
   ShieldAlert,
   UserCog,
   Radar,
@@ -23,6 +24,7 @@ import { LanguageSwitcher } from '@/lib/i18n/LanguageSwitcher';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { playTradeOpenSound } from '@/lib/sound';
 import { hasProModules } from '@/lib/pro-access';
+import { SUPPORT_TELEGRAM_URL } from '@/lib/support';
 
 export default function DashboardLayout({
   children,
@@ -343,7 +345,16 @@ export default function DashboardLayout({
           )}
         </nav>
 
-        <div className="border-t border-dark-800 px-4 py-3">
+        <div className="border-t border-dark-800 px-4 py-3 space-y-1">
+          <a
+            href={SUPPORT_TELEGRAM_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-honey-300 hover:bg-dark-850 transition-colors"
+          >
+            <Send className="w-4 h-4" />
+            {t('nav.support')}
+          </a>
           <div className="flex items-center gap-1">
             <button
               onClick={() => setIsLogoutModalOpen(true)}

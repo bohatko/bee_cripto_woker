@@ -467,6 +467,93 @@ class TelegramNotifier {
       await this.sendToUser(data.userId, message);
     }
   }
+
+  public async notifyGridStarted(data: {
+    userId: string;
+    exchange: string;
+    symbol: string;
+    marginUsdt: number;
+    leverage: number;
+    lowerPrice: number;
+    upperPrice: number;
+    gridCount: number;
+  }): Promise<void> {
+    const message = [
+      `🐝 <b>ГРИД-БОТ ЗАПУЩЕН</b>`,
+      `━━━━━━━━━━━━━━━━━━`,
+      `📊 <b>Монета:</b> <code>${escapeHtml(data.symbol)}/USDT</code>`,
+      `🏦 <b>Биржа:</b> <code>${escapeHtml(data.exchange.toUpperCase())}</code>`,
+      `💵 <b>Маржа:</b> <code>${data.marginUsdt.toFixed(2)} USDT</code>`,
+      `📈 <b>Плечо:</b> <code>${data.leverage}x</code>`,
+      `📐 <b>Диапазон:</b> <code>${data.lowerPrice} – ${data.upperPrice}</code>`,
+      `▦ <b>Сетки:</b> <code>${data.gridCount}</code>`,
+      `━━━━━━━━━━━━━━━━━━`,
+      `⏱ <i>${new Date().toLocaleString('ru-RU', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })} UTC</i>`,
+    ].join('\n');
+    await this.sendToUser(data.userId, message);
+  }
+
+  public async notifyGridStopped(data: {
+    userId: string;
+    exchange: string;
+    symbol: string;
+    marginUsdt: number;
+    reason: 'user' | 'exchange';
+    pnlUsdt?: number | null;
+  }): Promise<void> {
+    const reason =
+      data.reason === 'exchange' ? 'Биржа остановила бота' : 'Остановлен вручную';
+    const pnl =
+      data.pnlUsdt == null
+        ? ''
+        : `${data.pnlUsdt >= 0 ? '🟢' : '🔴'} <b>PnL:</b> <code>${data.pnlUsdt >= 0 ? '+' : ''}${data.pnlUsdt.toFixed(2)} USDT</code>`;
+    const message = [
+      `🏁 <b>ГРИД-БОТ ОСТАНОВЛЕН</b>`,
+      `━━━━━━━━━━━━━━━━━━`,
+      `📊 <b>Монета:</b> <code>${escapeHtml(data.symbol)}/USDT</code>`,
+      `🏦 <b>Биржа:</b> <code>${escapeHtml(data.exchange.toUpperCase())}</code>`,
+      `💵 <b>Маржа:</b> <code>${data.marginUsdt.toFixed(2)} USDT</code>`,
+      `📌 <b>Причина:</b> ${reason}`,
+      pnl,
+      `━━━━━━━━━━━━━━━━━━`,
+      `⏱ <i>${new Date().toLocaleString('ru-RU', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })} UTC</i>`,
+    ]
+      .filter(Boolean)
+      .join('\n');
+    await this.sendToUser(data.userId, message);
+  }
+
+  public async notifySubscriptionEnding(data: {
+    userId: string;
+    withinHours: 24 | 12;
+    period: 'trial' | 'subscription';
+    plan: string;
+    intervalLabel: string;
+    amountUsd: number;
+    endsAtIso: string;
+  }): Promise<void> {
+    const when = data.withinHours === 24 ? 'меньше суток' : 'меньше 12 часов';
+    const what = data.period === 'trial' ? 'Пробный период' : 'Оплаченная подписка';
+    const ends = new Date(data.endsAtIso).toLocaleString('ru-RU', {
+      timeZone: 'UTC',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    const message = [
+      `🐝 <b>НУЖНО ОПЛАТИТЬ ПОДПИСКУ</b>`,
+      `━━━━━━━━━━━━━━━━━━`,
+      `${what} заканчивается через <b>${when}</b>.`,
+      `📦 <b>Тариф:</b> <code>${escapeHtml(data.plan)} · ${escapeHtml(data.intervalLabel)}</code>`,
+      `💵 <b>Сумма:</b> <code>${data.amountUsd.toFixed(2)} USDT</code>`,
+      `⏱ <b>Окончание:</b> <code>${ends} UTC</code>`,
+      `━━━━━━━━━━━━━━━━━━`,
+      `Оплатите в разделе <b>Оплата и инвойсы</b>, чтобы бот не перестал открывать новые сделки.`,
+    ].join('\n');
+    await this.sendToUser(data.userId, message);
+  }
 }
 
 export const telegramNotifier = new TelegramNotifier();

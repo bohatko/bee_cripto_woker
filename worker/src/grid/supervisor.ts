@@ -68,6 +68,7 @@ interface BotRow {
   run_status: 'starting' | 'running' | 'stopped' | 'error';
   stop_reason?: string | null;
   stopped_at?: string | null;
+  pnl_usdt?: number | null;
   base_asset?: string;
 }
 
@@ -280,6 +281,14 @@ export class GridSupervisor {
             last_error: null,
           });
           console.log(`[Grid] Stopped ${bot.exchange} bot ${bot.exchange_bot_id} for ${profile?.email || bot.user_id}`);
+          await telegramNotifier.notifyGridStopped({
+            userId: bot.user_id,
+            exchange: bot.exchange,
+            symbol: botTemplate.base_asset,
+            marginUsdt: Number(bot.margin_usdt),
+            reason: 'user',
+            pnlUsdt: bot.pnl_usdt == null ? null : Number(bot.pnl_usdt),
+          });
           await logEvent({
             userId: bot.user_id,
             botId: bot.id,
@@ -323,6 +332,14 @@ export class GridSupervisor {
           }
           const pnlText = snap.pnlUsdt == null ? '—' : snap.pnlUsdt.toFixed(2);
           if (!snap.running) {
+            await telegramNotifier.notifyGridStopped({
+              userId: bot.user_id,
+              exchange: bot.exchange,
+              symbol: botTemplate.base_asset,
+              marginUsdt: Number(bot.margin_usdt),
+              reason: 'exchange',
+              pnlUsdt: snap.pnlUsdt,
+            });
             await logEvent({
               userId: bot.user_id,
               botId: bot.id,
@@ -438,6 +455,16 @@ export class GridSupervisor {
           exchange: resolved.account.exchange,
           event: 'created',
           message: `Opened ${active.base_asset}/USDT on ${resolved.account.exchange.toUpperCase()} with ${Number(setting.margin_usdt)} USDT margin. Exchange bot ${exchangeBotId}.`,
+        });
+        await telegramNotifier.notifyGridStarted({
+          userId: setting.user_id,
+          exchange: resolved.account.exchange,
+          symbol: active.base_asset,
+          marginUsdt: Number(setting.margin_usdt),
+          leverage: Number(active.leverage),
+          lowerPrice: Number(active.lower_price),
+          upperPrice: Number(active.upper_price),
+          gridCount: Number(active.grid_count),
         });
         console.log(`[Grid] Started ${resolved.account.exchange} ${active.base_asset} for ${profileById.get(setting.user_id)?.email || setting.user_id}`);
       } catch (err: any) {

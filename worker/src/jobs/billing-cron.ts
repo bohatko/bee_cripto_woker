@@ -1,4 +1,5 @@
 import { supabase, CONFIG } from '../config.js';
+import { telegramNotifier } from '../notifications/telegram.js';
 import { UserProfile } from '../types/index.js';
 import {
   isBillingInterval,
@@ -7,6 +8,22 @@ import {
   type BillingInterval,
   type SubscriptionPlan,
 } from '../plans.js';
+
+const HOUR_MS = 60 * 60 * 1000;
+
+type PaymentReminderRow = {
+  id: string;
+  email: string | null;
+  subscription_status: 'trial' | 'active';
+  subscription_plan: string | null;
+  billing_interval: string | null;
+  pending_subscription_plan: string | null;
+  pending_billing_interval: string | null;
+  trial_end_at: string | null;
+  subscription_paid_until: string | null;
+  billing_notice_24h_for: string | null;
+  billing_notice_12h_for: string | null;
+};
 
 export class BillingCronJob {
   private timer: NodeJS.Timeout | null = null;
@@ -90,6 +107,78 @@ export class BillingCronJob {
           .eq('id', inv.id);
       }
     }
+
+    await this.sendPaymentReminders(now);
+  }
+
+  private async sendPaymentReminders(now: Date) {
+    const horizon = new Date(now.getTime() + 24 * HOUR_MS).toISOString();
+    const [{ data: activeRows, error: activeError }, { data: trialRows, error: trialError }] = await Promise.all([
+      supabase
+        .from('users_profile')
+        .select('id, email, subscription_status, subscription_plan, billing_interval, pending_subscription_plan, pending_billing_interval, trial_end_at, subscription_paid_until, billing_notice_24h_for, billing_notice_12h_for')
+        .eq('subscription_status', 'active')
+        .eq('is_frozen', false)
+        .eq('telegram_enabled', true)
+        .not('telegram_chat_id', 'is', null)
+        .not('subscription_paid_until', 'is', null)
+        .gt('subscription_paid_until', now.toISOString())
+        .lte('subscription_paid_until', horizon),
+      supabase
+        .from('users_profile')
+        .select('id, email, subscription_status, subscription_plan, billing_interval, pending_subscription_plan, pending_billing_interval, trial_end_at, subscription_paid_until, billing_notice_24h_for, billing_notice_12h_for')
+        .eq('subscription_status', 'trial')
+        .eq('is_frozen', false)
+        .eq('telegram_enabled', true)
+        .not('telegram_chat_id', 'is', null)
+        .not('trial_end_at', 'is', null)
+        .gt('trial_end_at', now.toISOString())
+        .lte('trial_end_at', horizon),
+    ]);
+
+    if (activeError) console.error(`❌ [BILLING] Payment reminder query failed: ${activeError.message}`);
+    if (trialError) console.error(`❌ [BILLING] Trial reminder query failed: ${trialError.message}`);
+
+    const rows = [...((activeRows || []) as PaymentReminderRow[]), ...((trialRows || []) as PaymentReminderRow[])];
+    for (const user of rows) {
+      const endsAtIso = user.subscription_status === 'trial' ? user.trial_end_at : user.subscription_paid_until;
+      if (!endsAtIso) continue;
+      const remaining = new Date(endsAtIso).getTime() - now.getTime();
+      if (remaining <= 0 || remaining > 24 * HOUR_MS) continue;
+
+      const withinHours: 24 | 12 = remaining <= 12 * HOUR_MS ? 12 : 24;
+      const sentFor = withinHours === 12 ? user.billing_notice_12h_for : user.billing_notice_24h_for;
+      if (sentFor && new Date(sentFor).getTime() === new Date(endsAtIso).getTime()) continue;
+
+      const plan: SubscriptionPlan = isSubscriptionPlan(user.pending_subscription_plan)
+        ? user.pending_subscription_plan
+        : isSubscriptionPlan(user.subscription_plan)
+          ? user.subscription_plan
+          : 'lite';
+      const interval: BillingInterval = isBillingInterval(user.pending_billing_interval)
+        ? user.pending_billing_interval
+        : isBillingInterval(user.billing_interval)
+          ? user.billing_interval
+          : 'month';
+
+      await telegramNotifier.notifySubscriptionEnding({
+        userId: user.id,
+        withinHours,
+        period: user.subscription_status === 'trial' ? 'trial' : 'subscription',
+        plan: plan === 'pro' ? 'Pro' : 'Lite',
+        intervalLabel: interval === 'year' ? 'год' : 'месяц',
+        amountUsd: planPriceUsd(plan, interval),
+        endsAtIso,
+      });
+
+      const column = withinHours === 12 ? 'billing_notice_12h_for' : 'billing_notice_24h_for';
+      const { error } = await supabase.from('users_profile').update({ [column]: endsAtIso }).eq('id', user.id);
+      if (error) {
+        console.error(`❌ [BILLING] Failed to store ${column} for ${user.email || user.id}: ${error.message}`);
+        continue;
+      }
+      console.log(`💳 [BILLING] Sent ${withinHours}h payment reminder to ${user.email || user.id}`);
+    }
   }
 
   private async generatePlanInvoice(user: UserProfile) {
@@ -157,6 +246,7 @@ export class BillingCronJob {
 
   public start() {
     if (this.timer) return;
+    void this.runAudit().catch((err) => console.error('Billing audit error:', err));
     this.timer = setInterval(() => {
       this.runAudit().catch((err) => console.error('Billing audit error:', err));
     }, this.intervalMs);

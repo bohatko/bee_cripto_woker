@@ -35,6 +35,7 @@ export const en = {
     adminGrid: 'Grid bot',
     proBadge: 'Pro',
     proHint: 'Included with the Pro plan',
+    support: 'Support',
   },
   sidebar: {
     tradingSaas: 'Crypto Bee',
@@ -56,6 +57,7 @@ export const en = {
     trialBadge: '7-Day Free Trial Auto-Activated',
     fullName: 'Full Name / Alias',
     createAccount: 'Create Account & Start Trial',
+    support: 'Need help? Message support on Telegram',
     settingUpTrial: 'Setting up trial...',
     alreadyRegistered: 'Already registered?',
     registrationSuccess: 'Registration successful! Welcome aboard.',
@@ -130,6 +132,7 @@ export const en = {
     navPricing: 'Pricing',
     navSecurity: 'Security',
     navFaq: 'FAQ',
+    navSupport: 'Support',
     signIn: 'Sign In',
     tryFree: 'Try 7 Days Free',
     heroStatus: 'Online and running',
@@ -229,11 +232,11 @@ export const en = {
     insuranceNote:
       'On Pro, if a calendar year ends with less on the account than you put in, we pay the difference back to that amount. Money you take out yourself is not counted as a loss.',
     getStarted: 'Start 7-day trial',
-    securityTitle: 'Your money stays safe',
+    securityTitle: 'Account security',
     securitySubtitle: 'Three rules the service follows on every account.',
-    noWithdrawTitle: 'Money cannot be withdrawn',
+    noWithdrawTitle: 'Your money stays safe',
     noWithdrawDesc:
-      'Your money stays on your exchange. We can trade, but we cannot send it to ourselves or anywhere else.',
+      'The system only manages trades on the exchanges. The funds stay on your account.',
     staticIpTitle: 'A fixed address',
     staticIpDesc:
       'Trades leave from the same address every time. When you connect an exchange, we will show you where to add it. You do this once.',
@@ -427,6 +430,12 @@ export const en = {
     planSaveError: 'Could not save the plan.',
     currentPlan: 'Current plan: {plan}',
     noPerformanceFee: 'No performance fee',
+    upgradeTitle: 'Switch to Pro now',
+    upgradeDesc:
+      'The buttons above only change the next invoice. To turn Pro on before this period ends, message the admin. The difference for the current {interval} plan is ${amount} USDT.',
+    upgradeCta: 'Message admin on Telegram',
+    upgradeMessage:
+      'Hello, I want to upgrade from Lite to Pro ({interval}) now. Bee ID: {beeId}. Please send an invoice for the ${amount} USDT difference.',
   },
   history: {
     title: 'Trade History',

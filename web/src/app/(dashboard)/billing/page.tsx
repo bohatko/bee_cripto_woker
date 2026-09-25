@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   AlertTriangle,
   ExternalLink,
+  Send,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { resolveExternalUid } from '@/lib/externalUid';
@@ -21,6 +22,7 @@ import { toast } from '@/components/ui/sonner';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { BillingSkeleton } from '@/components/skeletons/PageSkeletons';
 import { PLAN_PRICE_USD, isBillingInterval, isSubscriptionPlan, type BillingInterval, type SubscriptionPlan } from '@/lib/plans';
+import { supportTelegramUrl } from '@/lib/support';
 
 const APTOS_WALLET_ADDRESS =
   process.env.NEXT_PUBLIC_ADMIN_APTOS_WALLET ||
@@ -195,6 +197,19 @@ export default function BillingPage() {
     : 'lite';
   const planAppliesNow = profile?.subscription_status === 'trial' && !isFrozen;
   const isPendingReview = activeInvoice?.status === 'pending_review';
+  const currentInterval: BillingInterval = isBillingInterval(profile?.billing_interval)
+    ? profile.billing_interval
+    : 'month';
+  const upgradeDifference = PLAN_PRICE_USD.pro[currentInterval] - PLAN_PRICE_USD.lite[currentInterval];
+  const showUpgradeNow = entitledPlan === 'lite' && !planAppliesNow;
+  const upgradeIntervalLabel = t(currentInterval === 'year' ? 'billing.intervalYear' : 'billing.intervalMonth');
+  const upgradeHref = supportTelegramUrl(
+    t('billing.upgradeMessage', {
+      interval: upgradeIntervalLabel,
+      beeId: externalUid || 'n/a',
+      amount: upgradeDifference,
+    })
+  );
 
   return (
     <div className="p-4 sm:p-8 max-w-5xl space-y-8">
@@ -301,6 +316,28 @@ export default function BillingPage() {
         >
           {savingPlan ? t('billing.submitting') : t('billing.choosePlan')}
         </button>
+        {showUpgradeNow && (
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-honey-500/30 bg-honey-500/5 p-4">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-white">{t('billing.upgradeTitle')}</p>
+              <p className="mt-1 text-xs text-slate-400">
+                {t('billing.upgradeDesc', {
+                  interval: upgradeIntervalLabel,
+                  amount: upgradeDifference,
+                })}
+              </p>
+            </div>
+            <a
+              href={upgradeHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-honey-500 px-4 py-2.5 text-sm font-bold text-dark-950 hover:bg-honey-400"
+            >
+              <Send className="h-4 w-4" />
+              {t('billing.upgradeCta')}
+            </a>
+          </div>
+        )}
       </section>
 
       {/* Active Invoice & Payment Screen */}
