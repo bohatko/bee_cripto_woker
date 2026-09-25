@@ -288,7 +288,7 @@ export default function GridPage() {
           {templates.length === 0 ? t('grid.noCoin') : t('grid.noCards')}
         </section>
       ) : (
-        <div className="space-y-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {slots.map((slot) => {
             const coin = templateById.get(slot.template_id);
             const bot = latestBot(slot);
@@ -300,35 +300,34 @@ export default function GridPage() {
                   ? 'waiting'
                   : bot?.run_status || (slot.is_enabled ? 'waiting' : 'stopped');
             return (
-              <article key={slot.id} className="rounded-2xl border border-dark-800 bg-dark-900 p-5">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="font-mono text-xl font-bold text-white">{coin ? `${coin.base_asset}/USDT` : '—'}</h2>
-                      <span className="rounded-lg border border-dark-700 bg-dark-950 px-2 py-1 font-mono text-[11px] font-bold uppercase text-honey-300">
+              <article key={slot.id} className="rounded-2xl border border-dark-800 bg-dark-900 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2 className="font-mono text-base font-bold text-white">{coin ? `${coin.base_asset}/USDT` : '—'}</h2>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <span className="rounded-md border border-dark-700 bg-dark-950 px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase text-honey-300">
                         {slot.exchange}
                       </span>
                       <StatusPill status={status} label={statusText(status, t)} />
                     </div>
-                    <p className="mt-1 text-xs text-slate-500">{t('grid.cardPnlHint')}</p>
                   </div>
-                  <div className="text-right">
-                    <p className={`font-mono text-2xl font-bold ${pnl != null && pnl < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                  <div className="shrink-0 text-right">
+                    <p className={`font-mono text-lg font-bold leading-none ${pnl != null && pnl < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
                       {pnl == null ? '—' : `${pnl > 0 ? '+' : ''}${pnl.toFixed(2)}`}
-                      <span className="ml-1 text-sm font-medium text-slate-500">USDT</span>
+                      <span className="ml-1 text-[10px] font-medium text-slate-500">USDT</span>
                     </p>
                     <button
                       type="button"
                       onClick={() => setHistorySlot(slot)}
-                      className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-honey-300"
+                      className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-bold text-honey-300"
                     >
-                      <History className="h-3.5 w-3.5" />
+                      <History className="h-3 w-3" />
                       {t('grid.history')}
                     </button>
                   </div>
                 </div>
 
-                <dl className="mt-5 grid grid-cols-2 gap-3 font-mono text-sm sm:grid-cols-4">
+                <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 font-mono text-xs">
                   <Stat label={t('grid.margin')} value={`${Number(slot.margin_usdt)} USDT`} />
                   <Stat label={t('grid.range')} value={coin ? `${px(coin.lower_price)} – ${px(coin.upper_price)}` : '—'} />
                   <Stat label={t('grid.grids')} value={coin ? String(coin.grid_count) : '—'} />
@@ -336,22 +335,21 @@ export default function GridPage() {
                   <Stat label={t('grid.stopPrice')} value={coin ? px(coin.stop_price) : '—'} />
                   <Stat label={t('grid.takeProfit')} value={coin ? px(coin.take_profit_price) : '—'} />
                   <Stat label={t('grid.direction')} value={t('grid.neutral')} />
-                  <Stat label={t('grid.exchange')} value={slot.exchange.toUpperCase()} />
                 </dl>
 
                 {(slot.last_error || bot?.last_error) && (
-                  <p className="mt-4 text-sm text-rose-300">
+                  <p className="mt-3 text-xs text-rose-300">
                     {t('grid.error')}: {slot.last_error || bot?.last_error}
                   </p>
                 )}
 
-                <div className="mt-4">
+                <div className="mt-3">
                   {slot.is_enabled ? (
                     <button
                       type="button"
                       disabled={!pro}
                       onClick={() => setStopSlot(slot)}
-                      className="rounded-xl border border-rose-500/40 px-4 py-2 text-sm font-bold text-rose-300 disabled:opacity-40"
+                      className="rounded-lg border border-rose-500/40 px-3 py-1.5 text-xs font-bold text-rose-300 disabled:opacity-40"
                     >
                       {t('grid.stop')}
                     </button>
@@ -360,7 +358,7 @@ export default function GridPage() {
                       type="button"
                       disabled={!pro}
                       onClick={() => setRestartSlot(slot)}
-                      className="rounded-xl bg-honey-500 px-4 py-2 text-sm font-bold text-dark-950 disabled:opacity-40"
+                      className="rounded-lg bg-honey-500 px-3 py-1.5 text-xs font-bold text-dark-950 disabled:opacity-40"
                     >
                       {t('grid.restart')}
                     </button>
@@ -574,14 +572,14 @@ function StatusPill({ status, label }: { status: string; label: string }) {
         : status === 'released'
           ? 'border-honey-500/40 bg-honey-500/10 text-honey-200'
           : 'border-dark-700 bg-dark-950 text-slate-400';
-  return <span className={`rounded-lg border px-2 py-1 text-[11px] font-bold ${tone}`}>{label}</span>;
+  return <span className={`rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${tone}`}>{label}</span>;
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <dt className="text-[10px] uppercase tracking-wider text-slate-500">{label}</dt>
-      <dd className="text-white">{value}</dd>
+      <dd className="text-slate-100">{value}</dd>
     </div>
   );
 }

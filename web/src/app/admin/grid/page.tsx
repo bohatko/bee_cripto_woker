@@ -8,20 +8,6 @@ import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { toast } from '@/components/ui/sonner';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 
-type Candidate = {
-  baseAsset: string;
-  lowerPrice: number;
-  upperPrice: number;
-  gridCount: number;
-  leverage: number;
-  stopPrice: number;
-  takeProfitPrice: number;
-  spacing: 'geometric' | 'arithmetic';
-  direction: 'neutral' | 'long' | 'short';
-  score: number;
-  metrics: { netReturnPct: number; efficiency: number; avgDailyRangePct: number; lastPrice: number };
-};
-
 type BotRow = {
   id: string;
   exchange: string;
@@ -36,16 +22,14 @@ type BotRow = {
 
 export default function AdminGridPage() {
   const router = useRouter();
-  const { t, formatDateTime } = useLanguage();
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [template, setTemplate] = useState<any>(null);
   const [coins, setCoins] = useState<any[]>([]);
   const [draft, setDraft] = useState({ lower: '', upper: '', grids: '', leverage: '', stop: '', take: '' });
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [lastScan, setLastScan] = useState<string | null>(null);
-  const [scanError, setScanError] = useState<string | null>(null);
+  const [newCoin, setNewCoin] = useState({ base: '', lower: '', upper: '', grids: '15', leverage: '2', stop: '', take: '' });
   const [bots, setBots] = useState<BotRow[]>([]);
-  const [pending, setPending] = useState<null | { kind: 'activate'; candidate: Candidate } | { kind: 'stop' } | { kind: 'save' }>(null);
+  const [pending, setPending] = useState<null | { kind: 'add' } | { kind: 'stop' } | { kind: 'save' }>(null);
 
   const load = useCallback(async () => {
     const { data: auth } = await supabase.auth.getUser();
@@ -59,10 +43,8 @@ export default function AdminGridPage() {
       return;
     }
 
-    const [{ data: active }, { data: engine }, { data: runs }, { data: botRows }] = await Promise.all([
+    const [{ data: active }, { data: botRows }] = await Promise.all([
       supabase.from('grid_templates').select('*').eq('is_active', true).order('created_at', { ascending: true }),
-      supabase.from('grid_engine').select('*').eq('id', 1).maybeSingle(),
-      supabase.from('grid_screener_runs').select('*').order('created_at', { ascending: false }).limit(1),
       supabase
         .from('grid_bots')
         .select('id, exchange, margin_usdt, run_status, control_status, pnl_usdt, last_error, exchange_bot_id, users_profile(email, full_name)')
@@ -84,9 +66,6 @@ export default function AdminGridPage() {
         take: String(editable.take_profit_price),
       });
     }
-    setLastScan(engine?.last_scan_at || null);
-    setScanError(engine?.last_scan_error || null);
-    setCandidates(((runs || [])[0]?.candidates || []) as Candidate[]);
     setBots((botRows || []) as unknown as BotRow[]);
     setLoading(false);
   }, [router]);
@@ -95,29 +74,36 @@ export default function AdminGridPage() {
     void load();
   }, [load]);
 
-  const scan = async () => {
-    const { error } = await supabase.from('grid_engine').update({ scan_requested: true }).eq('id', 1);
-    if (error) toast.error(error.message);
-    else toast.success(t('grid.scanQueued'));
-  };
-
-  const activate = async (candidate: Candidate) => {
+  const addCoin = async () => {
+    const base = newCoin.base.trim().toUpperCase();
+    const lower = Number(newCoin.lower);
+    const upper = Number(newCoin.upper);
+    const stop = Number(newCoin.stop);
+    const take = Number(newCoin.take);
+    const grids = Number(newCoin.grids);
+    const leverage = Number(newCoin.leverage);
+    if (!/^[A-Z0-9]{2,12}$/.test(base) || !(upper > lower) || !(stop < lower) || !(take > upper) || grids < 2 || leverage < 1) {
+      toast.error(t('grid.addCoinInvalid'));
+      setPending(null);
+      return;
+    }
     const { error } = await supabase.from('grid_templates').insert({
-      base_asset: candidate.baseAsset,
+      base_asset: base,
       is_active: true,
-      lower_price: candidate.lowerPrice,
-      upper_price: candidate.upperPrice,
-      grid_count: candidate.gridCount,
-      spacing: candidate.spacing,
-      leverage: candidate.leverage,
-      stop_price: candidate.stopPrice,
-      take_profit_price: candidate.takeProfitPrice,
-      direction: candidate.direction,
-      score: candidate.score,
-      metrics: candidate.metrics,
+      lower_price: lower,
+      upper_price: upper,
+      grid_count: grids,
+      spacing: 'geometric',
+      leverage,
+      stop_price: stop,
+      take_profit_price: take,
+      direction: 'neutral',
     });
     if (error) toast.error(error.message);
-    else toast.success(`${candidate.baseAsset} activated`);
+    else {
+      toast.success(t('grid.saved'));
+      setNewCoin({ base: '', lower: '', upper: '', grids: '15', leverage: '2', stop: '', take: '' });
+    }
     setPending(null);
     await load();
   };
@@ -164,10 +150,6 @@ export default function AdminGridPage() {
           <div>
             <h1 className="text-2xl font-extrabold text-white">{t('grid.adminTitle')}</h1>
             <p className="mt-1 max-w-2xl text-sm text-slate-400">{t('grid.adminSubtitle')}</p>
-            <p className="mt-2 font-mono text-xs text-slate-500">
-              {t('grid.lastScan')}: {lastScan ? formatDateTime(lastScan) : t('common.never')}
-              {scanError ? ` · ${scanError}` : ''}
-            </p>
           </div>
           <Link href="/admin" className="text-sm text-honey-400">
             Admin
@@ -175,9 +157,6 @@ export default function AdminGridPage() {
         </div>
 
         <div className="flex flex-wrap gap-3">
-          <button type="button" onClick={() => void scan()} className="rounded-xl bg-honey-500 px-4 py-2 text-sm font-bold text-dark-950">
-            {t('grid.scan')}
-          </button>
           <button type="button" onClick={() => setPending({ kind: 'stop' })} className="rounded-xl border border-rose-500/40 px-4 py-2 text-sm font-bold text-rose-300">
             {t('grid.stopAll')}
           </button>
@@ -212,35 +191,20 @@ export default function AdminGridPage() {
           )}
         </section>
 
-        <section>
-          <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-slate-500">{t('grid.candidates')}</h2>
-          {candidates.length === 0 ? (
-            <p className="font-mono text-sm text-slate-500">{t('grid.noCandidates')}</p>
-          ) : (
-            <div className="grid gap-3 md:grid-cols-2">
-              {candidates.map((candidate) => (
-                <article key={candidate.baseAsset} className="rounded-2xl border border-dark-800 bg-dark-900 p-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-mono text-lg text-white">{candidate.baseAsset}/USDT</h3>
-                    <span className="font-mono text-honey-400">{candidate.score}</span>
-                  </div>
-                  <p className="mt-2 font-mono text-xs text-slate-400">
-                    {candidate.lowerPrice} – {candidate.upperPrice} · {candidate.gridCount} · {candidate.leverage}x
-                  </p>
-                  <p className="mt-1 font-mono text-xs text-slate-500">
-                    {t('grid.netReturn')} {candidate.metrics.netReturnPct}% · {t('grid.efficiency')} {candidate.metrics.efficiency} · ATR {candidate.metrics.avgDailyRangePct}%
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setPending({ kind: 'activate', candidate })}
-                    className="mt-3 rounded-lg bg-honey-500/15 px-3 py-1.5 text-xs font-bold text-honey-300"
-                  >
-                    {t('grid.activate')}
-                  </button>
-                </article>
-              ))}
-            </div>
-          )}
+        <section className="rounded-2xl border border-dark-800 bg-dark-900 p-5">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">{t('grid.addCoin')}</h2>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <Field label={t('grid.coin')} value={newCoin.base} onChange={(value) => setNewCoin({ ...newCoin, base: value })} />
+            <Field label={t('grid.range') + ' min'} value={newCoin.lower} onChange={(value) => setNewCoin({ ...newCoin, lower: value })} />
+            <Field label={t('grid.range') + ' max'} value={newCoin.upper} onChange={(value) => setNewCoin({ ...newCoin, upper: value })} />
+            <Field label={t('grid.grids')} value={newCoin.grids} onChange={(value) => setNewCoin({ ...newCoin, grids: value })} />
+            <Field label={t('grid.leverage')} value={newCoin.leverage} onChange={(value) => setNewCoin({ ...newCoin, leverage: value })} />
+            <Field label={t('grid.stopPrice')} value={newCoin.stop} onChange={(value) => setNewCoin({ ...newCoin, stop: value })} />
+            <Field label={t('grid.takeProfit')} value={newCoin.take} onChange={(value) => setNewCoin({ ...newCoin, take: value })} />
+            <button type="button" onClick={() => setPending({ kind: 'add' })} className="rounded-xl bg-honey-500 px-4 py-2 text-sm font-bold text-dark-950 sm:col-span-3">
+              {t('grid.addCoin')}
+            </button>
+          </div>
         </section>
 
         <section className="overflow-x-auto rounded-2xl border border-dark-800 bg-dark-900">
@@ -282,11 +246,11 @@ export default function AdminGridPage() {
       </div>
 
       <ConfirmModal
-        isOpen={pending?.kind === 'activate'}
-        title={t('grid.confirmActivateTitle')}
-        description={t('grid.confirmActivateDesc')}
-        confirmText={t('grid.activate')}
-        onConfirm={() => pending?.kind === 'activate' && void activate(pending.candidate)}
+        isOpen={pending?.kind === 'add'}
+        title={t('grid.confirmAddTitle')}
+        description={t('grid.confirmAddDesc')}
+        confirmText={t('grid.addCoin')}
+        onConfirm={() => void addCoin()}
         onCancel={() => setPending(null)}
       />
       <ConfirmModal
