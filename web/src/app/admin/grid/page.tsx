@@ -39,6 +39,7 @@ export default function AdminGridPage() {
   const { t, formatDateTime } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [template, setTemplate] = useState<any>(null);
+  const [coins, setCoins] = useState<any[]>([]);
   const [draft, setDraft] = useState({ lower: '', upper: '', grids: '', leverage: '', stop: '', take: '' });
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [lastScan, setLastScan] = useState<string | null>(null);
@@ -59,7 +60,7 @@ export default function AdminGridPage() {
     }
 
     const [{ data: active }, { data: engine }, { data: runs }, { data: botRows }] = await Promise.all([
-      supabase.from('grid_templates').select('*').eq('is_active', true).maybeSingle(),
+      supabase.from('grid_templates').select('*').eq('is_active', true).order('created_at', { ascending: true }),
       supabase.from('grid_engine').select('*').eq('id', 1).maybeSingle(),
       supabase.from('grid_screener_runs').select('*').order('created_at', { ascending: false }).limit(1),
       supabase
@@ -69,15 +70,18 @@ export default function AdminGridPage() {
         .limit(80),
     ]);
 
-    setTemplate(active);
-    if (active) {
+    const rows = (active || []) as any[];
+    setCoins(rows);
+    const editable = rows[0] ?? null;
+    setTemplate(editable);
+    if (editable) {
       setDraft({
-        lower: String(active.lower_price),
-        upper: String(active.upper_price),
-        grids: String(active.grid_count),
-        leverage: String(active.leverage),
-        stop: String(active.stop_price),
-        take: String(active.take_profit_price),
+        lower: String(editable.lower_price),
+        upper: String(editable.upper_price),
+        grids: String(editable.grid_count),
+        leverage: String(editable.leverage),
+        stop: String(editable.stop_price),
+        take: String(editable.take_profit_price),
       });
     }
     setLastScan(engine?.last_scan_at || null);
@@ -98,35 +102,21 @@ export default function AdminGridPage() {
   };
 
   const activate = async (candidate: Candidate) => {
-    const { data: inserted, error } = await supabase
-      .from('grid_templates')
-      .insert({
-        base_asset: candidate.baseAsset,
-        is_active: false,
-        lower_price: candidate.lowerPrice,
-        upper_price: candidate.upperPrice,
-        grid_count: candidate.gridCount,
-        spacing: candidate.spacing,
-        leverage: candidate.leverage,
-        stop_price: candidate.stopPrice,
-        take_profit_price: candidate.takeProfitPrice,
-        direction: candidate.direction,
-        score: candidate.score,
-        metrics: candidate.metrics,
-      })
-      .select('id')
-      .single();
-    if (error || !inserted) {
-      toast.error(error?.message || 'Insert failed');
-      return;
-    }
-    const { error: clearError } = await supabase.from('grid_templates').update({ is_active: false }).eq('is_active', true);
-    if (clearError) {
-      toast.error(clearError.message);
-      return;
-    }
-    const { error: onError } = await supabase.from('grid_templates').update({ is_active: true }).eq('id', inserted.id);
-    if (onError) toast.error(onError.message);
+    const { error } = await supabase.from('grid_templates').insert({
+      base_asset: candidate.baseAsset,
+      is_active: true,
+      lower_price: candidate.lowerPrice,
+      upper_price: candidate.upperPrice,
+      grid_count: candidate.gridCount,
+      spacing: candidate.spacing,
+      leverage: candidate.leverage,
+      stop_price: candidate.stopPrice,
+      take_profit_price: candidate.takeProfitPrice,
+      direction: candidate.direction,
+      score: candidate.score,
+      metrics: candidate.metrics,
+    });
+    if (error) toast.error(error.message);
     else toast.success(`${candidate.baseAsset} activated`);
     setPending(null);
     await load();
@@ -195,6 +185,15 @@ export default function AdminGridPage() {
 
         <section className="rounded-2xl border border-dark-800 bg-dark-900 p-5">
           <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">{t('grid.activeCoin')}</h2>
+          {coins.length > 0 && (
+            <ul className="mt-3 space-y-1 font-mono text-sm text-slate-300">
+              {coins.map((coin) => (
+                <li key={coin.id}>
+                  {coin.base_asset}/USDT · {coin.lower_price}–{coin.upper_price} · {coin.grid_count} · {coin.leverage}x · SL {coin.stop_price} · TP {coin.take_profit_price}
+                </li>
+              ))}
+            </ul>
+          )}
           {template ? (
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
               <p className="font-mono text-lg text-white sm:col-span-3">{template.base_asset}/USDT · {template.direction}</p>

@@ -50,6 +50,7 @@ interface SettingsRow {
   exchange: 'okx' | 'bybit' | null;
   is_enabled: boolean;
   last_error?: string | null;
+  updated_at?: string;
 }
 
 interface BotRow {
@@ -63,6 +64,8 @@ interface BotRow {
   params_hash: string;
   control_status: 'controlled' | 'released';
   run_status: 'starting' | 'running' | 'stopped' | 'error';
+  stop_reason?: string | null;
+  stopped_at?: string | null;
   base_asset?: string;
 }
 
@@ -145,18 +148,17 @@ export class GridSupervisor {
   private async run(): Promise<void> {
     await this.maybeScan();
 
-    const { data: template } = await supabase
-      .from('grid_templates')
-      .select('*')
-      .eq('is_active', true)
-      .maybeSingle();
-    const active = (template || null) as TemplateRow | null;
+    const { data: templateRows } = await supabase.from('grid_templates').select('*').eq('is_active', true);
+    const actives = (templateRows || []) as TemplateRow[];
 
-    const { data: liveRows } = await supabase
+    const { data: botRows } = await supabase
       .from('grid_bots')
       .select('*')
-      .in('run_status', ['starting', 'running']);
-    const live = (liveRows || []) as BotRow[];
+      .in('run_status', ['starting', 'running', 'stopped'])
+      .order('created_at', { ascending: false })
+      .limit(1000);
+    const knownBots = (botRows || []) as BotRow[];
+    const live = knownBots.filter((bot) => bot.run_status === 'starting' || bot.run_status === 'running');
     const skipStart = new Set<string>();
 
     const { data: settingRows } = await supabase.from('grid_user_settings').select('*');
@@ -193,7 +195,7 @@ export class GridSupervisor {
     );
     const templateIds = Array.from(new Set(live.map((b) => b.template_id).filter(Boolean))) as string[];
     const templateById = new Map<string, TemplateRow>();
-    if (active) templateById.set(active.id, active);
+    for (const row of actives) templateById.set(row.id, row);
     if (templateIds.length) {
       const { data: oldTemplates } = await supabase.from('grid_templates').select('*').in('id', templateIds);
       for (const row of (oldTemplates || []) as TemplateRow[]) templateById.set(row.id, row);
@@ -225,14 +227,7 @@ export class GridSupervisor {
         bot.control_status = 'controlled';
       }
 
-      const shouldStop =
-        !setting?.is_enabled ||
-        !active ||
-        bot.template_id !== active.id ||
-        bot.params_hash !== active.params_hash ||
-        Number(bot.margin_usdt) !== Number(setting.margin_usdt);
-
-      if (shouldStop) {
+      if (setting && !setting.is_enabled) {
         if (!account || !botTemplate) {
           await markBot(bot.id, {
             run_status: 'error',
@@ -244,7 +239,7 @@ export class GridSupervisor {
           await closeOnExchange(bot, account, botTemplate.base_asset);
           await markBot(bot.id, {
             run_status: 'stopped',
-            stop_reason: !setting?.is_enabled ? 'user' : 'rotation',
+            stop_reason: 'user',
             stopped_at: new Date().toISOString(),
             last_error: null,
           });
@@ -271,30 +266,18 @@ export class GridSupervisor {
             last_error: null,
             ...(snap.running ? {} : { stop_reason: 'exchange', stopped_at: new Date().toISOString() }),
           });
-          if (!snap.running && setting?.is_enabled) {
-            await supabase.from('grid_user_settings').update({ is_enabled: false }).eq('user_id', bot.user_id);
-            setting.is_enabled = false;
-          }
         } catch (err: any) {
           await markBot(bot.id, { last_error: err?.message || String(err) });
         }
       }
     }
 
-    if (!active) return;
+    if (actives.length === 0) return;
 
     for (const setting of settings) {
       if (!setting.is_enabled) continue;
       if (skipStart.has(setting.user_id)) continue;
       if (!entitled(profileById.get(setting.user_id))) continue;
-      const stillLive = live.some(
-        (bot) =>
-          bot.user_id === setting.user_id &&
-          bot.template_id === active.id &&
-          bot.params_hash === active.params_hash &&
-          Number(bot.margin_usdt) === Number(setting.margin_usdt)
-      );
-      if (stillLive) continue;
 
       const resolved = resolveAccount(setting, accountsByUser.get(setting.user_id) || [], primaryByUser.get(setting.user_id) || null);
       if ('error' in resolved) {
@@ -306,32 +289,46 @@ export class GridSupervisor {
       }
       if (Number(setting.margin_usdt) < 10) continue;
 
-      try {
-        const creds = credsOf(resolved.account);
-        const params = orderParams(active, Number(setting.margin_usdt));
-        const exchangeBotId =
-          resolved.account.exchange === 'okx'
-            ? await createOkxGrid(creds, params)
-            : await createBybitGrid(creds, params);
-        const { error } = await supabase.from('grid_bots').insert({
-          user_id: setting.user_id,
-          template_id: active.id,
-          exchange_account_id: resolved.account.id,
-          exchange: resolved.account.exchange,
-          exchange_bot_id: exchangeBotId,
-          margin_usdt: setting.margin_usdt,
-          params_hash: active.params_hash,
-          control_status: 'controlled',
-          run_status: 'running',
-          started_at: new Date().toISOString(),
-        });
-        if (error) throw new Error(error.message);
-        await supabase.from('grid_user_settings').update({ last_error: null }).eq('user_id', setting.user_id);
-        console.log(`[Grid] Started ${resolved.account.exchange} ${active.base_asset} for ${profileById.get(setting.user_id)?.email || setting.user_id}`);
-      } catch (err: any) {
-        const message = err?.message || String(err);
-        console.error(`[Grid] Start failed for ${setting.user_id}: ${message}`);
-        await supabase.from('grid_user_settings').update({ last_error: message }).eq('user_id', setting.user_id);
+      for (const active of actives) {
+        const latest = knownBots.find((bot) => bot.user_id === setting.user_id && bot.template_id === active.id);
+        if (latest && (latest.run_status === 'running' || latest.run_status === 'starting')) continue;
+        if (
+          latest?.run_status === 'stopped' &&
+          latest.stopped_at &&
+          setting.updated_at &&
+          new Date(latest.stopped_at).getTime() >= new Date(setting.updated_at).getTime()
+        ) {
+          continue;
+        }
+
+        try {
+          const creds = credsOf(resolved.account);
+          const params = orderParams(active, Number(setting.margin_usdt));
+          const exchangeBotId =
+            resolved.account.exchange === 'okx'
+              ? await createOkxGrid(creds, params)
+              : await createBybitGrid(creds, params);
+          const { error } = await supabase.from('grid_bots').insert({
+            user_id: setting.user_id,
+            template_id: active.id,
+            exchange_account_id: resolved.account.id,
+            exchange: resolved.account.exchange,
+            exchange_bot_id: exchangeBotId,
+            margin_usdt: setting.margin_usdt,
+            params_hash: active.params_hash,
+            control_status: 'controlled',
+            run_status: 'running',
+            started_at: new Date().toISOString(),
+          });
+          if (error) throw new Error(error.message);
+          await supabase.from('grid_user_settings').update({ last_error: null }).eq('user_id', setting.user_id);
+          console.log(`[Grid] Started ${resolved.account.exchange} ${active.base_asset} for ${profileById.get(setting.user_id)?.email || setting.user_id}`);
+        } catch (err: any) {
+          const message = err?.message || String(err);
+          console.error(`[Grid] Start failed for ${setting.user_id} ${active.base_asset}: ${message}`);
+          await supabase.from('grid_user_settings').update({ last_error: message }).eq('user_id', setting.user_id);
+          break;
+        }
       }
     }
   }

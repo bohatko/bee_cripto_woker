@@ -31,6 +31,7 @@ type Bot = {
   last_error: string | null;
   margin_usdt: number;
   created_at: string;
+  grid_templates: { base_asset: string } | null;
 };
 
 export default function GridPage() {
@@ -41,8 +42,8 @@ export default function GridPage() {
   const [pro, setPro] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [primaryExchange, setPrimaryExchange] = useState<string | null>(null);
-  const [template, setTemplate] = useState<Template | null>(null);
-  const [bot, setBot] = useState<Bot | null>(null);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [bots, setBots] = useState<Bot[]>([]);
   const [margin, setMargin] = useState('140');
   const [exchange, setExchange] = useState<'' | ExchangeName>('');
   const [enabled, setEnabled] = useState(false);
@@ -57,7 +58,7 @@ export default function GridPage() {
     }
     setUserId(auth.user.id);
 
-    const [{ data: profile }, { data: accs }, { data: trading }, { data: active }, { data: settings }, { data: bots }] =
+    const [{ data: profile }, { data: accs }, { data: trading }, { data: active }, { data: settings }, { data: botRows }] =
       await Promise.all([
         supabase
           .from('users_profile')
@@ -66,14 +67,14 @@ export default function GridPage() {
           .maybeSingle(),
         supabase.from('exchange_accounts').select('id, exchange, is_validated, is_active').eq('user_id', auth.user.id),
         supabase.from('trading_settings').select('exchange_account_id').eq('user_id', auth.user.id).maybeSingle(),
-        supabase.from('grid_templates').select('*').eq('is_active', true).maybeSingle(),
+        supabase.from('grid_templates').select('*').eq('is_active', true).order('created_at', { ascending: true }),
         supabase.from('grid_user_settings').select('*').eq('user_id', auth.user.id).maybeSingle(),
         supabase
           .from('grid_bots')
-          .select('*')
+          .select('*, grid_templates(base_asset)')
           .eq('user_id', auth.user.id)
           .order('created_at', { ascending: false })
-          .limit(1),
+          .limit(20),
       ]);
 
     const entitled =
@@ -85,14 +86,14 @@ export default function GridPage() {
     setAccounts(list);
     const primary = list.find((row) => row.id === trading?.exchange_account_id);
     setPrimaryExchange(primary?.exchange || null);
-    setTemplate((active || null) as Template | null);
+    setTemplates((active || []) as Template[]);
     if (settings) {
       setMargin(String(settings.margin_usdt ?? 140));
       setExchange((settings.exchange || '') as '' | ExchangeName);
       setEnabled(Boolean(settings.is_enabled));
       setSettingsError(settings.last_error || null);
     }
-    setBot(((bots || [])[0] || null) as Bot | null);
+    setBots((botRows || []) as Bot[]);
     setLoading(false);
   }, [router]);
 
@@ -109,7 +110,7 @@ export default function GridPage() {
   const effectiveExchange: ExchangeName | null =
     exchange || (primaryExchange === 'okx' || primaryExchange === 'bybit' ? primaryExchange : null);
   const exchangeReady = effectiveExchange ? connected[effectiveExchange] : false;
-  const canStart = pro && Boolean(template) && exchangeReady && Number(margin) >= 10;
+  const canStart = pro && templates.length > 0 && exchangeReady && Number(margin) >= 10;
 
   const save = async (nextEnabled: boolean) => {
     if (!userId) return;
@@ -149,7 +150,7 @@ export default function GridPage() {
             {t('grid.proOnly')}
           </div>
         )}
-        {bot?.control_status === 'released' && bot.run_status === 'running' && (
+        {bots.some((row) => row.control_status === 'released' && row.run_status === 'running') && (
           <div className="rounded-2xl border border-honey-500/30 bg-honey-500/10 px-4 py-3 text-sm text-honey-100">
             {t('grid.released')}
           </div>
@@ -162,15 +163,19 @@ export default function GridPage() {
 
         <section className="rounded-2xl border border-dark-800 bg-dark-900 p-5">
           <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">{t('grid.activeCoin')}</h2>
-          {template ? (
-            <div className="mt-3 grid grid-cols-2 gap-3 font-mono text-sm sm:grid-cols-3">
-              <Stat label={t('grid.activeCoin')} value={`${template.base_asset}/USDT`} />
-              <Stat label={t('grid.range')} value={`${template.lower_price} – ${template.upper_price}`} />
-              <Stat label={t('grid.grids')} value={String(template.grid_count)} />
-              <Stat label={t('grid.leverage')} value={`${template.leverage}x`} />
-              <Stat label={t('grid.stopPrice')} value={String(template.stop_price)} />
-              <Stat label={t('grid.takeProfit')} value={String(template.take_profit_price)} />
-              <Stat label={t('grid.direction')} value={t('grid.neutral')} />
+          {templates.length > 0 ? (
+            <div className="mt-3 space-y-4">
+              {templates.map((item) => (
+                <div key={item.id} className="grid grid-cols-2 gap-3 font-mono text-sm sm:grid-cols-3">
+                  <Stat label={t('grid.activeCoin')} value={`${item.base_asset}/USDT`} />
+                  <Stat label={t('grid.range')} value={`${item.lower_price} – ${item.upper_price}`} />
+                  <Stat label={t('grid.grids')} value={String(item.grid_count)} />
+                  <Stat label={t('grid.leverage')} value={`${item.leverage}x`} />
+                  <Stat label={t('grid.stopPrice')} value={String(item.stop_price)} />
+                  <Stat label={t('grid.takeProfit')} value={String(item.take_profit_price)} />
+                  <Stat label={t('grid.direction')} value={t('grid.neutral')} />
+                </div>
+              ))}
             </div>
           ) : (
             <p className="mt-3 text-sm text-slate-400">{t('grid.noCoin')}</p>
@@ -233,25 +238,27 @@ export default function GridPage() {
 
         <section className="rounded-2xl border border-dark-800 bg-dark-900 p-5">
           <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">{t('grid.yourBot')}</h2>
-          {!bot && enabled && <p className="mt-3 text-sm text-slate-400">{t('grid.waiting')}</p>}
-          {bot && (
-            <div className="mt-3 space-y-1 font-mono text-sm text-slate-200">
+          {bots.length === 0 && enabled && <p className="mt-3 text-sm text-slate-400">{t('grid.waiting')}</p>}
+          {bots.map((row) => (
+            <div key={row.id} className="mt-3 space-y-1 font-mono text-sm text-slate-200">
               <p>
-                {t('common.status')}: {bot.control_status === 'released' ? t('grid.released') : statusLabel(bot.run_status, t)}
+                {row.grid_templates?.base_asset || '—'}/USDT · {t('common.status')}:{' '}
+                {row.control_status === 'released' ? t('grid.released') : statusLabel(row.run_status, t)}
               </p>
               <p>
-                {t('grid.exchange')}: {bot.exchange.toUpperCase()} · {t('grid.margin')}: {bot.margin_usdt}
+                {t('grid.exchange')}: {row.exchange.toUpperCase()} · {t('grid.margin')}: {row.margin_usdt}
               </p>
-              <p className={Number(bot.pnl_usdt) >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
-                {t('grid.pnl')}: {bot.pnl_usdt ?? '—'} USDT
+              <p className={Number(row.pnl_usdt) >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                {t('grid.pnl')}: {row.pnl_usdt ?? '—'} USDT
               </p>
+              {row.last_error && (
+                <p className="text-rose-300">
+                  {t('grid.error')}: {row.last_error}
+                </p>
+              )}
             </div>
-          )}
-          {(settingsError || bot?.last_error) && (
-            <p className="mt-3 text-sm text-rose-300">
-              {t('grid.error')}: {settingsError || bot?.last_error}
-            </p>
-          )}
+          ))}
+          {settingsError && <p className="mt-3 text-sm text-rose-300">{t('grid.error')}: {settingsError}</p>}
         </section>
 
       <ConfirmModal
