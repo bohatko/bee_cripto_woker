@@ -186,17 +186,19 @@ export default function ReferralsPage() {
         <div className="rounded-2xl border border-dark-800 bg-dark-900 p-5">
           <p className="text-xs uppercase text-slate-400">{t('referrals.available')}</p>
           <p className="mt-1 font-mono text-2xl font-bold text-emerald-400">{formatUsd(available)}</p>
+          <p className="mt-2 text-xs text-slate-500">{t('referrals.availableHint')}</p>
         </div>
         <div className="rounded-2xl border border-dark-800 bg-dark-900 p-5">
           <p className="text-xs uppercase text-slate-400">{t('referrals.onHold')}</p>
           <p className="mt-1 font-mono text-2xl font-bold text-honey-400">{formatUsd(Number(summary.held_usd))}</p>
+          <p className="mt-2 text-xs text-slate-500">{t('referrals.onHoldHint')}</p>
         </div>
         <div className="rounded-2xl border border-dark-800 bg-dark-900 p-5">
           <p className="text-xs uppercase text-slate-400">{t('referrals.invited')}</p>
           <p className="mt-1 font-mono text-2xl font-bold text-white">{Number(summary.invited_count) || 0}</p>
+          <p className="mt-2 text-xs text-slate-500">{t('referrals.invitedHint')}</p>
         </div>
       </div>
-      <p className="-mt-4 text-xs text-slate-500">{t('referrals.holdHint')}</p>
 
       <section className="rounded-2xl border border-dark-800 bg-dark-900 p-5 shadow-xl sm:p-6">
         <h2 className="font-bold text-white">{t('referrals.codeTitle')}</h2>

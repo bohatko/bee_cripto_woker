@@ -305,6 +305,14 @@ export default function UserHistoryPage() {
         </div>
       </div>
 
+      <Link
+        href="/history/bot"
+        className="inline-flex w-fit items-center gap-2 rounded-xl border border-dark-700 bg-dark-900 px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:border-honey-500/40 hover:text-honey-400"
+      >
+        <TrendingUp className="h-4 w-4" />
+        {t('nav.backtest')}
+      </Link>
+
       <PairTradingMarginSettings />
 
       {/* Realized PnL Growth Dynamics Chart (Strictly trade-by-trade, no exchange capital) */}

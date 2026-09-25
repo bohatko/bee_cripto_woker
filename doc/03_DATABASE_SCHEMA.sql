@@ -210,7 +210,7 @@ CREATE TABLE IF NOT EXISTS public.bot_positions (
 );
 
 -- ==============================================================================
--- ТАБЛИЦА 6: invoices (Биллинг: Лайт 70/700 USDT, Про 200/2000 USDT)
+-- ТАБЛИЦА 6: invoices (Биллинг: Lite 70/700 USDT, Pro 200/2000 USDT)
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.invoices (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

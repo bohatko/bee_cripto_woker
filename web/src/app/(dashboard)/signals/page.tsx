@@ -1,6 +1,7 @@
 'use client';
 
 import React, { Suspense, useEffect, useState, useMemo } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
@@ -10,7 +11,7 @@ import { SignalPositionsTable } from '@/components/signals/SignalPositionsTable'
 import { StrategyCombinedCard } from '@/components/signals/StrategyCombinedCard';
 import { EquityGrowthChart } from '@/components/charts/EquityGrowthChart';
 import { SignalsSkeleton } from '@/components/skeletons/PageSkeletons';
-import { Compass, Sparkles, Filter } from 'lucide-react';
+import { Compass, Sparkles, Filter, TrendingUp } from 'lucide-react';
 
 function SignalsContent() {
   const router = useRouter();
@@ -163,6 +164,14 @@ function SignalsContent() {
           </span>
         </div>
       </div>
+
+      <Link
+        href="/signals/backtest"
+        className="inline-flex w-fit items-center gap-2 rounded-xl border border-dark-700 bg-dark-900 px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:border-honey-500/40 hover:text-honey-400"
+      >
+        <TrendingUp className="h-4 w-4" />
+        {t('nav.backtest')}
+      </Link>
 
       {closedPositionsForChart.length > 0 ? (
         <EquityGrowthChart

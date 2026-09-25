@@ -7,7 +7,6 @@ import {
   LayoutDashboard,
   KeyRound,
   History,
-  TrendingUp,
   CreditCard,
   Gift,
   LogOut,
@@ -186,6 +185,7 @@ export default function DashboardLayout({
 
   const navSections: Array<{
     label?: string;
+    divided?: boolean;
     items: Array<{ name: string; href: string; icon: typeof LayoutDashboard }>;
   }> = [
     {
@@ -195,17 +195,11 @@ export default function DashboardLayout({
       label: t('nav.sectionSignals'),
       items: [
         { name: t('nav.signals'), href: '/signals', icon: Radar },
-        { name: t('nav.signalsBacktest'), href: '/signals/backtest', icon: TrendingUp },
-      ],
-    },
-    {
-      label: t('nav.sectionPairTrading'),
-      items: [
         { name: t('nav.pairTrading'), href: '/history', icon: History },
-        { name: t('nav.pairBacktest'), href: '/history/bot', icon: TrendingUp },
       ],
     },
     {
+      divided: true,
       items: [
         { name: t('nav.exchangeKeys'), href: '/settings/exchange', icon: KeyRound },
         { name: t('nav.billing'), href: '/billing', icon: CreditCard },
@@ -275,7 +269,10 @@ export default function DashboardLayout({
 
         <nav className="flex-1 px-3 py-2 space-y-3 overflow-y-auto">
           {navSections.map((section, sectionIdx) => (
-            <div key={section.label || `section-${sectionIdx}`} className="space-y-1">
+            <div
+              key={section.label || `section-${sectionIdx}`}
+              className={`space-y-1 ${section.divided ? 'pt-3 mt-1 border-t border-dark-800' : ''}`}
+            >
               {section.label && (
                 <span className="px-3 text-[10px] uppercase tracking-wider font-mono text-slate-500 font-bold">
                   {section.label}
