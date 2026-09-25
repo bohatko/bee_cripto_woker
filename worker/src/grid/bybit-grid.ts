@@ -157,11 +157,18 @@ export async function readBybitGrid(
   creds: { apiKey: string; secret: string },
   botId: string
 ): Promise<GridBotSnapshot> {
-  const result = await bybitRequest(creds, 'GET', '/v5/fgridbot/detail', { bot_id: botId }, undefined);
-  const row = (result.bot || result.detail || result) as Record<string, unknown>;
+  const result = await bybitRequest(creds, 'POST', '/v5/fgridbot/detail', {}, { bot_id: botId });
+  const row = (result.detail || result.bot || result) as Record<string, unknown>;
   const status = String(row.status || row.bot_status || row.state || '').toLowerCase();
-  const running = status === '' || status.includes('run') || status === '1' || status === 'created';
-  const stopped = status.includes('stop') || status.includes('clos') || status.includes('cancel') || status === '2';
+  const stopped =
+    status.includes('stop') ||
+    status.includes('clos') ||
+    status.includes('cancel') ||
+    status.includes('complet') ||
+    status.includes('fail') ||
+    status.includes('liquidat') ||
+    status === '2';
+  const running = !stopped;
   const pnlRaw = row.pnl ?? row.total_pnl ?? row.totalPnl ?? row.realized_pnl ?? row.profit;
   const pnl = Number(pnlRaw);
   return {
