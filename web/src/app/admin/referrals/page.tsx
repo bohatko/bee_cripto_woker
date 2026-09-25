@@ -81,15 +81,15 @@ export default function AdminReferralPayoutsPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-dark-950 text-slate-400">
+      <div className="flex items-center justify-center py-24 text-slate-400">
         <p className="font-mono text-sm">{t('referrals.loading')}</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-dark-950 p-4 text-slate-100 sm:p-8">
-      <div className="mx-auto max-w-5xl">
+    <div className="p-4 text-slate-100 sm:p-8">
+      <div className="max-w-5xl">
         <h1 className="text-2xl font-extrabold text-white">{t('referrals.adminTitle')}</h1>
         <p className="mt-1 max-w-2xl text-sm text-slate-400">{t('referrals.adminSubtitle')}</p>
 

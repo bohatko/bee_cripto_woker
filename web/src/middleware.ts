@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { hasProModules } from '@/lib/pro-access';
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
@@ -42,6 +43,7 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/billing') ||
     pathname.startsWith('/signals') ||
     pathname.startsWith('/history') ||
+    pathname.startsWith('/grid') ||
     pathname.startsWith('/settings') ||
     pathname.startsWith('/admin');
 
@@ -56,6 +58,19 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
+  const isProSection = pathname.startsWith('/grid') || pathname.startsWith('/history');
+  if (user && isProSection) {
+    const { data: profile, error } = await supabase
+      .from('users_profile')
+      .select('subscription_plan, subscription_status, is_frozen')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (!error && !hasProModules(profile)) {
+      return NextResponse.redirect(new URL('/billing', request.url));
+    }
+  }
+
   return response;
 }
 
@@ -64,7 +79,10 @@ export const config = {
     '/dashboard/:path*',
     '/billing/:path*',
     '/signals/:path*',
+    '/history',
     '/history/:path*',
+    '/grid',
+    '/grid/:path*',
     '/settings/:path*',
     '/admin/:path*',
     '/login',

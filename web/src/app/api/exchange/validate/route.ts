@@ -39,11 +39,14 @@ export async function POST(request: Request) {
 
     const { data: profile } = await supabase
       .from('users_profile')
-      .select('subscription_plan')
+      .select('subscription_plan, subscription_status')
       .eq('id', user.id)
       .maybeSingle();
 
-    if (profile?.subscription_plan !== 'pro') {
+    const extraExchangeRequiresPro =
+      profile?.subscription_plan !== 'pro' || profile?.subscription_status === 'trial';
+
+    if (extraExchangeRequiresPro) {
       const { data: existingAccounts, error: accountsError } = await supabase
         .from('exchange_accounts')
         .select('exchange')
@@ -59,7 +62,7 @@ export async function POST(request: Request) {
       const otherExchanges = (existingAccounts || []).filter((account) => account.exchange !== exchange);
       if (otherExchanges.length >= 1) {
         return NextResponse.json(
-          { error: 'Lite plan allows one exchange. Upgrade to Pro to connect Binance, OKX and Bybit.' },
+          { error: 'Lite and trial include one exchange. Upgrade to Pro to connect Binance, OKX and Bybit.' },
           { status: 403 }
         );
       }

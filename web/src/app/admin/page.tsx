@@ -1,8 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   Users,
   CreditCard,
@@ -14,7 +13,6 @@ import {
   ExternalLink,
   Search,
   Filter,
-  ArrowLeft,
   KeyRound,
   RefreshCw,
   Wallet,
@@ -37,17 +35,26 @@ import {
 } from '@/components/admin/ReplacePairModal';
 import { toast } from '@/components/ui/sonner';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
-import { LanguageSwitcher } from '@/lib/i18n/LanguageSwitcher';
 import { isUnfilledSimulation, getDisplayPnlUsd } from '@/lib/positions';
 import { signalPriceDecimals } from '@/lib/signals';
 import { resolveExternalUid } from '@/lib/externalUid';
 import { AdminSkeleton } from '@/components/skeletons/PageSkeletons';
 import { LineChart, Line } from 'recharts';
 
+function adminSection(pathname: string) {
+  if (pathname.startsWith('/admin/users')) return 'users';
+  if (pathname.startsWith('/admin/invoices')) return 'invoices';
+  if (pathname.startsWith('/admin/positions')) return 'positions';
+  if (pathname.startsWith('/admin/pairs')) return 'pairs';
+  if (pathname.startsWith('/admin/signals')) return 'signals';
+  return 'overview';
+}
+
 export default function AdminDashboardPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const section = adminSection(pathname);
   const { t, dateLocale, formatDate, formatDateTime } = useLanguage();
-  const [activeTab, setActiveTab] = useState<'users' | 'invoices' | 'positions' | 'pairs' | 'signals' | 'health'>('users');
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
 
@@ -728,43 +735,34 @@ export default function AdminDashboardPage() {
     return null;
   }
 
+  const sectionTitle =
+    section === 'users'
+      ? t('admin.usersNav')
+      : section === 'invoices'
+        ? t('admin.invoicesPayments')
+        : section === 'positions'
+          ? t('admin.livePositions')
+          : section === 'pairs'
+            ? t('admin.pairsTab')
+            : section === 'signals'
+              ? t('admin.signalsNav')
+              : t('admin.overview');
+
   return (
-    <div className="min-h-screen bg-dark-950 text-slate-100 flex flex-col">
-      {/* Top Navigation Bar */}
-      <header className="border-b border-dark-800 bg-dark-900/90 backdrop-blur-md sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link
-              href="/dashboard"
-              className="p-2 rounded-xl bg-dark-800 hover:bg-dark-700 text-slate-300 hover:text-white transition-colors flex items-center gap-1.5 text-xs font-semibold"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              {t('admin.userDashboard')}
-            </Link>
+    <div className="space-y-8 p-4 sm:p-6 lg:p-8">
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="text-2xl font-extrabold text-white">{sectionTitle}</h1>
+        <button
+          onClick={checkAdminAndLoadData}
+          className="rounded-xl bg-dark-800 p-2 text-slate-400 transition-colors hover:bg-dark-700 hover:text-white"
+          title="Refresh Data"
+        >
+          <RefreshCw className="h-4 w-4" />
+        </button>
+      </div>
 
-            <div className="flex items-center gap-2">
-              <span className="text-lg font-extrabold text-white tracking-tight">{t('admin.adminControl')}</span>
-              <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-honey-500/15 text-honey-400 border border-honey-500/30">
-                {t('admin.master')}
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <LanguageSwitcher variant="compact" />
-            <button
-              onClick={checkAdminAndLoadData}
-              className="p-2 bg-dark-800 hover:bg-dark-700 rounded-xl text-slate-400 hover:text-white transition-colors"
-              title="Refresh Data"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Admin Content */}
-      <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full space-y-8">
+      {section === 'overview' && (
+        <>
         {/* Top Summary Metrics */}
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
           <div className="bg-dark-900 border border-dark-800 p-5 rounded-2xl shadow-xl">
@@ -873,68 +871,11 @@ export default function AdminDashboardPage() {
             </div>
           )}
         </div>
-
-        {/* Navigation Tabs */}
-        <div className="flex border-b border-dark-800 gap-2 font-mono text-xs font-semibold uppercase">
-          <button
-            onClick={() => setActiveTab('users')}
-            className={`pb-3 px-4 border-b-2 transition-colors ${
-              activeTab === 'users'
-                ? 'border-honey-500 text-honey-400 font-bold'
-                : 'border-transparent text-slate-400 hover:text-white'
-            }`}
-          >
-            {t('admin.usersDir', { count: users.length })}
-          </button>
-          <button
-            onClick={() => setActiveTab('invoices')}
-            className={`pb-3 px-4 border-b-2 transition-colors flex items-center gap-1.5 ${
-              activeTab === 'invoices'
-                ? 'border-honey-500 text-honey-400 font-bold'
-                : 'border-transparent text-slate-400 hover:text-white'
-            }`}
-          >
-            <span>{t('admin.invoicesPayments')}</span>
-            {pendingReviewInvoices.length > 0 && (
-              <span className="w-5 h-5 rounded-full bg-amber-500 text-dark-950 font-black text-[10px] flex items-center justify-center">
-                {pendingReviewInvoices.length}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('positions')}
-            className={`pb-3 px-4 border-b-2 transition-colors ${
-              activeTab === 'positions'
-                ? 'border-honey-500 text-honey-400 font-bold'
-                : 'border-transparent text-slate-400 hover:text-white'
-            }`}
-          >
-            {t('admin.livePositions')}
-          </button>
-          <button
-            onClick={() => setActiveTab('pairs')}
-            className={`pb-3 px-4 border-b-2 transition-colors ${
-              activeTab === 'pairs'
-                ? 'border-honey-500 text-honey-400 font-bold'
-                : 'border-transparent text-slate-400 hover:text-white'
-            }`}
-          >
-            {t('admin.pairsTab')}
-          </button>
-          <button
-            onClick={() => setActiveTab('signals')}
-            className={`pb-3 px-4 border-b-2 transition-colors ${
-              activeTab === 'signals'
-                ? 'border-honey-500 text-honey-400 font-bold'
-                : 'border-transparent text-slate-400 hover:text-white'
-            }`}
-          >
-            Signals
-          </button>
-        </div>
+        </>
+      )}
 
         {/* TAB 1: USERS DIRECTORY */}
-        {activeTab === 'users' && (
+        {section === 'users' && (
           <div className="bg-dark-900 border border-dark-800 rounded-2xl shadow-xl overflow-hidden">
             <div className="p-5 border-b border-dark-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="relative w-full sm:w-80">
@@ -1066,7 +1007,7 @@ export default function AdminDashboardPage() {
         )}
 
         {/* TAB 2: INVOICES MODERATION */}
-        {activeTab === 'invoices' && (
+        {section === 'invoices' && (
           <div className="bg-dark-900 border border-dark-800 rounded-2xl shadow-xl overflow-hidden">
             <div className="p-5 border-b border-dark-800 flex justify-between items-center">
               <h2 className="text-base font-bold text-white">{t('admin.systemInvoices')}</h2>
@@ -1204,7 +1145,7 @@ export default function AdminDashboardPage() {
         )}
 
         {/* TAB 3: GLOBAL POSITIONS */}
-        {activeTab === 'positions' && (
+        {section === 'positions' && (
           <div className="bg-dark-900 border border-dark-800 rounded-2xl shadow-xl overflow-hidden">
             <div className="p-5 border-b border-dark-800 flex justify-between items-center">
               <h2 className="text-base font-bold text-white">{t('admin.globalTrades')}</h2>
@@ -1280,7 +1221,7 @@ export default function AdminDashboardPage() {
         )}
 
         {/* TAB 4: PAIRS & ROTATION */}
-        {activeTab === 'pairs' && (
+        {section === 'pairs' && (
           <div className="space-y-6">
             {/* Block A: Current Active Basket */}
             <div className="bg-dark-900 border border-dark-800 rounded-2xl shadow-xl overflow-hidden">
@@ -1649,7 +1590,7 @@ export default function AdminDashboardPage() {
         )}
 
         {/* TAB 5: SIGNALS STRATEGY ADMIN */}
-        {activeTab === 'signals' && (
+        {section === 'signals' && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {signalStrategies.map((strat) => (
@@ -1753,8 +1694,6 @@ export default function AdminDashboardPage() {
             </div>
           </div>
         )}
-
-      </main>
 
       {/* Confirmation Modal for Invoices */}
       <ConfirmModal

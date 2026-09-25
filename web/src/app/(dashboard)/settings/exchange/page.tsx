@@ -17,6 +17,7 @@ import {
   Building2,
   Activity,
   AlertTriangle,
+  Star,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
@@ -61,6 +62,8 @@ export default function ExchangeSettingsPage() {
 
   const [accounts, setAccounts] = useState<ExchangeAccountItem[]>([]);
   const [tradingSettings, setTradingSettings] = useState<TradingSettingsItem | null>(null);
+  const [subscriptionPlan, setSubscriptionPlan] = useState<string | null>(null);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
 
   // Modals state
   const [accountToDelete, setAccountToDelete] = useState<ExchangeAccountItem | null>(null);
@@ -90,11 +93,12 @@ export default function ExchangeSettingsPage() {
       }
 
       // 1. Fetch exchange accounts
-      const { data: accData } = await supabase
-        .from('exchange_accounts')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: true });
+      const [{ data: accData }, { data: profile }] = await Promise.all([
+        supabase.from('exchange_accounts').select('*').eq('user_id', user.id).order('created_at', { ascending: true }),
+        supabase.from('users_profile').select('subscription_plan, subscription_status').eq('id', user.id).maybeSingle(),
+      ]);
+      setSubscriptionPlan(profile?.subscription_plan ?? 'lite');
+      setSubscriptionStatus(profile?.subscription_status ?? null);
 
       const accList = (accData || []) as ExchangeAccountItem[];
       setAccounts(accList);
@@ -158,6 +162,15 @@ export default function ExchangeSettingsPage() {
         data: { session },
       } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated. Please sign in again.');
+
+      const blocksExtraExchange =
+        accounts.length >= 1 &&
+        (subscriptionPlan !== 'pro' || subscriptionStatus === 'trial') &&
+        !accounts.some((account) => account.exchange === selectedExchange);
+      if (blocksExtraExchange) {
+        toast.error(t('exchange.extraProDesc'));
+        return;
+      }
 
       const response = await fetch('/api/exchange/validate', {
         method: 'POST',
@@ -319,6 +332,9 @@ export default function ExchangeSettingsPage() {
   const isCurrentTabPrimary = Boolean(
     currentTabAccount && tradingSettings?.exchange_account_id === currentTabAccount.id
   );
+  const extraExchangeRequiresPro =
+    accounts.length >= 1 && (subscriptionPlan !== 'pro' || subscriptionStatus === 'trial');
+  const selectedExchangeLocked = extraExchangeRequiresPro && !currentTabAccount;
 
   if (pageLoading) {
     return <ExchangeSkeleton />;
@@ -486,6 +502,14 @@ export default function ExchangeSettingsPage() {
                         {t('exchange.connected')}
                       </span>
                     )
+                  ) : extraExchangeRequiresPro ? (
+                    <span
+                      title={t('exchange.extraProDesc')}
+                      className="inline-flex items-center gap-0.5 rounded-md bg-honey-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-honey-300"
+                    >
+                      <Star className="h-2.5 w-2.5 fill-current" aria-hidden />
+                      {t('exchange.extraProBadge')}
+                    </span>
                   ) : (
                     <span className="text-[10px] font-mono px-2 py-0.5 rounded text-slate-500 bg-dark-900 border border-dark-800">
                       {t('exchange.connect')}
@@ -688,6 +712,22 @@ export default function ExchangeSettingsPage() {
                   )}
                 </div>
               </div>
+            </div>
+          ) : selectedExchangeLocked ? (
+            <div className="max-w-xl">
+              <span className="inline-flex items-center gap-1 rounded-md bg-honey-500/15 px-2 py-1 text-xs font-bold uppercase tracking-wide text-honey-300">
+                <Star className="h-3.5 w-3.5 fill-current" aria-hidden />
+                {t('exchange.extraProBadge')}
+              </span>
+              <h2 className="mt-4 text-lg font-bold text-white">{t('exchange.extraProTitle')}</h2>
+              <p className="mt-2 text-sm text-slate-400">{t('exchange.extraProDesc')}</p>
+              <button
+                type="button"
+                onClick={() => router.push('/billing')}
+                className="mt-5 rounded-xl bg-honey-500 px-4 py-2.5 text-sm font-bold text-dark-950"
+              >
+                {t('exchange.extraProAction')}
+              </button>
             </div>
           ) : (
             /* ============================================================

@@ -13,8 +13,8 @@ import {
   ShieldAlert,
   UserCog,
   Radar,
-  Wallet,
   Grid3x3,
+  Star,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
@@ -22,6 +22,7 @@ import { toast } from '@/components/ui/sonner';
 import { LanguageSwitcher } from '@/lib/i18n/LanguageSwitcher';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { playTradeOpenSound } from '@/lib/sound';
+import { hasProModules } from '@/lib/pro-access';
 
 export default function DashboardLayout({
   children,
@@ -90,6 +91,14 @@ export default function DashboardLayout({
       subscription?.unsubscribe();
     };
   }, [router]);
+
+  useEffect(() => {
+    if (!profile) return;
+    const proSection = pathname === '/grid' || pathname.startsWith('/grid/') || pathname === '/history' || pathname.startsWith('/history/');
+    if (proSection && !hasProModules(profile)) {
+      router.replace('/billing');
+    }
+  }, [profile, pathname, router]);
 
   // Real-time listener for new trade executions with Sound & Sonner Toast
   useEffect(() => {
@@ -187,7 +196,7 @@ export default function DashboardLayout({
   const navSections: Array<{
     label?: string;
     divided?: boolean;
-    items: Array<{ name: string; href: string; icon: typeof LayoutDashboard }>;
+    items: Array<{ name: string; href: string; icon: typeof LayoutDashboard; pro?: boolean }>;
   }> = [
     {
       items: [{ name: t('nav.dashboard'), href: '/dashboard', icon: LayoutDashboard }],
@@ -196,8 +205,8 @@ export default function DashboardLayout({
       label: t('nav.sectionSignals'),
       items: [
         { name: t('nav.signals'), href: '/signals', icon: Radar },
-        { name: t('nav.grid'), href: '/grid', icon: Grid3x3 },
-        { name: t('nav.pairTrading'), href: '/history', icon: History },
+        { name: t('nav.grid'), href: '/grid', icon: Grid3x3, pro: true },
+        { name: t('nav.pairTrading'), href: '/history', icon: History, pro: true },
       ],
     },
     {
@@ -282,22 +291,36 @@ export default function DashboardLayout({
               )}
               {section.items.map((item) => {
                 const Icon = item.icon;
+                const locked = Boolean(item.pro && !hasProModules(profile));
+                const href = locked ? '/billing' : item.href;
                 const isActive =
-                  item.href === '/history' || item.href === '/signals'
+                  !locked &&
+                  (item.href === '/history' || item.href === '/signals'
                     ? pathname === item.href
-                    : pathname === item.href || pathname.startsWith(`${item.href}/`);
+                    : pathname === item.href || pathname.startsWith(`${item.href}/`));
                 return (
                   <Link
                     key={item.href}
-                    href={item.href}
+                    href={href}
                     className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
                       isActive
                         ? 'bg-honey-500 text-dark-950 font-bold shadow-md shadow-honey-500/20'
                         : 'text-slate-400 hover:text-white hover:bg-dark-850'
                     }`}
                   >
-                    <Icon className={`w-4 h-4 ${isActive ? 'text-dark-950' : 'text-slate-400'}`} />
-                    {item.name}
+                    <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-dark-950' : 'text-slate-400'}`} />
+                    <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                    {item.pro && (
+                      <span
+                        title={t('nav.proHint')}
+                        className={`inline-flex shrink-0 items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                          isActive ? 'bg-dark-950/15 text-dark-950' : 'bg-honey-500/15 text-honey-300'
+                        }`}
+                      >
+                        <Star className="h-2.5 w-2.5 fill-current" aria-hidden />
+                        {t('nav.proBadge')}
+                      </span>
+                    )}
                   </Link>
                 );
               })}
@@ -311,36 +334,10 @@ export default function DashboardLayout({
               </span>
               <Link
                 href="/admin"
-                className={`flex items-center gap-3 px-3 py-2.5 mt-1 rounded-xl text-sm font-medium transition-colors ${
-                  pathname === '/admin'
-                    ? 'bg-amber-500/20 text-honey-400 border border-honey-500/30 font-bold shadow-md shadow-honey-500/10'
-                    : 'text-honey-400/80 hover:text-honey-300 hover:bg-dark-850'
-                }`}
+                className="flex items-center gap-3 px-3 py-2.5 mt-1 rounded-xl text-sm font-medium transition-colors text-honey-400/80 hover:text-honey-300 hover:bg-dark-850"
               >
                 <ShieldAlert className="w-4 h-4 text-honey-400" />
                 {t('nav.administration')}
-              </Link>
-              <Link
-                href="/admin/referrals"
-                className={`flex items-center gap-3 px-3 py-2.5 mt-1 rounded-xl text-sm font-medium transition-colors ${
-                  pathname.startsWith('/admin/referrals')
-                    ? 'bg-amber-500/20 text-honey-400 border border-honey-500/30 font-bold shadow-md shadow-honey-500/10'
-                    : 'text-honey-400/80 hover:text-honey-300 hover:bg-dark-850'
-                }`}
-              >
-                <Wallet className="w-4 h-4 text-honey-400" />
-                {t('nav.partnerPayouts')}
-              </Link>
-              <Link
-                href="/admin/grid"
-                className={`flex items-center gap-3 px-3 py-2.5 mt-1 rounded-xl text-sm font-medium transition-colors ${
-                  pathname.startsWith('/admin/grid')
-                    ? 'bg-amber-500/20 text-honey-400 border border-honey-500/30 font-bold shadow-md shadow-honey-500/10'
-                    : 'text-honey-400/80 hover:text-honey-300 hover:bg-dark-850'
-                }`}
-              >
-                <Grid3x3 className="w-4 h-4 text-honey-400" />
-                {t('nav.adminGrid')}
               </Link>
             </div>
           )}

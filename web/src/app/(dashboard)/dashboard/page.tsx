@@ -26,6 +26,7 @@ import { toast } from '@/components/ui/sonner';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { isUnfilledSimulation } from '@/lib/positions';
 import { playWarningSound } from '@/lib/sound';
+import { hasProModules } from '@/lib/pro-access';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -46,6 +47,7 @@ export default function DashboardPage() {
   const [isToggleModalOpen, setIsToggleModalOpen] = useState(false);
   const [isMissingExchangeModalOpen, setIsMissingExchangeModalOpen] = useState(false);
   const [signalStrategyIds, setSignalStrategyIds] = useState<string[]>([]);
+  const [proModules, setProModules] = useState(false);
   const [engineRisk, setEngineRisk] = useState({
     defaultLeverage: 3,
     tpDisabled: true,
@@ -91,6 +93,13 @@ export default function DashboardPage() {
         return;
       }
       setCurrentUser(user);
+
+      const { data: profile } = await supabase
+        .from('users_profile')
+        .select('subscription_plan, subscription_status, is_frozen')
+        .eq('id', user.id)
+        .maybeSingle();
+      setProModules(hasProModules(profile));
 
       // 1. Fetch user trading settings
       const { data: sett } = await supabase
@@ -438,10 +447,10 @@ export default function DashboardPage() {
     if (nextState) {
       const { data: profile } = await supabase
         .from('users_profile')
-        .select('subscription_plan')
+        .select('subscription_plan, subscription_status, is_frozen')
         .eq('id', currentUser?.id || settings.user_id)
         .maybeSingle();
-      if (profile?.subscription_plan !== 'pro') {
+      if (!hasProModules(profile)) {
         setIsToggleModalOpen(false);
         toast.error(t('dashboard.litePairLocked'));
         return;
@@ -853,22 +862,36 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <TradeReadinessMonitor
-        marketData={marketData}
-        activeBasket={activeBasket}
-        positions={positions}
-        isBotActive={isBotActive}
-        hasValidatedAccount={hasValidatedAccount}
-        freeMargin={totalFreeMargin}
-        hasInsufficientMargin={hasInsufficientMargin}
-        onStartBotClick={() => {
-          if (!settings?.is_bot_active && !hasValidatedAccount) {
-            setIsMissingExchangeModalOpen(true);
-          } else {
-            setIsToggleModalOpen(true);
-          }
-        }}
-      />
+      <div className="relative overflow-hidden rounded-2xl">
+        <div className={proModules ? undefined : 'pointer-events-none select-none blur-lg'} aria-hidden={proModules ? undefined : true}>
+          <TradeReadinessMonitor
+            marketData={marketData}
+            activeBasket={activeBasket}
+            positions={positions}
+            isBotActive={isBotActive}
+            hasValidatedAccount={hasValidatedAccount}
+            freeMargin={totalFreeMargin}
+            hasInsufficientMargin={hasInsufficientMargin}
+            onStartBotClick={() => {
+              if (!settings?.is_bot_active && !hasValidatedAccount) {
+                setIsMissingExchangeModalOpen(true);
+              } else {
+                setIsToggleModalOpen(true);
+              }
+            }}
+          />
+        </div>
+        {!proModules && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-dark-950/35 p-4">
+            <Link
+              href="/billing"
+              className="rounded-xl bg-honey-500 px-5 py-2.5 text-sm font-bold text-dark-950 shadow-lg shadow-honey-500/30"
+            >
+              {t('dashboard.goToPro')}
+            </Link>
+          </div>
+        )}
+      </div>
 
       {/* Active Basket Positions Table */}
       <div className="bg-dark-900 border border-dark-800 rounded-2xl shadow-2xl overflow-hidden">

@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { toast } from '@/components/ui/sonner';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { hasProModules } from '@/lib/pro-access';
 
 type ExchangeName = 'okx' | 'bybit';
 
@@ -104,11 +105,7 @@ export default function GridPage() {
           .limit(120),
       ]);
 
-    const entitled =
-      profile?.subscription_plan === 'pro' &&
-      !profile?.is_frozen &&
-      (profile?.subscription_status === 'trial' || profile?.subscription_status === 'active');
-    setPro(Boolean(entitled));
+    setPro(hasProModules(profile));
     setAccounts((accs || []) as Account[]);
     const coins = (active || []) as Template[];
     setTemplates(coins);
@@ -373,27 +370,43 @@ export default function GridPage() {
       {createOpen && (
         <div className="fixed inset-0 z-40 flex items-center justify-center p-4">
           <button type="button" className="absolute inset-0 bg-black/70" aria-label={t('common.cancel')} onClick={() => setCreateOpen(false)} />
-          <div className="relative w-full max-w-md rounded-2xl border border-dark-800 bg-dark-900 p-5">
+          <div className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-dark-800 bg-dark-900 p-5">
             <div className="flex items-start justify-between gap-3">
               <h2 className="text-lg font-bold text-white">{t('grid.create')}</h2>
               <button type="button" onClick={() => setCreateOpen(false)} className="rounded-lg p-1 text-slate-400">
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <label className="mt-4 block text-sm text-slate-300">
-              {t('grid.coin')}
-              <select
-                value={draftCoin}
-                onChange={(event) => setDraftCoin(event.target.value)}
-                className="mt-2 w-full rounded-xl border border-dark-700 bg-dark-950 px-3 py-2 font-mono text-white outline-none focus:border-honey-500"
-              >
-                {templates.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.base_asset}/USDT · {px(item.lower_price)}–{px(item.upper_price)} · {Number(item.leverage)}x
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="mt-4">
+              <p className="text-sm text-slate-300">{t('grid.coin')}</p>
+              {templates.length === 0 ? (
+                <p className="mt-2 text-sm text-slate-500">{t('grid.noCoin')}</p>
+              ) : (
+                <div className="mt-2 grid max-h-56 grid-cols-2 gap-2 overflow-y-auto">
+                  {templates.map((item) => {
+                    const selected = draftCoin === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => setDraftCoin(item.id)}
+                        className={`rounded-xl border px-3 py-2 text-left transition-colors ${
+                          selected
+                            ? 'border-honey-500 bg-honey-500/10'
+                            : 'border-dark-700 bg-dark-950 hover:border-dark-600'
+                        }`}
+                      >
+                        <span className="block font-mono text-sm font-bold text-white">{item.base_asset}/USDT</span>
+                        <span className="mt-0.5 block font-mono text-[11px] text-slate-400">
+                          {px(item.lower_price)}–{px(item.upper_price)} · {Number(item.leverage)}x
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
             <div className="mt-4 text-sm text-slate-300">
               {t('grid.exchange')}
               <div className="mt-2 flex gap-2">
