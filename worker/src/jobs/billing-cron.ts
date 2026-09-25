@@ -1,5 +1,12 @@
 import { supabase, CONFIG } from '../config.js';
 import { UserProfile } from '../types/index.js';
+import {
+  isBillingInterval,
+  isSubscriptionPlan,
+  planPriceUsd,
+  type BillingInterval,
+  type SubscriptionPlan,
+} from '../plans.js';
 
 export class BillingCronJob {
   private timer: NodeJS.Timeout | null = null;
@@ -31,7 +38,7 @@ export class BillingCronJob {
           .limit(1);
 
         if (!openInvs || openInvs.length === 0) {
-          await this.generateWeeklyInvoice(u);
+          await this.generatePlanInvoice(u);
         }
       }
     }
@@ -56,7 +63,7 @@ export class BillingCronJob {
           .limit(1);
 
         if (!openInvs || openInvs.length === 0) {
-          await this.generateWeeklyInvoice(u);
+          await this.generatePlanInvoice(u);
         }
       }
     }
@@ -85,31 +92,25 @@ export class BillingCronJob {
     }
   }
 
-  private async generateWeeklyInvoice(user: UserProfile) {
+  private async generatePlanInvoice(user: UserProfile) {
     const periodEnd = new Date();
     const periodStart = new Date(Date.now() - 7 * 86400000);
     const dueDate = new Date(Date.now() + 48 * 3600000); // 48h Grace Period
 
-    // Calculate realized PnL in the last 7 days
-    const { data: closedPositions } = await supabase
-      .from('bot_positions')
-      .select('realized_pnl_usd, long_order_id, short_order_id')
-      .eq('user_id', user.id)
-      .eq('status', 'closed')
-      .gte('closed_at', periodStart.toISOString());
-
-    const realizedProfit = (closedPositions || [])
-      .filter((p) => {
-        const longId = String(p.long_order_id || '');
-        const shortId = String(p.short_order_id || '');
-        return !longId.startsWith('sim-') && !shortId.startsWith('sim-');
-      })
-      .reduce((sum, p) => sum + (Number(p.realized_pnl_usd) || 0), 0);
-
-    const baseFee = 20.0;
-    // Flat weekly subscription only: no performance / profit share fee.
+    const plan: SubscriptionPlan = isSubscriptionPlan(user.pending_subscription_plan)
+      ? user.pending_subscription_plan
+      : isSubscriptionPlan(user.subscription_plan)
+        ? user.subscription_plan
+        : 'lite';
+    const interval: BillingInterval = isBillingInterval(user.pending_billing_interval)
+      ? user.pending_billing_interval
+      : isBillingInterval(user.billing_interval)
+        ? user.billing_interval
+        : 'month';
+    const baseFee = planPriceUsd(plan, interval);
     const profitFee = 0;
     const totalAmount = baseFee;
+    const realizedProfit = 0;
 
     const invoiceNumber = `INV-${Date.now().toString(36).toUpperCase()}`;
 
@@ -128,6 +129,8 @@ export class BillingCronJob {
       payment_wallet_address: CONFIG.adminAptosWallet,
       due_date: dueDate.toISOString(),
       user_notes: 'Payment network: USDT on Aptos (OKX)',
+      subscription_plan: plan,
+      billing_interval: interval,
     };
 
     // Defensively try inserting with payment_network: 'APTOS'.

@@ -37,6 +37,34 @@ export async function POST(request: Request) {
       );
     }
 
+    const { data: profile } = await supabase
+      .from('users_profile')
+      .select('subscription_plan')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (profile?.subscription_plan !== 'pro') {
+      const { data: existingAccounts, error: accountsError } = await supabase
+        .from('exchange_accounts')
+        .select('exchange')
+        .eq('user_id', user.id);
+
+      if (accountsError) {
+        return NextResponse.json(
+          { error: `Database error checking exchanges: ${accountsError.message}` },
+          { status: 500 }
+        );
+      }
+
+      const otherExchanges = (existingAccounts || []).filter((account) => account.exchange !== exchange);
+      if (otherExchanges.length >= 1) {
+        return NextResponse.json(
+          { error: 'Lite plan allows one exchange. Upgrade to Pro to connect Binance, OKX and Bybit.' },
+          { status: 403 }
+        );
+      }
+    }
+
     // Live CCXT calls must run on the worker (static egress IP), not on Vercel.
     const validation = await validateExchangeViaWorker(
       exchange,

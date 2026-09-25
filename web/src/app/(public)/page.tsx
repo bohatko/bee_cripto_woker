@@ -16,7 +16,6 @@ import {
   Server,
   ShieldCheck,
   TrendingDown,
-  UsersRound,
   Zap,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
@@ -27,17 +26,21 @@ import { BeeHeroScene } from '@/components/landing/BeeHeroScene';
 type PairMarketRow = {
   pair_symbol: string;
   is_in_trend: boolean | null;
-  current_ratio: number | string | null;
-  ema_10: number | string | null;
 };
 
-const FEATURES = [
-  'landing.planFeature1',
-  'landing.planFeature2',
-  'landing.planFeature3',
-  'landing.planFeature4',
-  'landing.planFeature5',
-  'landing.planFeature6',
+const LITE_FEATURES = [
+  'landing.liteFeature1',
+  'landing.liteFeature2',
+  'landing.liteFeature3',
+  'landing.liteFeature4',
+];
+
+const PRO_FEATURES = [
+  'landing.proFeature1',
+  'landing.proFeature2',
+  'landing.proFeature3',
+  'landing.proFeature4',
+  'landing.proFeature5',
 ];
 
 const STEPS = [
@@ -71,44 +74,10 @@ function SectionHeading({
   );
 }
 
-function ProfitPanel({
-  whatIs,
-  prefix,
-  tone,
-  note,
-  caveat,
-}: {
-  whatIs: string;
-  prefix: 'pair' | 'signal';
-  tone: 'outcome' | 'payoff';
-  note: string;
-  caveat: string;
-}) {
-  const { t } = useLanguage();
-
+function ProfitPanel({ whatIs }: { whatIs: string }) {
   return (
     <div className="mt-7 rounded-xl border border-dark-800 bg-dark-950 p-5">
       <p className="text-sm leading-relaxed text-slate-300">{whatIs}</p>
-      <div className="mt-5 grid grid-cols-1 gap-4 border-t border-dark-800 pt-4 sm:grid-cols-3">
-        {[1, 2, 3].map((index) => {
-          const value = t(`landing.${prefix}Stat${index}Value`);
-          const label = t(`landing.${prefix}Stat${index}Label`);
-          const valueClass =
-            tone === 'payoff'
-              ? 'text-slate-100'
-              : index === 3
-                ? 'text-rose-400'
-                : 'text-emerald-400';
-          return (
-            <div key={index}>
-              <span className={`block font-mono text-lg font-bold ${valueClass}`}>{value}</span>
-              <span className="mt-0.5 block text-[11px] leading-tight text-slate-500">{label}</span>
-            </div>
-          );
-        })}
-      </div>
-      <p className="mt-4 border-t border-dark-800 pt-3 text-[11px] leading-relaxed text-slate-500">{note}</p>
-      <p className="mt-2 text-[11px] leading-relaxed text-honey-400/70">{caveat}</p>
     </div>
   );
 }
@@ -117,8 +86,7 @@ const CALC_MIN_BALANCE = 1200;
 const CALC_MAX_BALANCE = 500000;
 const CALC_SLIDER_STEPS = 1000;
 const CALC_SIX_MONTH_RETURN = 1.1;
-const CALC_WEEKLY_FEE = 20;
-const CALC_WEEKS_PER_MONTH = 4.345;
+const CALC_MONTHLY_FEE = { lite: 70, pro: 200 } as const;
 const CALC_PRESETS = [1200, 5000, 20000, 100000, 500000];
 const CALC_HORIZONS = [
   { months: 1, label: 'landing.calcHorizon1' },
@@ -139,6 +107,7 @@ function ProfitCalculator() {
   const { t, dateLocale } = useLanguage();
   const [sliderPosition, setSliderPosition] = useState(() => balanceToSlider(20000));
   const [months, setMonths] = useState(60);
+  const [calcPlan, setCalcPlan] = useState<'lite' | 'pro'>('lite');
 
   const rawBalance =
     CALC_MIN_BALANCE *
@@ -146,8 +115,9 @@ function ProfitCalculator() {
   const balanceStep = rawBalance >= 100000 ? 1000 : rawBalance >= 10000 ? 100 : 50;
   const balance = Math.round(rawBalance / balanceStep) * balanceStep;
 
-  const grossProfit = balance * (Math.pow(1 + CALC_SIX_MONTH_RETURN, months / 6) - 1);
-  const fixedFee = CALC_WEEKLY_FEE * months * CALC_WEEKS_PER_MONTH;
+  const liteGrossProfit = balance * (Math.pow(1 + CALC_SIX_MONTH_RETURN, months / 6) - 1);
+  const grossProfit = calcPlan === 'pro' ? liteGrossProfit * 3 : liteGrossProfit;
+  const fixedFee = CALC_MONTHLY_FEE[calcPlan] * months;
   const netProfit = Math.max(grossProfit - fixedFee, -balance);
   const finalBalance = balance + netProfit;
   const effectiveRate = balance > 0 ? (netProfit / balance) * 100 : 0;
@@ -198,6 +168,24 @@ function ProfitCalculator() {
         <p className="mt-3 text-xs text-slate-500">{t('landing.calcBalanceHint')}</p>
       </div>
 
+      <div className="mb-6 flex flex-wrap gap-2">
+        {(['lite', 'pro'] as const).map((plan) => (
+          <button
+            key={plan}
+            type="button"
+            onClick={() => setCalcPlan(plan)}
+            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-colors ${
+              calcPlan === plan
+                ? 'border-honey-500/50 bg-honey-500/10 text-honey-400'
+                : 'border-dark-800 bg-dark-950 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            {t(plan === 'lite' ? 'landing.liteName' : 'landing.proName')} · ${CALC_MONTHLY_FEE[plan]}
+            {t('landing.perMonth')}
+          </button>
+        ))}
+      </div>
+
       <div className="mb-6">
         <span className="text-xs font-medium uppercase text-slate-400">
           {t('landing.calcHorizonLabel')}
@@ -235,7 +223,9 @@ function ProfitCalculator() {
         </div>
         <div className="rounded-xl border border-dark-800 bg-dark-950 p-5">
           <span className="text-xs font-medium uppercase text-slate-400">
-            {t('landing.calcFixedFee')}
+            {t('landing.calcFixedFee', {
+              plan: t(calcPlan === 'lite' ? 'landing.liteName' : 'landing.proName'),
+            })}
           </span>
           <p className="mt-1 font-mono text-xl font-bold text-slate-200">{formatUsd(fixedFee)}</p>
         </div>
@@ -285,6 +275,7 @@ export default function LandingPage() {
   const { t } = useLanguage();
   const [marketPairs, setMarketPairs] = useState<PairMarketRow[]>([]);
   const [hintVisible, setHintVisible] = useState(true);
+  const [yearly, setYearly] = useState(false);
 
   useEffect(() => {
     async function fetchMarket() {
@@ -307,9 +298,6 @@ export default function LandingPage() {
     };
   }, []);
 
-  const pairsInTrend = marketPairs.filter((pair) => pair.is_in_trend).length;
-  const basketSize = marketPairs.length > 0 ? marketPairs.length : 4;
-
   return (
     <div className="flex min-h-screen flex-col bg-dark-950 text-slate-100 selection:bg-honey-500 selection:text-black">
       {/* Navigation Header */}
@@ -321,7 +309,7 @@ export default function LandingPage() {
             </div>
             <div className="flex items-baseline gap-1.5">
               <span className="text-lg font-extrabold tracking-tight text-white">
-                CRYPTO <span className="text-honey-400">B</span>
+                CRYPTO <span className="text-honey-400">BEE</span>
               </span>
             </div>
           </Link>
@@ -373,12 +361,9 @@ export default function LandingPage() {
 
         <div className="relative mx-auto max-w-7xl px-4 pb-24 pt-16 sm:px-6 lg:px-8 lg:pb-36 lg:pt-24">
           <div className="mx-auto max-w-xl text-center lg:mx-0 lg:text-left">
-            <div className="inline-flex items-center gap-2 rounded-full border border-dark-700/80 bg-dark-900/90 px-3.5 py-1.5 font-mono text-xs text-slate-300 backdrop-blur">
+            <div className="inline-flex items-center gap-2 rounded-full border border-dark-700/80 bg-dark-900/90 px-3.5 py-1.5 text-xs text-slate-300 backdrop-blur">
               <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-              <span className="hidden sm:inline">{t('landing.heroBadge')}</span>
-              <span className="font-semibold text-honey-400">
-                {t('landing.pairsInTrend', { count: pairsInTrend, total: basketSize })}
-              </span>
+              <span className="font-semibold text-emerald-400">{t('landing.heroStatus')}</span>
             </div>
 
             <h1 className="mt-8 text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl lg:text-6xl">
@@ -425,11 +410,11 @@ export default function LandingPage() {
 
             <div className="mt-10 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 font-mono text-xs text-slate-500 lg:justify-start">
               <span>{t('landing.compatible')}</span>
-              <span className="font-semibold text-slate-300">BINANCE FUTURES</span>
+              <span className="font-semibold text-slate-300">BINANCE</span>
               <span>•</span>
-              <span className="font-semibold text-slate-300">OKX SWAP</span>
+              <span className="font-semibold text-slate-300">OKX</span>
               <span>•</span>
-              <span className="font-semibold text-slate-300">BYBIT DERIVATIVES</span>
+              <span className="font-semibold text-slate-300">BYBIT</span>
             </div>
           </div>
         </div>
@@ -471,16 +456,6 @@ export default function LandingPage() {
                       {pair.is_in_trend ? t('landing.activeTrend') : t('landing.flat')}
                     </span>
                   </div>
-                  <div className="mt-3 flex items-baseline justify-between font-mono">
-                    <span className="text-xs text-slate-400">{t('landing.ratio')}</span>
-                    <span className="text-sm font-semibold text-honey-400">
-                      {Number(pair.current_ratio).toFixed(4)}
-                    </span>
-                  </div>
-                  <div className="flex items-baseline justify-between font-mono text-[11px] text-slate-500">
-                    <span>{t('landing.ema10')}</span>
-                    <span>{Number(pair.ema_10).toFixed(4)}</span>
-                  </div>
                 </div>
               ))
             )}
@@ -517,13 +492,7 @@ export default function LandingPage() {
               </ul>
 
               <div className="mt-auto">
-                <ProfitPanel
-                  whatIs={t('landing.pairWhatIs')}
-                  prefix="pair"
-                  tone="outcome"
-                  note={t('landing.pairProfitNote')}
-                  caveat={t('landing.pairCaveat')}
-                />
+                <ProfitPanel whatIs={t('landing.pairWhatIs')} />
               </div>
             </article>
 
@@ -553,13 +522,7 @@ export default function LandingPage() {
               </ul>
 
               <div className="mt-auto">
-                <ProfitPanel
-                  whatIs={t('landing.signalWhatIs')}
-                  prefix="signal"
-                  tone="payoff"
-                  note={t('landing.signalProfitNote')}
-                  caveat={t('landing.signalCaveat')}
-                />
+                <ProfitPanel whatIs={t('landing.signalWhatIs')} />
               </div>
             </article>
           </div>
@@ -602,54 +565,91 @@ export default function LandingPage() {
 
       {/* Pricing */}
       <section id="pricing" className="scroll-mt-20 border-t border-dark-800 py-20">
-        <div className="mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
           <SectionHeading title={t('landing.pricingTitle')} subtitle={t('landing.pricingSubtitle')} />
 
-          <div className="relative rounded-3xl border-2 border-honey-500/40 bg-dark-900 p-8 shadow-2xl sm:p-12">
-            <div className="absolute -top-4 left-1/2 -translate-x-1/2 rounded-full bg-honey-500 px-4 py-1 text-xs font-bold uppercase tracking-wider text-dark-950">
-              {t('landing.trialIncluded')}
+          <div className="mb-8 flex justify-center">
+            <div className="inline-flex rounded-xl border border-dark-700 bg-dark-900 p-1">
+              <button
+                type="button"
+                onClick={() => setYearly(false)}
+                className={`rounded-lg px-4 py-2 text-sm font-semibold ${
+                  yearly ? 'text-slate-400' : 'bg-honey-500 text-dark-950'
+                }`}
+              >
+                {t('landing.monthly')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setYearly(true)}
+                className={`rounded-lg px-4 py-2 text-sm font-semibold ${
+                  yearly ? 'bg-honey-500 text-dark-950' : 'text-slate-400'
+                }`}
+              >
+                {t('landing.yearly')}
+              </button>
             </div>
-
-            <h3 className="text-2xl font-bold text-white">{t('landing.fullAccess')}</h3>
-            <div className="mt-6 flex items-baseline justify-center gap-2">
-              <span className="font-mono text-5xl font-black text-honey-400">$20</span>
-              <span className="font-medium text-slate-400">{t('landing.perWeekPrice')}</span>
-            </div>
-            <p className="mt-2 font-mono text-sm text-slate-400">{t('landing.profitShare')}</p>
-
-            <ul className="mx-auto mt-8 max-w-md space-y-3.5 text-left text-sm text-slate-300">
-              {FEATURES.map((key) => (
-                <li key={key} className="flex items-center gap-3">
-                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-400" />
-                  <span>{t(key)}</span>
-                </li>
-              ))}
-            </ul>
-
-            <Link
-              href="/register"
-              className="mt-10 block w-full rounded-xl bg-honey-500 py-4 text-base font-bold text-dark-950 shadow-xl shadow-honey-500/20 transition-all hover:bg-honey-400"
-            >
-              {t('landing.getStarted')}
-            </Link>
           </div>
 
-          <div className="mx-auto mt-8 flex max-w-3xl flex-col items-center gap-4 rounded-2xl border border-honey-500/25 bg-honey-500/5 px-6 py-8 text-center sm:px-10">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-honey-500/10 text-honey-400">
-              <UsersRound className="h-5 w-5" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-white">{t('landing.referralTitle')}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-400">{t('landing.referralSubtitle')}</p>
-            </div>
-            <Link
-              href="/register"
-              className="inline-flex items-center gap-2 text-sm font-semibold text-honey-400 transition-colors hover:text-honey-300"
-            >
-              {t('landing.referralCta')}
-              <ChevronRight className="h-4 w-4" />
-            </Link>
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <article className="flex flex-col rounded-3xl border border-dark-800 bg-dark-900 p-8 text-left">
+              <span className="w-fit rounded-full border border-dark-700 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-300">
+                {t('landing.trialIncluded')}
+              </span>
+              <h3 className="mt-4 text-2xl font-bold text-white">{t('landing.liteName')}</h3>
+              <div className="mt-4 flex items-baseline gap-2">
+                <span className="font-mono text-5xl font-black text-honey-400">
+                  {yearly ? t('landing.litePriceYear') : t('landing.litePriceMonth')}
+                </span>
+                <span className="text-slate-400">{yearly ? t('landing.perYear') : t('landing.perMonth')}</span>
+              </div>
+              {yearly && <p className="mt-1 text-xs text-slate-500">{t('landing.billedYearly')}</p>}
+              <ul className="mt-6 space-y-3 text-sm text-slate-300">
+                {LITE_FEATURES.map((key) => (
+                  <li key={key} className="flex items-start gap-3">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                    <span>{t(key)}</span>
+                  </li>
+                ))}
+              </ul>
+              <Link
+                href="/register"
+                className="mt-8 block rounded-xl border border-honey-500/40 py-3 text-center text-sm font-bold text-honey-400 transition-colors hover:bg-honey-500/10"
+              >
+                {t('landing.getStarted')}
+              </Link>
+            </article>
+
+            <article className="flex flex-col rounded-3xl border-2 border-honey-500/40 bg-dark-900 p-8 text-left shadow-2xl">
+              <span className="w-fit rounded-full bg-honey-500 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-dark-950">
+                {t('landing.trialIncluded')}
+              </span>
+              <h3 className="mt-4 text-2xl font-bold text-white">{t('landing.proName')}</h3>
+              <div className="mt-4 flex items-baseline gap-2">
+                <span className="font-mono text-5xl font-black text-honey-400">
+                  {yearly ? t('landing.proPriceYear') : t('landing.proPriceMonth')}
+                </span>
+                <span className="text-slate-400">{yearly ? t('landing.perYear') : t('landing.perMonth')}</span>
+              </div>
+              {yearly && <p className="mt-1 text-xs text-slate-500">{t('landing.billedYearly')}</p>}
+              <ul className="mt-6 space-y-3 text-sm text-slate-300">
+                {PRO_FEATURES.map((key) => (
+                  <li key={key} className="flex items-start gap-3">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+                    <span>{t(key)}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-4 text-xs leading-relaxed text-slate-500">{t('landing.insuranceNote')}</p>
+              <Link
+                href="/register"
+                className="mt-8 block rounded-xl bg-honey-500 py-3 text-center text-sm font-bold text-dark-950 shadow-xl shadow-honey-500/20 transition-colors hover:bg-honey-400"
+              >
+                {t('landing.getStarted')}
+              </Link>
+            </article>
           </div>
+
         </div>
       </section>
 
@@ -668,11 +668,6 @@ export default function LandingPage() {
               <Server className="mx-auto mb-3 h-8 w-8 text-honey-400" />
               <h4 className="mb-1 font-bold text-white">{t('landing.staticIpTitle')}</h4>
               <p className="text-xs leading-relaxed text-slate-400">{t('landing.staticIpDesc')}</p>
-              <p className="mt-3 space-y-1 font-mono text-xs text-honey-400">
-                <span className="block">208.77.244.240</span>
-                <span className="block">152.55.185.189</span>
-                <span className="block">152.55.185.190</span>
-              </p>
             </div>
             <div className="rounded-2xl border border-dark-800 bg-dark-900 p-6 text-center">
               <ShieldCheck className="mx-auto mb-3 h-8 w-8 text-honey-400" />

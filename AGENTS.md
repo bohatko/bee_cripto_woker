@@ -13,7 +13,7 @@
 | Файл | Описание и что в нем искать |
 |---|---|
 | [`doc/README.md`](doc/README.md) | **Главный индекс документации** и быстрый путеводитель. |
-| [`doc/01_TECHNICAL_SPECIFICATION.md`](doc/01_TECHNICAL_SPECIFICATION.md) | **Полное техническое задание**: описание SaaS, бизнес-модель, триал 7 дней, $20/нед (без performance fee), политика неоплаты (Вариант А), архитектура системы. |
+| [`doc/01_TECHNICAL_SPECIFICATION.md`](doc/01_TECHNICAL_SPECIFICATION.md) | **Полное техническое задание**: описание SaaS, бизнес-модель, триал 7 дней, тарифы Лайт (70/700 USDT) и Про (200/2000 USDT) без процента с прибыли, политика неоплаты (Вариант А), архитектура системы. |
 | [`doc/02_STRATEGY_AND_BACKTESTS.md`](doc/02_STRATEGY_AND_BACKTESTS.md) | **Математика стратегии и честные бэктесты**: теория парного трейдинга, состав корзины, Scenario A/C (`research/backtest/`), коинтеграция (`research/cointegration/`), робастность и paper-trading config (раздел 6). |
 | [`doc/03_DATABASE_SCHEMA.sql`](doc/03_DATABASE_SCHEMA.sql) | **SQL-схема Supabase**: 15 таблиц (включая `strategy_pairs` / `pair_selection_runs` / `engine_settings` и 4 таблицы сигналов), ENUM-типы, RLS, Realtime. |
 | [`doc/04_WORKER_ENGINE_SPECIFICATION.md`](doc/04_WORKER_ENGINE_SPECIFICATION.md) | **Спецификация воркера на Railway**: 24/7 демон, статический Egress IP, шифрование ключей AES-256-GCM, CCXT-фабрика, логика расчета EMA 10, ATR-стоп-лосс (`SL_ATR_MULT=1.5`) и trend-flip выход. |

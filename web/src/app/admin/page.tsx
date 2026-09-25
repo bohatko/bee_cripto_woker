@@ -314,23 +314,46 @@ export default function AdminDashboardPage() {
           })
           .eq('id', selectedInvoice.id);
 
-        // 2. Extend subscription for user by 7 days and unfreeze if frozen
+        // 2. Extend the paid period for the invoiced plan and unfreeze if frozen.
         const currentPaidUntil = selectedInvoice.users_profile?.subscription_paid_until;
         const baseDate =
           currentPaidUntil && new Date(currentPaidUntil).getTime() > Date.now()
-            ? new Date(currentPaidUntil).getTime()
-            : Date.now();
-        const newPaidUntil = new Date(baseDate + 7 * 86400000).toISOString();
+            ? new Date(currentPaidUntil)
+            : new Date();
+        const interval = selectedInvoice.billing_interval;
+        const paidUntil = new Date(baseDate);
+        if (interval === 'year') {
+          paidUntil.setUTCMonth(paidUntil.getUTCMonth() + 12);
+        } else if (interval === 'month') {
+          paidUntil.setUTCMonth(paidUntil.getUTCMonth() + 1);
+        } else {
+          paidUntil.setUTCDate(paidUntil.getUTCDate() + 7);
+        }
+
+        const profileUpdate: Record<string, unknown> = {
+          subscription_status: 'active',
+          is_frozen: false,
+          subscription_paid_until: paidUntil.toISOString(),
+          high_water_mark_equity: selectedInvoice.hwm_after || 0,
+          pending_subscription_plan: null,
+          pending_billing_interval: null,
+        };
+        if (selectedInvoice.subscription_plan === 'lite' || selectedInvoice.subscription_plan === 'pro') {
+          profileUpdate.subscription_plan = selectedInvoice.subscription_plan;
+          profileUpdate.billing_interval = interval === 'year' ? 'year' : 'month';
+        }
 
         await supabase
           .from('users_profile')
-          .update({
-            subscription_status: 'active',
-            is_frozen: false,
-            subscription_paid_until: newPaidUntil,
-            high_water_mark_equity: selectedInvoice.hwm_after || 0,
-          })
+          .update(profileUpdate)
           .eq('id', selectedInvoice.user_id);
+
+        if (selectedInvoice.subscription_plan === 'lite') {
+          await supabase
+            .from('trading_settings')
+            .update({ is_bot_active: false })
+            .eq('user_id', selectedInvoice.user_id);
+        }
 
         const successText = t('admin.approvedToast', { number: selectedInvoice.invoice_number });
         toast.success(successText);
@@ -661,15 +684,6 @@ export default function AdminDashboardPage() {
               <ArrowLeft className="w-4 h-4" />
               {t('admin.userDashboard')}
             </Link>
-
-            <Link
-              href="/admin/referrals"
-              className="p-2 rounded-xl bg-dark-800 hover:bg-dark-700 text-slate-300 hover:text-white transition-colors flex items-center gap-1.5 text-xs font-semibold"
-            >
-              Referral payouts
-            </Link>
-
-            <div className="h-5 w-px bg-dark-800" />
 
             <div className="flex items-center gap-2">
               <span className="text-lg font-extrabold text-white tracking-tight">{t('admin.adminControl')}</span>

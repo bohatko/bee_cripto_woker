@@ -435,6 +435,19 @@ export default function DashboardPage() {
 
     const nextState = !settings.is_bot_active;
 
+    if (nextState) {
+      const { data: profile } = await supabase
+        .from('users_profile')
+        .select('subscription_plan')
+        .eq('id', currentUser?.id || settings.user_id)
+        .maybeSingle();
+      if (profile?.subscription_plan !== 'pro') {
+        setIsToggleModalOpen(false);
+        toast.error(t('dashboard.litePairLocked'));
+        return;
+      }
+    }
+
     try {
       const { error } = await supabase
         .from('trading_settings')

@@ -125,6 +125,8 @@ export class OrderRouter {
         try {
           if (!user || user.is_frozen) return;
           if (!['trial', 'active'].includes(user.subscription_status)) return;
+          // Lite includes Dip-Buy only. Open pair legs stay with the position guard.
+          if (user.subscription_plan !== 'pro') return;
 
           // Strict requirement: User MUST have an active & validated exchange account connected
           if (!account || !account.is_active || !account.is_validated) {

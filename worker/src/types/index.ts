@@ -17,6 +17,10 @@ export interface UserProfile {
   /** Unique 7-digit payment reference shown to the user for OKX internal transfers. */
   external_uid: string;
   subscription_status: SubscriptionStatus;
+  subscription_plan?: 'lite' | 'pro';
+  billing_interval?: 'month' | 'year';
+  pending_subscription_plan?: 'lite' | 'pro' | null;
+  pending_billing_interval?: 'month' | 'year' | null;
   trial_start_at: string;
   trial_end_at: string;
   subscription_paid_until: string | null;

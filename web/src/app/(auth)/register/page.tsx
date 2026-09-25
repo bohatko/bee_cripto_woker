@@ -20,10 +20,9 @@ export default function RegisterPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    const code = new URLSearchParams(window.location.search).get('ref');
-    if (code) {
-      setReferralCode(code.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10));
-    }
+    const ref = new URLSearchParams(window.location.search).get('ref') || '';
+    const normalized = ref.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+    if (normalized.length === 10) setReferralCode(normalized);
   }, []);
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -31,22 +30,13 @@ export default function RegisterPage() {
     setLoading(true);
     setErrorMsg(null);
 
-    const normalizedReferralCode = referralCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-    if (normalizedReferralCode && normalizedReferralCode.length !== 10) {
-      const message = t('auth.referralCodeInvalid');
-      setErrorMsg(message);
-      toast.error(message);
-      setLoading(false);
-      return;
-    }
-
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
           full_name: fullName,
-          referral_code: normalizedReferralCode,
+          ...(referralCode.length === 10 ? { referral_code: referralCode } : {}),
         },
       },
     });
@@ -72,7 +62,9 @@ export default function RegisterPage() {
           <div className="w-10 h-10 rounded-xl bg-honey-500/10 border border-honey-500/30 flex items-center justify-center text-honey-500 font-bold text-2xl">
             🐝
           </div>
-          <span className="font-extrabold text-xl text-white tracking-tight">BEE CRYPTO</span>
+          <span className="font-extrabold text-xl text-white tracking-tight">
+            CRYPTO <span className="text-honey-400">BEE</span>
+          </span>
         </Link>
         <h2 className="text-2xl font-bold text-white tracking-tight">{t('auth.createAccountTitle')}</h2>
         <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-honey-500/10 border border-honey-500/20 text-xs font-mono text-honey-400">
@@ -150,19 +142,19 @@ export default function RegisterPage() {
 
             <div>
               <label className="block text-xs font-medium text-slate-300 uppercase mb-1.5">
-                {t('auth.referralCode')}{' '}
-                <span className="normal-case text-slate-500">{t('auth.referralCodeOptional')}</span>
+                {t('auth.referralLabel')}
               </label>
               <input
                 type="text"
                 value={referralCode}
+                maxLength={10}
                 onChange={(e) =>
                   setReferralCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))
                 }
-                placeholder="XXXXXXXXXX"
-                maxLength={10}
-                className="w-full px-4 py-2.5 bg-dark-950 border border-dark-700 rounded-xl text-white text-sm font-mono tracking-[0.2em] outline-none focus:border-honey-500 transition-colors"
+                placeholder="ABC123XYZ0"
+                className="w-full px-4 py-2.5 bg-dark-950 border border-dark-700 rounded-xl text-white font-mono text-sm tracking-wider outline-none focus:border-honey-500 transition-colors"
               />
+              <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500">{t('auth.referralHint')}</p>
             </div>
 
             <button

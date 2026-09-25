@@ -20,6 +20,7 @@ import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { toast } from '@/components/ui/sonner';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { BillingSkeleton } from '@/components/skeletons/PageSkeletons';
+import { PLAN_PRICE_USD, isBillingInterval, isSubscriptionPlan, type BillingInterval, type SubscriptionPlan } from '@/lib/plans';
 
 const APTOS_WALLET_ADDRESS =
   process.env.NEXT_PUBLIC_ADMIN_APTOS_WALLET ||
@@ -33,6 +34,9 @@ export default function BillingPage() {
   const router = useRouter();
   const { t, formatDate } = useLanguage();
   const [profile, setProfile] = useState<any>(null);
+  const [planDraft, setPlanDraft] = useState<SubscriptionPlan>('lite');
+  const [intervalDraft, setIntervalDraft] = useState<BillingInterval>('month');
+  const [savingPlan, setSavingPlan] = useState(false);
   const [userId, setUserId] = useState<string>('');
   const [invoices, setInvoices] = useState<any[]>([]);
   const [txHash, setTxHash] = useState('');
@@ -62,7 +66,13 @@ export default function BillingPage() {
         .eq('id', user.id)
         .single();
 
-      if (prof) setProfile(prof);
+      if (prof) {
+        setProfile(prof);
+        const selectedPlan = prof.pending_subscription_plan || prof.subscription_plan;
+        const selectedInterval = prof.pending_billing_interval || prof.billing_interval;
+        if (isSubscriptionPlan(selectedPlan)) setPlanDraft(selectedPlan);
+        if (isBillingInterval(selectedInterval)) setIntervalDraft(selectedInterval);
+      }
 
       const { data: invs } = await supabase
         .from('invoices')
@@ -164,7 +174,26 @@ export default function BillingPage() {
     return <BillingSkeleton />;
   }
 
+  const savePlan = async () => {
+    setSavingPlan(true);
+    const { error } = await supabase.rpc('select_subscription_plan', {
+      p_plan: planDraft,
+      p_interval: intervalDraft,
+    });
+    setSavingPlan(false);
+    if (error) {
+      toast.error(error.message || t('billing.planSaveError'));
+      return;
+    }
+    toast.success(t('billing.planSaved'));
+    await loadBilling();
+  };
+
   const isFrozen = profile?.is_frozen || profile?.subscription_status === 'frozen';
+  const entitledPlan: SubscriptionPlan = isSubscriptionPlan(profile?.subscription_plan)
+    ? profile.subscription_plan
+    : 'lite';
+  const planAppliesNow = profile?.subscription_status === 'trial' && !isFrozen;
   const isPendingReview = activeInvoice?.status === 'pending_review';
 
   return (
@@ -219,6 +248,60 @@ export default function BillingPage() {
           </div>
         )}
       </div>
+
+      <section className="bg-dark-900 border border-dark-800 rounded-2xl p-6 shadow-xl space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
+          <div>
+            <h2 className="font-bold text-white">{t('billing.choosePlan')}</h2>
+            <p className="text-xs text-slate-400 mt-1">
+              {t('billing.currentPlan', { plan: t(entitledPlan === 'pro' ? 'billing.planPro' : 'billing.planLite') })}
+              {' · '}
+              {planAppliesNow ? t('billing.planAppliesNow') : t('billing.planAppliesNext')}
+            </p>
+          </div>
+          <p className="font-mono text-lg font-bold text-honey-400">
+            ${PLAN_PRICE_USD[planDraft][intervalDraft]} USDT
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {(['lite', 'pro'] as const).map((plan) => (
+            <button
+              key={plan}
+              type="button"
+              onClick={() => setPlanDraft(plan)}
+              className={`px-4 py-2 rounded-xl text-sm font-bold border ${
+                planDraft === plan
+                  ? 'bg-honey-500 text-dark-950 border-honey-500'
+                  : 'bg-dark-950 text-slate-300 border-dark-700'
+              }`}
+            >
+              {t(plan === 'pro' ? 'billing.planPro' : 'billing.planLite')}
+            </button>
+          ))}
+          {(['month', 'year'] as const).map((interval) => (
+            <button
+              key={interval}
+              type="button"
+              onClick={() => setIntervalDraft(interval)}
+              className={`px-4 py-2 rounded-xl text-sm font-bold border ${
+                intervalDraft === interval
+                  ? 'bg-dark-800 text-white border-honey-500/50'
+                  : 'bg-dark-950 text-slate-400 border-dark-700'
+              }`}
+            >
+              {t(interval === 'year' ? 'billing.intervalYear' : 'billing.intervalMonth')}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={savePlan}
+          disabled={savingPlan}
+          className="px-4 py-2.5 rounded-xl text-sm font-bold bg-honey-500 hover:bg-honey-400 text-dark-950 disabled:opacity-50"
+        >
+          {savingPlan ? t('billing.submitting') : t('billing.choosePlan')}
+        </button>
+      </section>
 
       {/* Active Invoice & Payment Screen */}
       {activeInvoice ? (
@@ -448,8 +531,8 @@ export default function BillingPage() {
                     <span className="text-honey-400 font-semibold">USDT (Aptos)</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-400">Performance fee:</span>
-                    <span className="text-slate-500">$0.00 (Flat $20/week)</span>
+                    <span className="text-slate-400">{t('billing.profitFee')}</span>
+                    <span className="text-slate-500">{t('billing.noPerformanceFee')}</span>
                   </div>
                 </div>
 

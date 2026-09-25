@@ -9,11 +9,11 @@ import {
   History,
   TrendingUp,
   CreditCard,
+  Gift,
   LogOut,
   ShieldAlert,
   UserCog,
   Radar,
-  UsersRound,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
@@ -208,7 +208,7 @@ export default function DashboardLayout({
       items: [
         { name: t('nav.exchangeKeys'), href: '/settings/exchange', icon: KeyRound },
         { name: t('nav.billing'), href: '/billing', icon: CreditCard },
-        { name: t('nav.referrals'), href: '/referrals', icon: UsersRound },
+        { name: t('nav.referrals'), href: '/referrals', icon: Gift },
       ],
     },
   ];
@@ -235,7 +235,9 @@ export default function DashboardLayout({
             🐝
           </div>
           <div>
-            <h1 className="font-extrabold tracking-tight text-white text-base">CRYPTO BEE</h1>
+            <h1 className="font-extrabold tracking-tight text-white text-base">
+              CRYPTO <span className="text-honey-400">BEE</span>
+            </h1>
           </div>
         </div>
 

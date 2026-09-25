@@ -1,5 +1,6 @@
+-- SUPERSEDED by doc/migrations/2026-09-25_subscription_plans.sql.
+-- Do not apply this file. The percentage referral payout was removed.
 -- Referral program: one-level 10% weekly reward on invitees' positive realised PnL.
--- Apply this migration in the Supabase SQL Editor before deploying the web/worker changes.
 
 -- A short immutable code is safer to share than an internal user ID.
 CREATE OR REPLACE FUNCTION public.generate_referral_code()

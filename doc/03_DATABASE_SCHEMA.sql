@@ -68,6 +68,10 @@ CREATE TABLE IF NOT EXISTS public.users_profile (
     full_name TEXT,
     role user_role DEFAULT 'user'::user_role NOT NULL,
     subscription_status subscription_status DEFAULT 'trial'::subscription_status NOT NULL,
+    subscription_plan TEXT DEFAULT 'lite' NOT NULL CHECK (subscription_plan IN ('lite', 'pro')),
+    billing_interval TEXT DEFAULT 'month' NOT NULL CHECK (billing_interval IN ('month', 'year')),
+    pending_subscription_plan TEXT CHECK (pending_subscription_plan IS NULL OR pending_subscription_plan IN ('lite', 'pro')),
+    pending_billing_interval TEXT CHECK (pending_billing_interval IS NULL OR pending_billing_interval IN ('month', 'year')),
     trial_start_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     trial_end_at TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '7 days') NOT NULL,
     subscription_paid_until TIMESTAMPTZ,
@@ -77,6 +81,10 @@ CREATE TABLE IF NOT EXISTS public.users_profile (
     -- user UUID, auto-filled on insert by trg_users_profile_external_uid.
     external_uid TEXT NOT NULL UNIQUE
         CONSTRAINT users_profile_external_uid_format CHECK (external_uid ~ '^[0-9]{7}$'),
+    -- Immutable partner code. A $50 bonus is credited once when the invitee pays
+    -- a subscription of at least Lite monthly (70 USDT). See referral_attributions.
+    referral_code TEXT NOT NULL UNIQUE
+        CONSTRAINT users_profile_referral_code_format CHECK (referral_code ~ '^[A-Z0-9]{10}$'),
     -- Per-user Telegram (bot token AES-256-GCM encrypted as iv:tag:ciphertext)
     telegram_bot_token_enc TEXT,
     telegram_chat_id TEXT,
@@ -202,7 +210,7 @@ CREATE TABLE IF NOT EXISTS public.bot_positions (
 );
 
 -- ==============================================================================
--- ТАБЛИЦА 6: invoices (Биллинг: фиксированная абонплата $20/нед)
+-- ТАБЛИЦА 6: invoices (Биллинг: Лайт 70/700 USDT, Про 200/2000 USDT)
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.invoices (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -212,7 +220,9 @@ CREATE TABLE IF NOT EXISTS public.invoices (
     period_end TIMESTAMPTZ NOT NULL,
     
     -- Расчет платежа
-    base_fee_usd NUMERIC(10, 2) DEFAULT 20.00 NOT NULL,
+    base_fee_usd NUMERIC(10, 2) DEFAULT 70.00 NOT NULL,
+    subscription_plan TEXT CHECK (subscription_plan IS NULL OR subscription_plan IN ('lite', 'pro')),
+    billing_interval TEXT CHECK (billing_interval IS NULL OR billing_interval IN ('month', 'year')),
     profit_fee_usd NUMERIC(10, 2) DEFAULT 0.00 NOT NULL,
     total_amount_usd NUMERIC(10, 2) NOT NULL,
     

@@ -54,7 +54,9 @@ export default function LoginPage() {
           <div className="w-10 h-10 rounded-xl bg-honey-500/10 border border-honey-500/30 flex items-center justify-center text-honey-500 font-bold text-2xl">
             🐝
           </div>
-          <span className="font-extrabold text-xl text-white tracking-tight">BEE CRYPTO</span>
+          <span className="font-extrabold text-xl text-white tracking-tight">
+            CRYPTO <span className="text-honey-400">BEE</span>
+          </span>
         </Link>
         <h2 className="text-2xl font-bold text-white tracking-tight">{t('auth.signInTitle')}</h2>
         <p className="mt-2 text-sm text-slate-400">

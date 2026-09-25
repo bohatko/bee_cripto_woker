@@ -6,7 +6,6 @@ import { OrderRouter } from './engine/order-router.js';
 import { PositionGuard } from './engine/position-guard.js';
 import { HealthCheckJob } from './jobs/health-check.js';
 import { BillingCronJob } from './jobs/billing-cron.js';
-import { ReferralCronJob } from './jobs/referral-cron.js';
 import { PairSelectionJob } from './jobs/pair-selection-engine-aware.js';
 import { pairRegistry } from './exchanges/pair-registry.js';
 import { DipBuyScanner } from './signals/dip-buy-scanner.js';
@@ -68,7 +67,6 @@ async function main() {
   const guard = new PositionGuard(orderRouter, scanner, 5000);
   const healthCheck = new HealthCheckJob(CONFIG.healthPingIntervalMs);
   const billingCron = new BillingCronJob(CONFIG.billingCronIntervalMs);
-  const referralCron = new ReferralCronJob(CONFIG.billingCronIntervalMs);
   const pairSelection = new PairSelectionJob(60_000);
 
   // Dip-Buy Signals Engines (loaded from signal_strategies)
@@ -104,7 +102,6 @@ async function main() {
     guard.start();
     healthCheck.start();
     billingCron.start();
-    referralCron.start();
     pairSelection.start();
 
     if (CONFIG.dipBuyEnabled) {
@@ -125,7 +122,6 @@ async function main() {
       guard.stop();
       healthCheck.stop();
       billingCron.stop();
-      referralCron.stop();
       pairSelection.stop();
       pairRegistry.stop();
       if (CONFIG.dipBuyEnabled) {
