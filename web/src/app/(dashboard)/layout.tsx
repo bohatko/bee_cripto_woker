@@ -14,6 +14,7 @@ import {
   ShieldAlert,
   UserCog,
   Radar,
+  Wallet,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
@@ -312,13 +313,24 @@ export default function DashboardLayout({
               <Link
                 href="/admin"
                 className={`flex items-center gap-3 px-3 py-2.5 mt-1 rounded-xl text-sm font-medium transition-colors ${
-                  pathname.startsWith('/admin')
+                  pathname === '/admin'
                     ? 'bg-amber-500/20 text-honey-400 border border-honey-500/30 font-bold shadow-md shadow-honey-500/10'
                     : 'text-honey-400/80 hover:text-honey-300 hover:bg-dark-850'
                 }`}
               >
                 <ShieldAlert className="w-4 h-4 text-honey-400" />
                 {t('nav.administration')}
+              </Link>
+              <Link
+                href="/admin/referrals"
+                className={`flex items-center gap-3 px-3 py-2.5 mt-1 rounded-xl text-sm font-medium transition-colors ${
+                  pathname.startsWith('/admin/referrals')
+                    ? 'bg-amber-500/20 text-honey-400 border border-honey-500/30 font-bold shadow-md shadow-honey-500/10'
+                    : 'text-honey-400/80 hover:text-honey-300 hover:bg-dark-850'
+                }`}
+              >
+                <Wallet className="w-4 h-4 text-honey-400" />
+                {t('nav.partnerPayouts')}
               </Link>
             </div>
           )}
