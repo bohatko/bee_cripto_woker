@@ -206,8 +206,8 @@ export const en = {
     calcEffective: 'Example return',
     calcFeeWarning:
       'At this balance the subscription is larger than the example profit, so the estimate shows a loss of the starting amount.',
-    pricingTitle: 'Two plans, no profit share',
-    pricingSubtitle: 'A flat subscription. Each plan includes a 7-day trial. No percentage of your trading profit.',
+    pricingTitle: 'Plans',
+    pricingSubtitle: 'Each plan includes a 7-day trial.',
     trialIncluded: '7-day trial',
     monthly: 'Monthly',
     yearly: 'Yearly',
