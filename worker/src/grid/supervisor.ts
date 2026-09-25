@@ -382,7 +382,20 @@ export class GridSupervisor {
       const latest = knownBots.find(
         (bot) => bot.user_id === setting.user_id && bot.template_id === active.id && bot.exchange === setting.exchange
       );
-      if (latest && (latest.run_status === 'running' || latest.run_status === 'starting')) continue;
+      const liveBot = latest && (latest.run_status === 'running' || latest.run_status === 'starting');
+      if (!liveBot && setting.last_error) {
+        await supabase.from('grid_user_settings').delete().eq('id', setting.id);
+        await logEvent({
+          userId: setting.user_id,
+          templateId: active.id,
+          exchange: setting.exchange,
+          event: 'removed',
+          message: `Removed ${active.base_asset}/USDT on ${setting.exchange.toUpperCase()} after a failed start: ${setting.last_error}`,
+        });
+        console.log(`[Grid] Removed failed slot ${active.base_asset} ${setting.exchange} for ${setting.user_id}`);
+        continue;
+      }
+      if (liveBot) continue;
       if (
         latest?.run_status === 'stopped' &&
         latest.stopped_at &&
@@ -392,10 +405,11 @@ export class GridSupervisor {
         continue;
       }
 
+      let exchangeBotId: string | null = null;
       try {
         const creds = credsOf(resolved.account);
         const params = orderParams(active, Number(setting.margin_usdt));
-        const exchangeBotId =
+        exchangeBotId =
           resolved.account.exchange === 'okx'
             ? await createOkxGrid(creds, params)
             : await createBybitGrid(creds, params);
@@ -429,13 +443,22 @@ export class GridSupervisor {
       } catch (err: any) {
         const message = err?.message || String(err);
         console.error(`[Grid] Start failed for ${setting.user_id} ${active.base_asset}: ${message}`);
-        await supabase.from('grid_user_settings').update({ last_error: message }).eq('id', setting.id);
+        if (exchangeBotId) {
+          try {
+            const creds = credsOf(resolved.account);
+            if (resolved.account.exchange === 'okx') await stopOkxGrid(creds, active.base_asset, exchangeBotId);
+            else await stopBybitGrid(creds, exchangeBotId);
+          } catch (closeErr: any) {
+            console.error(`[Grid] Failed to roll back ${exchangeBotId}: ${closeErr?.message || closeErr}`);
+          }
+        }
+        await supabase.from('grid_user_settings').delete().eq('id', setting.id);
         await logEvent({
           userId: setting.user_id,
           templateId: active.id,
           exchange: setting.exchange,
-          event: 'error',
-          message: `Create failed for ${active.base_asset}/USDT on ${setting.exchange.toUpperCase()}: ${message}`,
+          event: 'removed',
+          message: `Removed ${active.base_asset}/USDT on ${setting.exchange.toUpperCase()} because the exchange rejected it: ${message}`,
         });
         skipStart.add(setting.id);
       }

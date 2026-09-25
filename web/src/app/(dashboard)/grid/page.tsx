@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { History, Plus, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
@@ -65,6 +66,7 @@ export default function GridPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [confirmCreate, setConfirmCreate] = useState(false);
   const [stopSlot, setStopSlot] = useState<Slot | null>(null);
+  const [restartSlot, setRestartSlot] = useState<Slot | null>(null);
   const [historySlot, setHistorySlot] = useState<Slot | null>(null);
   const [draftCoin, setDraftCoin] = useState('');
   const [draftExchange, setDraftExchange] = useState<ExchangeName | ''>('');
@@ -110,8 +112,25 @@ export default function GridPage() {
     setAccounts((accs || []) as Account[]);
     const coins = (active || []) as Template[];
     setTemplates(coins);
-    setSlots((slotRows || []) as Slot[]);
-    setBots((botRows || []) as Bot[]);
+    const botList = (botRows || []) as Bot[];
+    const slotList = (slotRows || []) as Slot[];
+    const failedIds = slotList
+      .filter(
+        (slot) =>
+          slot.last_error &&
+          !botList.some(
+            (bot) =>
+              bot.template_id === slot.template_id &&
+              bot.exchange === slot.exchange &&
+              (bot.run_status === 'running' || bot.run_status === 'starting')
+          )
+      )
+      .map((slot) => slot.id);
+    if (failedIds.length > 0) {
+      await supabase.from('grid_user_settings').delete().in('id', failedIds);
+    }
+    setSlots(slotList.filter((slot) => !failedIds.includes(slot.id)));
+    setBots(botList);
     setEvents((eventRows || []) as GridEvent[]);
     setDraftCoin((current) => current || coins[0]?.id || '');
     setLoading(false);
@@ -191,6 +210,21 @@ export default function GridPage() {
     await load();
   };
 
+  const restartBot = async () => {
+    if (!restartSlot) return;
+    const { error } = await supabase
+      .from('grid_user_settings')
+      .update({ is_enabled: true, last_error: null })
+      .eq('id', restartSlot.id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(t('grid.saved'));
+    setRestartSlot(null);
+    await load();
+  };
+
   const historyEvents = historySlot
     ? events.filter((row) => row.template_id === historySlot.template_id && row.exchange === historySlot.exchange)
     : [];
@@ -222,8 +256,14 @@ export default function GridPage() {
       </div>
 
       {!pro && (
-        <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-          {t('grid.proOnly')}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+          <p>{t('grid.proOnly')}</p>
+          <Link
+            href="/billing"
+            className="inline-flex shrink-0 rounded-xl bg-honey-500 px-3 py-1.5 text-xs font-bold text-dark-950"
+          >
+            {t('nav.billing')}
+          </Link>
         </div>
       )}
       {bots.some((row) => row.control_status === 'released' && row.run_status === 'running') && (
@@ -232,8 +272,14 @@ export default function GridPage() {
         </div>
       )}
       {!connected.okx && !connected.bybit && (
-        <div className="rounded-2xl border border-dark-700 bg-dark-900 px-4 py-3 text-sm text-slate-300">
-          {t('grid.unavailable')}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-dark-700 bg-dark-900 px-4 py-3 text-sm text-slate-300">
+          <p>{t('grid.unavailable')}</p>
+          <Link
+            href="/settings/exchange"
+            className="inline-flex shrink-0 rounded-xl border border-honey-500/40 px-3 py-1.5 text-xs font-bold text-honey-300"
+          >
+            {t('nav.exchangeKeys')}
+          </Link>
         </div>
       )}
 
@@ -300,14 +346,25 @@ export default function GridPage() {
                 )}
 
                 <div className="mt-4">
-                  <button
-                    type="button"
-                    disabled={!slot.is_enabled || !pro}
-                    onClick={() => setStopSlot(slot)}
-                    className="rounded-xl border border-rose-500/40 px-4 py-2 text-sm font-bold text-rose-300 disabled:opacity-40"
-                  >
-                    {t('grid.stop')}
-                  </button>
+                  {slot.is_enabled ? (
+                    <button
+                      type="button"
+                      disabled={!pro}
+                      onClick={() => setStopSlot(slot)}
+                      className="rounded-xl border border-rose-500/40 px-4 py-2 text-sm font-bold text-rose-300 disabled:opacity-40"
+                    >
+                      {t('grid.stop')}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={!pro}
+                      onClick={() => setRestartSlot(slot)}
+                      className="rounded-xl bg-honey-500 px-4 py-2 text-sm font-bold text-dark-950 disabled:opacity-40"
+                    >
+                      {t('grid.restart')}
+                    </button>
+                  )}
                 </div>
               </article>
             );
@@ -422,15 +479,80 @@ export default function GridPage() {
         onConfirm={() => void createBot()}
         onCancel={() => setConfirmCreate(false)}
       />
-      <ConfirmModal
+      <CloseWordModal
         isOpen={Boolean(stopSlot)}
         title={t('grid.confirmStopTitle')}
         description={t('grid.confirmStopDesc')}
-        isDestructive
         confirmText={t('grid.stop')}
+        typeLabel={`${t('panic.typeClose')} CLOSE ${t('panic.toConfirm')}`}
         onConfirm={() => void stopBot()}
         onCancel={() => setStopSlot(null)}
       />
+      <ConfirmModal
+        isOpen={Boolean(restartSlot)}
+        title={t('grid.confirmRestartTitle')}
+        description={t('grid.confirmRestartDesc')}
+        confirmText={t('grid.restart')}
+        onConfirm={() => void restartBot()}
+        onCancel={() => setRestartSlot(null)}
+      />
+    </div>
+  );
+}
+
+function CloseWordModal({
+  isOpen,
+  title,
+  description,
+  confirmText,
+  typeLabel,
+  onConfirm,
+  onCancel,
+}: {
+  isOpen: boolean;
+  title: string;
+  description: string;
+  confirmText: string;
+  typeLabel: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const { t } = useLanguage();
+  const [value, setValue] = useState('');
+  useEffect(() => {
+    if (!isOpen) setValue('');
+  }, [isOpen]);
+  if (!isOpen) return null;
+  const ready = value.trim().toUpperCase() === 'CLOSE';
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md">
+      <div className="w-full max-w-lg rounded-2xl border-2 border-rose-600/40 bg-dark-900 p-6">
+        <h3 className="text-xl font-bold text-white">{title}</h3>
+        <p className="mt-3 text-sm text-slate-300">{description}</p>
+        <label className="mt-5 block text-xs font-medium text-slate-300">
+          {typeLabel}
+          <input
+            type="text"
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            placeholder="CLOSE"
+            className="mt-2 w-full rounded-xl border border-dark-700 bg-dark-950 px-4 py-2.5 text-center font-mono tracking-widest text-white outline-none focus:border-rose-500"
+          />
+        </label>
+        <div className="mt-6 flex justify-end gap-3">
+          <button type="button" onClick={onCancel} className="rounded-xl bg-dark-800 px-4 py-2 text-sm font-medium text-slate-300">
+            {t('common.cancel')}
+          </button>
+          <button
+            type="button"
+            disabled={!ready}
+            onClick={onConfirm}
+            className="rounded-xl bg-rose-600 px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-dark-800 disabled:text-slate-600"
+          >
+            {confirmText}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
