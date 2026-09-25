@@ -130,7 +130,7 @@ export const ru = {
   landing: {
     navProducts: 'Продукты',
     navHow: 'Как это работает',
-    navCalculator: 'Калькулятор прибыли',
+    navCalculator: 'Калькулятор',
     navPricing: 'Тарифы',
     navSecurity: 'Безопасность',
     navFaq: 'FAQ',

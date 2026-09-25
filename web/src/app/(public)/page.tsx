@@ -304,58 +304,56 @@ export default function LandingPage() {
     <div className="flex min-h-screen flex-col bg-dark-950 text-slate-100 selection:bg-honey-500 selection:text-black">
       {/* Navigation Header */}
       <header className="sticky top-0 z-40 w-full border-b border-dark-800/80 bg-dark-950/80 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <Link href="/" className="flex items-center gap-3">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+          <Link href="/" className="flex shrink-0 items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-honey-500/30 bg-honey-500/10 text-xl font-bold text-honey-500 shadow-lg shadow-honey-500/20">
               🐝
             </div>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-lg font-extrabold tracking-tight text-white">
-                CRYPTO <span className="text-honey-400">BEE</span>
-              </span>
-            </div>
+            <span className="whitespace-nowrap text-lg font-extrabold tracking-tight text-white">
+              CRYPTO <span className="text-honey-400">BEE</span>
+            </span>
           </Link>
 
-          <nav className="hidden items-center gap-8 text-sm font-medium text-slate-300 md:flex">
-            <a href="#products" className="transition-colors hover:text-honey-400">
+          <nav className="hidden shrink-0 items-center gap-x-3 text-[13px] font-medium leading-none text-slate-300 lg:flex xl:gap-x-5 xl:text-sm">
+            <a href="#products" className="whitespace-nowrap transition-colors hover:text-honey-400">
               {t('landing.navProducts')}
             </a>
-            <a href="#how" className="transition-colors hover:text-honey-400">
+            <a href="#how" className="whitespace-nowrap transition-colors hover:text-honey-400">
               {t('landing.navHow')}
             </a>
-            <a href="#calculator" className="transition-colors hover:text-honey-400">
+            <a href="#calculator" className="whitespace-nowrap transition-colors hover:text-honey-400">
               {t('landing.navCalculator')}
             </a>
-            <a href="#pricing" className="transition-colors hover:text-honey-400">
+            <a href="#pricing" className="whitespace-nowrap transition-colors hover:text-honey-400">
               {t('landing.navPricing')}
             </a>
-            <a href="#security" className="transition-colors hover:text-honey-400">
+            <a href="#security" className="whitespace-nowrap transition-colors hover:text-honey-400">
               {t('landing.navSecurity')}
             </a>
-            <a href="#faq" className="transition-colors hover:text-honey-400">
+            <a href="#faq" className="whitespace-nowrap transition-colors hover:text-honey-400">
               {t('landing.navFaq')}
             </a>
             <a
               href={SUPPORT_TELEGRAM_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="transition-colors hover:text-honey-400"
+              className="whitespace-nowrap transition-colors hover:text-honey-400"
             >
               {t('landing.navSupport')}
             </a>
           </nav>
 
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             <LanguageSwitcher variant="compact" />
             <Link
               href="/login"
-              className="px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:text-white"
+              className="hidden whitespace-nowrap px-2 py-2 text-sm font-medium text-slate-300 transition-colors hover:text-white xl:block xl:px-4"
             >
               {t('landing.signIn')}
             </Link>
             <Link
               href="/register"
-              className="flex items-center gap-1.5 rounded-xl bg-honey-500 px-4 py-2 text-sm font-semibold text-dark-950 shadow-lg shadow-honey-500/20 transition-all hover:bg-honey-400"
+              className="flex items-center gap-1.5 whitespace-nowrap rounded-xl bg-honey-500 px-3 py-2 text-sm font-semibold text-dark-950 shadow-lg shadow-honey-500/20 transition-all hover:bg-honey-400 lg:px-4"
             >
               {t('landing.tryFree')}
               <ArrowRight className="h-4 w-4" />
