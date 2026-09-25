@@ -24,6 +24,7 @@ import {
   Play,
   Repeat,
   ArrowRightLeft,
+  Square,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
@@ -80,6 +81,7 @@ export default function AdminDashboardPage() {
   const [pairsAction, setPairsAction] = useState<'toggleRotation' | 'runSelection' | null>(null);
   const [isPairsConfirmOpen, setIsPairsConfirmOpen] = useState(false);
   const [traceRunId, setTraceRunId] = useState<string | null>(null);
+  const [stopRunId, setStopRunId] = useState<string | null>(null);
   const [replaceOutgoing, setReplaceOutgoing] = useState<BasketPairRow | null>(null);
   const [isReplacePickerOpen, setIsReplacePickerOpen] = useState(false);
   const [pendingReplacement, setPendingReplacement] = useState<{
@@ -451,6 +453,61 @@ export default function AdminDashboardPage() {
     } catch (err: any) {
       const errorText = err.message || 'Action failed';
       toast.error(errorText);
+    }
+  };
+
+  const confirmStopRun = async () => {
+    const runId = stopRunId;
+    setStopRunId(null);
+    if (!runId) return;
+
+    const run = pairRuns.find((r) => r.id === runId);
+    const progress = Array.isArray(run?.progress_log) ? run.progress_log : [];
+    const stoppedAt = new Date().toISOString();
+
+    try {
+      const { data: { user: adminUser } } = await supabase.auth.getUser();
+      const { data: updated, error } = await supabase
+        .from('pair_selection_runs')
+        .update({
+          cancel_requested: true,
+          status: 'cancelled',
+          finished_at: stoppedAt,
+          error: 'Cancelled by admin',
+          applied: false,
+          progress_log: [
+            ...progress,
+            {
+              at: stoppedAt,
+              stage: 'cancelled',
+              message: 'Cancelled by admin',
+            },
+          ].slice(-100),
+        })
+        .eq('id', runId)
+        .in('status', ['pending', 'running'])
+        .select('id')
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!updated) {
+        toast.error('Run is no longer in progress');
+        loadPairsData();
+        return;
+      }
+
+      if (adminUser) {
+        await supabase.from('audit_logs').insert({
+          user_id: adminUser.id,
+          action: 'pair_selection_cancelled',
+          details: { run_id: runId },
+        });
+      }
+
+      toast.success(t('admin.stopRunToast'));
+      loadPairsData();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to stop run');
     }
   };
 
@@ -1453,20 +1510,34 @@ export default function AdminDashboardPage() {
                                 </span>
                               </td>
                               <td className="px-5 py-4">
-                                <button
-                                  type="button"
-                                  onClick={() => setTraceRunId(run.id)}
-                                  className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold border transition-colors hover:brightness-125 ${
-                                    run.status === 'completed'
-                                      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                                      : run.status === 'failed'
-                                      ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
-                                      : 'bg-amber-500/20 text-amber-400 border-amber-500/40 animate-pulse'
-                                  }`}
-                                  title={t('admin.traceOpenHint')}
-                                >
-                                  {run.status}
-                                </button>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setTraceRunId(run.id)}
+                                    className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold border transition-colors hover:brightness-125 ${
+                                      run.status === 'completed'
+                                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                                        : run.status === 'failed'
+                                        ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                                        : run.status === 'cancelled'
+                                        ? 'bg-slate-500/15 text-slate-300 border-slate-500/30'
+                                        : 'bg-amber-500/20 text-amber-400 border-amber-500/40 animate-pulse'
+                                    }`}
+                                    title={t('admin.traceOpenHint')}
+                                  >
+                                    {run.status}
+                                  </button>
+                                  {(run.status === 'running' || run.status === 'pending') && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setStopRunId(run.id)}
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] uppercase font-bold border border-rose-500/40 bg-rose-500/15 text-rose-400 hover:bg-rose-500/25 transition-colors"
+                                    >
+                                      <Square className="w-3 h-3 fill-current" />
+                                      {t('admin.stopRun')}
+                                    </button>
+                                  )}
+                                </div>
                               </td>
                               <td className="px-5 py-4 text-slate-300">
                                 {run.universe_size ?? '—'}
@@ -1481,7 +1552,7 @@ export default function AdminDashboardPage() {
                                 </span>
                               </td>
                               <td className="px-5 py-4 text-[11px]">
-                                {run.status === 'failed' && run.error ? (
+                                {(run.status === 'failed' || run.status === 'cancelled') && run.error ? (
                                   <span className="text-rose-400 block max-w-xs truncate" title={run.error}>
                                     {run.error}
                                   </span>
@@ -1734,6 +1805,11 @@ export default function AdminDashboardPage() {
         isOpen={!!traceRunId}
         run={tracedRun}
         onClose={() => setTraceRunId(null)}
+        onStop={
+          tracedRun && (tracedRun.status === 'running' || tracedRun.status === 'pending')
+            ? () => setStopRunId(tracedRun.id)
+            : undefined
+        }
       />
 
       <UserDetailDrawer
@@ -1778,6 +1854,16 @@ export default function AdminDashboardPage() {
           setIsReplaceConfirmOpen(false);
           setPendingReplacement(null);
         }}
+      />
+
+      <ConfirmModal
+        isOpen={!!stopRunId}
+        title={t('admin.stopRunTitle')}
+        description={t('admin.stopRunDesc')}
+        confirmText={t('admin.stopRunConfirm')}
+        isDestructive
+        onConfirm={confirmStopRun}
+        onCancel={() => setStopRunId(null)}
       />
     </div>
   );

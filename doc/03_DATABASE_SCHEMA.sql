@@ -277,7 +277,7 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.pair_selection_runs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','running','completed','failed')),
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','running','completed','failed','cancelled')),
     trigger_source TEXT NOT NULL CHECK (trigger_source IN ('cron','admin')),
     requested_by UUID REFERENCES public.users_profile(id) ON DELETE SET NULL, -- только для admin-триггера
     started_at TIMESTAMPTZ,
@@ -287,6 +287,7 @@ CREATE TABLE IF NOT EXISTS public.pair_selection_runs (
     applied BOOLEAN NOT NULL DEFAULT FALSE,
     replacements JSONB,         -- [{ removed, added, old_score, new_score }]
     progress_log JSONB NOT NULL DEFAULT '[]'::jsonb, -- live trace: [{at, stage, message, detail?}]
+    cancel_requested BOOLEAN NOT NULL DEFAULT FALSE, -- admin Stop; worker aborts and must not apply the basket
     error TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

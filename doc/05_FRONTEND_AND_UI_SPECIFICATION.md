@@ -194,8 +194,8 @@ src/app/
 
 1. **Current Active Basket** — до 4 активных пар: score, metrics (t-stat / corr / β-diff / funding), `activated_at`.
 2. **Auto-Rotation** toggle → `ConfirmModal` → UPDATE `engine_settings.auto_rotation_enabled` + `audit_logs`.
-3. **Run pair selection now** → `ConfirmModal` → INSERT `pair_selection_runs` (`trigger_source='admin'`, `status='pending'`) + audit; статус прогона обновляется live (pending → running → completed/failed).
-4. **Run history** — последние N прогонов с expandable candidates/replacements JSON.
+3. **Run pair selection now** → `ConfirmModal` → INSERT `pair_selection_runs` (`trigger_source='admin'`, `status='pending'`) + audit; статус прогона обновляется live (pending → running → completed/failed/cancelled).
+4. **Run history** — последние N прогонов с expandable candidates/replacements JSON. У прогона `pending` или `running` есть кнопка **Stop** → `ConfirmModal` → `cancel_requested=true`, `status='cancelled'`. Воркер на ближайшей проверке прерывает пайплайн и не применяет корзину.
 
 Фильтры пар на `/history` и `/history/bot` строятся динамически из фактических `pair_symbol` в данных (плюс активная корзина), без хардкода четырёх тикеров.
 Дашборд `TradeReadinessMonitor` читает пары из `pair_market_data` (пишет воркер по union-скану).

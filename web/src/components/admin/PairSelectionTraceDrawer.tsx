@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef } from 'react';
-import { X, Terminal, Loader2, CheckCircle2, XCircle, Clock3, Activity } from 'lucide-react';
+import { X, Terminal, Loader2, CheckCircle2, XCircle, Clock3, Activity, Square } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 export interface PairSelectionProgressStep {
@@ -30,6 +30,7 @@ interface PairSelectionTraceDrawerProps {
   isOpen: boolean;
   run: PairSelectionRunTrace | null;
   onClose: () => void;
+  onStop?: () => void;
 }
 
 function statusTone(status: string) {
@@ -38,6 +39,8 @@ function statusTone(status: string) {
       return 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30';
     case 'failed':
       return 'bg-rose-500/15 text-rose-400 border-rose-500/30';
+    case 'cancelled':
+      return 'bg-slate-500/15 text-slate-300 border-slate-500/30';
     case 'running':
       return 'bg-amber-500/20 text-amber-400 border-amber-500/40 animate-pulse';
     case 'pending':
@@ -49,12 +52,12 @@ function statusTone(status: string) {
 
 function StatusIcon({ status }: { status: string }) {
   if (status === 'completed') return <CheckCircle2 className="w-4 h-4" />;
-  if (status === 'failed') return <XCircle className="w-4 h-4" />;
+  if (status === 'failed' || status === 'cancelled') return <XCircle className="w-4 h-4" />;
   if (status === 'running') return <Loader2 className="w-4 h-4 animate-spin" />;
   return <Clock3 className="w-4 h-4" />;
 }
 
-export function PairSelectionTraceDrawer({ isOpen, run, onClose }: PairSelectionTraceDrawerProps) {
+export function PairSelectionTraceDrawer({ isOpen, run, onClose, onStop }: PairSelectionTraceDrawerProps) {
   const { t, formatDateTime } = useLanguage();
   const logEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -130,6 +133,16 @@ export function PairSelectionTraceDrawer({ isOpen, run, onClose }: PairSelection
                 <Activity className="w-3 h-3" />
                 {t('admin.traceLive')}
               </span>
+            )}
+            {onStop && isLive && (
+              <button
+                type="button"
+                onClick={onStop}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase border border-rose-500/40 bg-rose-500/15 text-rose-400 hover:bg-rose-500/25 transition-colors"
+              >
+                <Square className="w-3 h-3 fill-current" />
+                {t('admin.stopRun')}
+              </button>
             )}
           </div>
 

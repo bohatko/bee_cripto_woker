@@ -116,7 +116,7 @@ export interface BotPosition {
   closed_at: string | null;
 }
 
-export type PairSelectionRunStatus = 'pending' | 'running' | 'completed' | 'failed';
+export type PairSelectionRunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 export type PairSelectionTrigger = 'cron' | 'admin';
 
 export interface StrategyPairRow {
@@ -151,6 +151,7 @@ export interface PairSelectionRun {
   applied: boolean;
   replacements: unknown | null;
   progress_log: PairSelectionProgressStep[] | null;
+  cancel_requested?: boolean;
   error: string | null;
   created_at: string;
 }

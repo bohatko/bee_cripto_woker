@@ -163,6 +163,13 @@ function correlation(a: number[], b: number[]): number {
   return cov / Math.sqrt(va * vb);
 }
 
+class RunCancelledError extends Error {
+  constructor() {
+    super('Cancelled by admin');
+    this.name = 'RunCancelledError';
+  }
+}
+
 function emptySim() {
   return {
     netPnlPct: 0,
@@ -214,32 +221,96 @@ export class PairSelectionJob {
 
   private async executeRun(run: PairSelectionRun) {
     this.running = true;
-    console.log(`🚀 Starting PairSelectionRun ${run.id} (trigger: ${run.trigger_source})...`);
-    await supabase.from('pair_selection_runs').update({ status: 'running', started_at: new Date().toISOString() }).eq('id', run.id);
-    await this.appendProgress(run.id, 'started', 'Worker started engine-aware screener');
     try {
-      const result = await this.runPipeline(run);
-      await supabase
+      const { data: claimed, error: claimError } = await supabase
         .from('pair_selection_runs')
-        .update({
-          status: 'completed',
-          finished_at: new Date().toISOString(),
-          universe_size: result.universeSize,
-          candidates: result.candidatesJson,
-          applied: result.applied,
-          replacements: result.replacements,
-        })
-        .eq('id', run.id);
-      console.log(`✅ PairSelectionRun ${run.id} completed. Valid candidates: ${result.validCount}/${result.universeSize}`);
-    } catch (err: any) {
-      console.error(`❌ PairSelectionRun ${run.id} failed:`, err.message);
-      await supabase
-        .from('pair_selection_runs')
-        .update({ status: 'failed', finished_at: new Date().toISOString(), error: String(err.message || err).slice(0, 2000) })
-        .eq('id', run.id);
+        .update({ status: 'running', started_at: new Date().toISOString() })
+        .eq('id', run.id)
+        .eq('status', 'pending')
+        .eq('cancel_requested', false)
+        .select('id')
+        .maybeSingle();
+
+      if (claimError) {
+        console.error(`❌ PairSelectionRun ${run.id} claim failed:`, claimError.message);
+        return;
+      }
+      if (!claimed) {
+        console.log(`PairSelectionRun ${run.id} skipped: cancelled or no longer pending`);
+        return;
+      }
+
+      console.log(`🚀 Starting PairSelectionRun ${run.id} (trigger: ${run.trigger_source})...`);
+      await this.appendProgress(run.id, 'started', 'Worker started engine-aware screener');
+      try {
+        const result = await this.runPipeline(run);
+        await this.throwIfCancelled(run.id);
+        const { data: saved } = await supabase
+          .from('pair_selection_runs')
+          .update({
+            status: 'completed',
+            finished_at: new Date().toISOString(),
+            universe_size: result.universeSize,
+            candidates: result.candidatesJson,
+            applied: result.applied,
+            replacements: result.replacements,
+          })
+          .eq('id', run.id)
+          .eq('status', 'running')
+          .eq('cancel_requested', false)
+          .select('id')
+          .maybeSingle();
+        if (!saved) {
+          await this.markCancelled(run.id);
+          console.log(`PairSelectionRun ${run.id} cancelled before completion was saved`);
+          return;
+        }
+        console.log(`✅ PairSelectionRun ${run.id} completed. Valid candidates: ${result.validCount}/${result.universeSize}`);
+      } catch (err: any) {
+        if (err instanceof RunCancelledError || (await this.isCancelRequested(run.id))) {
+          await this.markCancelled(run.id);
+          console.log(`PairSelectionRun ${run.id} cancelled by admin`);
+          return;
+        }
+        console.error(`❌ PairSelectionRun ${run.id} failed:`, err.message);
+        await supabase
+          .from('pair_selection_runs')
+          .update({ status: 'failed', finished_at: new Date().toISOString(), error: String(err.message || err).slice(0, 2000) })
+          .eq('id', run.id)
+          .eq('status', 'running')
+          .eq('cancel_requested', false);
+      }
     } finally {
       this.running = false;
     }
+  }
+
+  private async isCancelRequested(runId: string): Promise<boolean> {
+    const { data } = await supabase
+      .from('pair_selection_runs')
+      .select('status, cancel_requested')
+      .eq('id', runId)
+      .maybeSingle();
+    return Boolean(data?.cancel_requested) || data?.status === 'cancelled';
+  }
+
+  private async throwIfCancelled(runId: string) {
+    if (await this.isCancelRequested(runId)) throw new RunCancelledError();
+  }
+
+  private async markCancelled(runId: string) {
+    await this.appendProgress(runId, 'cancelled', 'Cancelled by admin');
+    await supabase
+      .from('pair_selection_runs')
+      .update({
+        status: 'cancelled',
+        cancel_requested: true,
+        finished_at: new Date().toISOString(),
+        error: 'Cancelled by admin',
+        applied: false,
+      })
+      .eq('id', runId)
+      .in('status', ['pending', 'running', 'cancelled']);
   }
 
   private async appendProgress(runId: string, stage: string, message: string, detail?: Record<string, unknown>) {
@@ -254,15 +325,21 @@ export class PairSelectionJob {
     const okx = new ccxt.okx({ enableRateLimit: true });
     const bybit = new ccxt.bybit({ enableRateLimit: true });
 
+    binance.timeout = 20_000;
+    okx.timeout = 20_000;
+    bybit.timeout = 20_000;
+
     await Promise.all([binance.loadMarkets(), okx.loadMarkets(), bybit.loadMarkets()]);
+    await this.throwIfCancelled(run.id);
     const tickers = await binance.fetchTickers();
     const universeCoins = await this.buildUniverse(binance, okx, bybit, tickers, run.id);
-    const btc = await this.fetch4hBars(binance, 'BTC/USDT');
+    const btc = await this.fetch4hBars(binance, 'BTC/USDT', run.id);
     if (!btc) throw new Error('BTC history not available');
 
     const coins: CoinData[] = [];
     for (const u of universeCoins) {
-      const series = await this.fetch4hBars(binance, u.binanceSymbol);
+      await this.throwIfCancelled(run.id);
+      const series = await this.fetch4hBars(binance, u.binanceSymbol, run.id);
       if (!series || series.closesByTs.size < BARS_REQUIRED) continue;
       coins.push({
         coin: u.coin,
@@ -280,9 +357,12 @@ export class PairSelectionJob {
     if (coins.length < 4) throw new Error('Insufficient coins after history filter');
 
     const allCandidates: Candidate[] = [];
+    let pairIndex = 0;
     for (const a of coins) {
       for (const b of coins) {
         if (a.coin === b.coin) continue;
+        if (pairIndex % 200 === 0) await this.throwIfCancelled(run.id);
+        pairIndex++;
         const c = this.evaluatePairStructure(a, b);
         if (!c) continue;
         allCandidates.push(c);
@@ -303,9 +383,11 @@ export class PairSelectionJob {
       `Structure pass=${structurePass.length}, totalCandidates=${allCandidates.length}, toSim=${toSim.length}`,
     );
     for (let i = 0; i < toSim.length; i++) {
+      if (i % 10 === 0) await this.throwIfCancelled(run.id);
       this.evaluatePairSimulation(toSim[i]);
       if ((i + 1) % 50 === 0) await this.appendProgress(run.id, 'sim_progress', `Simulated ${i + 1}/${toSim.length} candidates`);
     }
+    await this.throwIfCancelled(run.id);
     allCandidates.sort((x, y) => {
       const sx = Number.isFinite(x.score) ? x.score : Number.NEGATIVE_INFINITY;
       const sy = Number.isFinite(y.score) ? y.score : Number.NEGATIVE_INFINITY;
@@ -346,6 +428,7 @@ export class PairSelectionJob {
     const replacements = this.planRotation(basket, validCandidates, openLocked);
     const settings = await this.getEngineSettings();
     let applied = false;
+    await this.throwIfCancelled(run.id);
     if (settings.auto_rotation_enabled && !this.isInCooldown(settings.last_rotation_applied_at) && replacements.length > 0) {
       await this.applyRotation(run, basket, replacements, bySymbol);
       applied = true;
@@ -353,6 +436,7 @@ export class PairSelectionJob {
       await this.appendProgress(run.id, 'rotation_cooldown', 'Rotation cooldown active');
     }
 
+    await this.throwIfCancelled(run.id);
     await this.refreshActivePairScores(bySymbol);
     const candidatesJson = this.buildCandidatesJson(allCandidates, current);
     return { universeSize: coins.length, validCount: validCandidates.length, candidatesJson, applied, replacements };
@@ -378,6 +462,7 @@ export class PairSelectionJob {
     const shortlist = ranked.slice(0, CONFIG.universeSize * 3);
     await this.appendProgress(runId, 'universe_spread', `Spread filtering ${shortlist.length} symbols`);
     for (const item of shortlist) {
+      await this.throwIfCancelled(runId);
       const ob = await binance.fetchOrderBook(item.binanceSymbol, 5).catch(() => null);
       const bid = Number(ob?.bids?.[0]?.[0] ?? 0);
       const ask = Number(ob?.asks?.[0]?.[0] ?? 0);
@@ -398,12 +483,13 @@ export class PairSelectionJob {
     return base;
   }
 
-  private async fetch4hBars(binance: any, symbol: string) {
+  private async fetch4hBars(binance: any, symbol: string, runId?: string) {
     const now = Date.now();
     const since = now - (BARS_REQUIRED + 80) * FOUR_H_MS;
     const all: number[][] = [];
     let cursor = since;
     for (let page = 0; page < 4; page++) {
+      if (runId) await this.throwIfCancelled(runId);
       const batch: number[][] = await binance.fetchOHLCV(symbol, '4h', cursor, 500).catch(() => []);
       if (!batch.length) break;
       all.push(...batch);
