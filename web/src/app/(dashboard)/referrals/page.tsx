@@ -10,6 +10,7 @@ type AttributionRow = {
   id: string;
   created_at: string;
   rewarded_at: string | null;
+  invitee_name: string;
 };
 
 export default function ReferralsPage() {
@@ -33,11 +34,7 @@ export default function ReferralsPage() {
 
     const [profileResult, attributionResult] = await Promise.all([
       supabase.from('users_profile').select('referral_code').eq('id', userId).maybeSingle(),
-      supabase
-        .from('referral_attributions')
-        .select('id, created_at, rewarded_at')
-        .eq('inviter_user_id', userId)
-        .order('created_at', { ascending: false }),
+      supabase.rpc('list_my_referrals'),
     ]);
 
     if (profileResult.error || attributionResult.error) {
@@ -76,8 +73,8 @@ export default function ReferralsPage() {
   }
 
   return (
-    <div className="min-h-full bg-dark-950 p-6 sm:p-8">
-      <div className="mx-auto max-w-3xl">
+    <div className="max-w-5xl space-y-8 p-4 sm:p-8">
+      <div>
         <div className="mb-6 flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-honey-500/30 bg-honey-500/10 text-honey-400">
             <Gift className="h-5 w-5" />
@@ -122,11 +119,12 @@ export default function ReferralsPage() {
         <section className="mt-6 rounded-2xl border border-dark-800 bg-dark-900 p-5 shadow-xl sm:p-6">
           <h2 className="font-bold text-white">{t('referrals.listTitle')}</h2>
           {rows.length === 0 ? (
-            <p className="py-8 text-center font-mono text-sm text-slate-500">{t('referrals.empty')}</p>
+            <p className="py-8 text-left font-mono text-sm text-slate-500">{t('referrals.empty')}</p>
           ) : (
             <table className="mt-4 w-full text-left text-sm">
               <thead className="border-b border-dark-800 font-mono text-[10px] uppercase tracking-wider text-slate-500">
                 <tr>
+                  <th className="pb-2 pr-3">{t('referrals.colName')}</th>
                   <th className="pb-2 pr-3">{t('referrals.colDate')}</th>
                   <th className="pb-2">{t('referrals.colStatus')}</th>
                 </tr>
@@ -134,6 +132,7 @@ export default function ReferralsPage() {
               <tbody>
                 {rows.map((row) => (
                   <tr key={row.id} className="border-b border-dark-800/70">
+                    <td className="py-3 pr-3 text-slate-100">{row.invitee_name}</td>
                     <td className="py-3 pr-3 font-mono text-slate-400">{formatDate(row.created_at)}</td>
                     <td className="py-3">
                       <span

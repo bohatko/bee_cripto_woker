@@ -71,6 +71,7 @@ export const en = {
     empty: 'No one has registered with your code yet.',
     waiting: 'Waiting for payment',
     rewarded: 'Paid · $50',
+    colName: 'Name',
     colDate: 'Joined',
     colStatus: 'Status',
     loadError: 'Could not load partner data.',
