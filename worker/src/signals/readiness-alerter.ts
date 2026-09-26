@@ -1,5 +1,6 @@
 import { supabase } from '../config.js';
 import { telegramNotifier } from '../notifications/telegram.js';
+import { recordUserNotification } from '../notifications/inbox.js';
 
 export interface ReadinessState {
   price: number;
@@ -95,6 +96,22 @@ export class ReadinessAlerter {
         );
 
         await telegramNotifier.notifySignalReadiness(threshold, state, targetUserIds, this.symbol);
+        const hour = new Date().toISOString().slice(0, 13);
+        for (const userId of targetUserIds) {
+          await recordUserNotification({
+            userId,
+            category: 'signals',
+            eventType: 'signal.readiness',
+            severity: 'info',
+            href: '/signals',
+            dedupeKey: `signal.readiness:${this.strategyId}:${threshold}:${hour}`,
+            payload: {
+              symbol: this.symbol,
+              threshold: String(threshold),
+              readiness: readiness_pct.toFixed(0),
+            },
+          });
+        }
       }
     }
   }

@@ -21,11 +21,11 @@ Always consult the documentation in `doc/` before modifying architectural, datab
 - All code interface text, labels, buttons, console logs, and errors must be in **English only**.
 
 ## Strategy & Risk Constraints
-- Basket is **dynamic** (always 4 slots): source of truth is `strategy_pairs` via `PairRegistry`; fallback `DEFAULT_STRATEGY_PAIRS` = `ZEC/AVAX`, `ENA/SUI`, `SOL/ADA`, `BNB/ETH`.
+- Basket is **dynamic** (always 2 slots): source of truth is `strategy_pairs` via `PairRegistry`; fallback `DEFAULT_STRATEGY_PAIRS` = `HYPE/DOGE`, `NEAR/XPL`. One slot is the best new screener pair; the other stays with a pair that already has an open position when one exists.
 - Daily momentum screener job (`pair-selection.ts`); auto-rotation gated by `engine_settings.auto_rotation_enabled` (keep `false` in prod until validation gate passes).
 - Removed pairs with open positions are managed to TP/SL/Trend-Flip; scanner unions active basket + open-position pairs.
 - Entry condition: `Ratio > EMA10` on 4h timeframe, and pair is in the active global basket.
-- Margin split: 20% of available free margin per pair (80% max across 4 slots, 20% buffer).
+- Margin split: 20% of available free margin per pair (40% max across 2 slots).
 - Leverage: 3.0x (hard cap via `MAX_LEVERAGE=3`).
 - Take Profit: disabled by default (`TP_DISABLED=true`).
 - Stop Loss: ATR-based (`SL_ATR_MULT=1.5`) capped by `SL_MAX_MARGIN_PCT=10`.

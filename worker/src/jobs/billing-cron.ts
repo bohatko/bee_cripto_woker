@@ -105,6 +105,17 @@ export class BillingCronJob {
           .from('invoices')
           .update({ status: 'frozen' })
           .eq('id', inv.id);
+
+        await telegramNotifier.sendToUser(
+          inv.user_id,
+          [
+            '❄️ <b>НОВЫЕ СДЕЛКИ ОСТАНОВЛЕНЫ</b>',
+            '━━━━━━━━━━━━━━━━━━',
+            `Счёт <code>${inv.invoice_number}</code> просрочен.`,
+            'Новые входы закрыты. Открытые позиции бот продолжает вести до тейка, стопа или разворота тренда.',
+            'Оплата — в разделе <b>Оплата и инвойсы</b>.',
+          ].join('\n')
+        );
       }
     }
 
@@ -119,8 +130,6 @@ export class BillingCronJob {
         .select('id, email, subscription_status, subscription_plan, billing_interval, pending_subscription_plan, pending_billing_interval, trial_end_at, subscription_paid_until, billing_notice_24h_for, billing_notice_12h_for')
         .eq('subscription_status', 'active')
         .eq('is_frozen', false)
-        .eq('telegram_enabled', true)
-        .not('telegram_chat_id', 'is', null)
         .not('subscription_paid_until', 'is', null)
         .gt('subscription_paid_until', now.toISOString())
         .lte('subscription_paid_until', horizon),
@@ -129,8 +138,6 @@ export class BillingCronJob {
         .select('id, email, subscription_status, subscription_plan, billing_interval, pending_subscription_plan, pending_billing_interval, trial_end_at, subscription_paid_until, billing_notice_24h_for, billing_notice_12h_for')
         .eq('subscription_status', 'trial')
         .eq('is_frozen', false)
-        .eq('telegram_enabled', true)
-        .not('telegram_chat_id', 'is', null)
         .not('trial_end_at', 'is', null)
         .gt('trial_end_at', now.toISOString())
         .lte('trial_end_at', horizon),
@@ -239,6 +246,18 @@ export class BillingCronJob {
 
     if (!error) {
       console.log(`🧾 [INVOICE GENERATED] ${invoiceNumber} for user ${user.email} (Total: $${totalAmount.toFixed(2)} USDT on Aptos)`);
+      const intervalLabel = interval === 'year' ? 'год' : 'месяц';
+      await telegramNotifier.sendToUser(
+        user.id,
+        [
+          '🧾 <b>СЧЁТ ВЫСТАВЛЕН</b>',
+          '━━━━━━━━━━━━━━━━━━',
+          `Номер: <code>${invoiceNumber}</code>`,
+          `Тариф: <code>${plan === 'pro' ? 'Pro' : 'Lite'} · ${intervalLabel}</code>`,
+          `Сумма: <code>${totalAmount.toFixed(2)} USDT</code>`,
+          'Льготные 48 часов открытые позиции продолжают вестись. Новые входы после этого срока остановятся, пока счёт не оплачен.',
+        ].join('\n')
+      );
     } else {
       console.error(`❌ [INVOICE ERROR] Failed to generate invoice for ${user.email}:`, error.message);
     }

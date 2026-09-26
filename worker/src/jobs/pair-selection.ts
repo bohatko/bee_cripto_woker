@@ -24,7 +24,7 @@ const MAX_BETA_DIFF = 0.15; // |beta_long - beta_short| vs BTC
 const MAX_FUNDING_COST_PCT_8H = 0.05; // hard reject above this expected cost (%/8h)
 const FUNDING_PENALTY_PER_THRESHOLD = 1.0; // t-stat points subtracted at the threshold cost
 const EMA_SPAN = 10;
-const BASKET_SIZE = 4;
+const BASKET_SIZE = 2;
 const CANDIDATES_STORED = 50;
 const MIN_RET_SAMPLES = 500; // require near-full 90d overlap between legs
 

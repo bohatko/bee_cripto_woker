@@ -9,7 +9,7 @@ import { CandidateMetrics, PairSelectionProgressStep, PairSelectionRun, Strategy
 const FOUR_H_MS = 4 * 60 * 60 * 1000;
 const BARS_REQUIRED = 1080;
 const MAX_FUNDING_COST_PCT_8H = 0.05;
-const BASKET_SIZE = 4;
+const BASKET_SIZE = CONFIG.basketSize;
 const CANDIDATES_STORED = 50;
 const MIN_RET_SAMPLES = 700;
 
@@ -139,9 +139,9 @@ interface BasketSlot {
 
 interface Replacement {
   removed: string | null;
-  added: string;
+  added: string | null;
   old_score: number | null;
-  new_score: number;
+  new_score: number | null;
 }
 
 function correlation(a: number[], b: number[]): number {
@@ -337,9 +337,18 @@ export class PairSelectionJob {
     if (!btc) throw new Error('BTC history not available');
 
     const coins: CoinData[] = [];
-    for (const u of universeCoins) {
+    await this.appendProgress(
+      run.id,
+      'history',
+      `Loading 4h history for ${universeCoins.length} coins`
+    );
+    for (let i = 0; i < universeCoins.length; i++) {
+      const u = universeCoins[i];
       await this.throwIfCancelled(run.id);
       const series = await this.fetch4hBars(binance, u.binanceSymbol, run.id);
+      if ((i + 1) % 5 === 0 || i + 1 === universeCoins.length) {
+        await this.appendProgress(run.id, 'history', `4h history ${i + 1}/${universeCoins.length}`);
+      }
       if (!series || series.closesByTs.size < BARS_REQUIRED) continue;
       coins.push({
         coin: u.coin,
@@ -709,80 +718,94 @@ export class PairSelectionJob {
     return out;
   }
 
+  /**
+   * Basket is exactly BASKET_SIZE (default 2):
+   * - one slot stays with a pair that already has an open position (dashboard + live), when one exists;
+   * - the other slot is the best new screener candidate that does not reuse those coins.
+   * Pairs without an open position are dropped so margin is not split across the old 4 slots.
+   * Open positions on a dropped pair are still managed to exit by the scanner.
+   */
   private planRotation(basket: BasketSlot[], validCandidates: Candidate[], openLocked: Set<string>): Replacement[] {
+    const target = BASKET_SIZE;
     const replacements: Replacement[] = [];
-    const roundTripFeePct = CONFIG.takerFeePct * 4 * CONFIG.defaultLeverage + CONFIG.simSlippagePct * 4 * CONFIG.defaultLeverage;
-    const coinsInUse = (slots: BasketSlot[]) => {
-      const s = new Set<string>();
+    const next: BasketSlot[] = [];
+
+    const fits = (longCoin: string, shortCoin: string, ratioRets: number[], slots: BasketSlot[]) => {
       for (const slot of slots) {
-        s.add(slot.longCoin);
-        s.add(slot.shortCoin);
+        if (
+          slot.longCoin === longCoin ||
+          slot.shortCoin === longCoin ||
+          slot.longCoin === shortCoin ||
+          slot.shortCoin === shortCoin
+        ) {
+          return false;
+        }
+        if (ratioRets.length > 0 && slot.ratioRets.length > 0) {
+          if (Math.abs(correlation(ratioRets, slot.ratioRets)) > CONFIG.basketMaxRatioCorr) return false;
+        }
       }
-      return s;
-    };
-    const maxCorr = (cand: Candidate, slots: BasketSlot[]) => {
-      let max = 0;
-      for (const slot of slots) {
-        if (!cand.ratioRets.length || !slot.ratioRets.length) continue;
-        max = Math.max(max, Math.abs(correlation(cand.ratioRets, slot.ratioRets)));
-      }
-      return max;
+      return true;
     };
 
-    for (const cand of validCandidates) {
-      if (basket.some((b) => b.pairSymbol === cand.pair_symbol)) continue;
-      if (basket.length < BASKET_SIZE) {
-        const used = coinsInUse(basket);
-        if (used.has(cand.long_coin) || used.has(cand.short_coin)) continue;
-        const corrMax = maxCorr(cand, basket);
-        if (corrMax > CONFIG.basketMaxRatioCorr) continue;
-        cand.metrics.basket_corr_max = Number(corrMax.toFixed(4));
-        basket.push({
-          pairSymbol: cand.pair_symbol,
-          longCoin: cand.long_coin,
-          shortCoin: cand.short_coin,
-          score: cand.score,
-          isIncumbent: false,
-          metrics: cand.metrics,
-          ratioRets: cand.ratioRets,
-        });
-        replacements.push({ removed: null, added: cand.pair_symbol, old_score: null, new_score: Number(cand.score.toFixed(4)) });
-        continue;
-      }
-      if (replacements.filter((r) => r.removed !== null).length >= CONFIG.rotationMaxReplacements) break;
-      const incumbents = basket.filter((b) => b.isIncumbent).sort((x, y) => x.score - y.score);
-      for (const inc of incumbents) {
-        if (openLocked.has(inc.pairSymbol)) continue;
-        const rest = basket.filter((s) => s !== inc);
-        const used = coinsInUse(rest);
-        if (used.has(cand.long_coin) || used.has(cand.short_coin)) continue;
-        const corrMax = maxCorr(cand, rest);
-        if (corrMax > CONFIG.basketMaxRatioCorr) continue;
-        const passHysteresis = inc.score <= 0 ? cand.score > 0 : cand.score >= CONFIG.rotationHysteresis * inc.score;
-        if (!passHysteresis) break;
-        const incNet = inc.metrics?.sim_insample.netPnlPct ?? 0;
-        const candNet = cand.metrics.sim_insample.netPnlPct;
-        if (candNet - incNet < 2 * roundTripFeePct) continue;
-        cand.metrics.basket_corr_max = Number(corrMax.toFixed(4));
-        const idx = basket.indexOf(inc);
-        basket[idx] = {
-          pairSymbol: cand.pair_symbol,
-          longCoin: cand.long_coin,
-          shortCoin: cand.short_coin,
-          score: cand.score,
-          isIncumbent: false,
-          metrics: cand.metrics,
-          ratioRets: cand.ratioRets,
-        };
-        replacements.push({
-          removed: inc.pairSymbol,
-          added: cand.pair_symbol,
-          old_score: Number.isFinite(inc.score) ? Number(inc.score.toFixed(4)) : null,
-          new_score: Number(cand.score.toFixed(4)),
-        });
-        break;
-      }
+    const fromCandidate = (cand: Candidate, isIncumbent: boolean): BasketSlot => ({
+      pairSymbol: cand.pair_symbol,
+      longCoin: cand.long_coin,
+      shortCoin: cand.short_coin,
+      score: cand.score,
+      isIncumbent,
+      metrics: cand.metrics,
+      ratioRets: cand.ratioRets,
+    });
+
+    const locked = basket
+      .filter((slot) => openLocked.has(slot.pairSymbol))
+      .sort((a, b) => b.score - a.score);
+
+    // If open trades already fill the basket, do not add another pair.
+    const lockedCap = locked.length >= target ? target : Math.min(locked.length, Math.max(0, target - 1));
+    for (const slot of locked) {
+      if (next.length >= lockedCap) break;
+      if (!fits(slot.longCoin, slot.shortCoin, slot.ratioRets, next)) continue;
+      next.push(slot);
     }
+
+    const alreadyActive = new Set(basket.map((slot) => slot.pairSymbol));
+    for (const cand of validCandidates) {
+      if (next.length >= target) break;
+      if (next.some((slot) => slot.pairSymbol === cand.pair_symbol)) continue;
+      if (!fits(cand.long_coin, cand.short_coin, cand.ratioRets, next)) continue;
+      const isIncumbent = alreadyActive.has(cand.pair_symbol);
+      next.push(fromCandidate(cand, isIncumbent));
+      if (!isIncumbent) {
+        replacements.push({
+          removed: null,
+          added: cand.pair_symbol,
+          old_score: null,
+          new_score: Number.isFinite(cand.score) ? Number(cand.score.toFixed(4)) : null,
+        });
+      }
+      break;
+    }
+
+    const incumbents = [...basket].sort((a, b) => b.score - a.score);
+    for (const slot of incumbents) {
+      if (next.length >= target) break;
+      if (next.some((kept) => kept.pairSymbol === slot.pairSymbol)) continue;
+      if (!fits(slot.longCoin, slot.shortCoin, slot.ratioRets, next)) continue;
+      next.push(slot);
+    }
+
+    for (const old of basket) {
+      if (next.some((slot) => slot.pairSymbol === old.pairSymbol)) continue;
+      replacements.push({
+        removed: old.pairSymbol,
+        added: null,
+        old_score: Number.isFinite(old.score) ? Number(old.score.toFixed(4)) : null,
+        new_score: null,
+      });
+    }
+
+    basket.splice(0, basket.length, ...next);
     return replacements;
   }
 
@@ -810,7 +833,7 @@ export class PairSelectionJob {
     if (removedSymbols.length > 0) {
       await supabase.from('strategy_pairs').update({ is_active: false, deactivated_at: nowIso }).in('pair_symbol', removedSymbols).eq('is_active', true);
     }
-    const addedSymbols = new Set(replacements.map((r) => r.added));
+    const addedSymbols = new Set(replacements.map((r) => r.added).filter((symbol): symbol is string => Boolean(symbol)));
     const inserts = finalBasket.filter((b) => addedSymbols.has(b.pairSymbol)).map((b) => ({
       pair_symbol: b.pairSymbol,
       long_coin: b.longCoin,
@@ -885,6 +908,7 @@ export class PairSelectionJob {
 
   public start() {
     if (this.timer) return;
+    void this.tick().catch((err) => console.error('Pair selection tick error:', err.message));
     this.timer = setInterval(() => {
       this.tick().catch((err) => console.error('Pair selection tick error:', err.message));
     }, this.intervalMs);

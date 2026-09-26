@@ -750,3 +750,19 @@ BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.signal_positions;
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
+
+-- Inbox written by triggers in doc/migrations/2026-09-26_user_notifications.sql
+CREATE TABLE IF NOT EXISTS public.user_notifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES public.users_profile(id) ON DELETE CASCADE,
+    category TEXT NOT NULL CHECK (category IN ('billing', 'trading', 'signals', 'grid', 'exchange', 'account', 'partners')),
+    event_type TEXT NOT NULL,
+    severity TEXT NOT NULL CHECK (severity IN ('info', 'success', 'warning', 'critical')),
+    href TEXT,
+    dedupe_key TEXT NOT NULL,
+    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    read_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT user_notifications_dedupe UNIQUE (user_id, dedupe_key)
+);
+ALTER TABLE public.user_notifications ENABLE ROW LEVEL SECURITY;

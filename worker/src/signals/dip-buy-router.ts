@@ -11,6 +11,7 @@ import { DipBuyExecution } from './dip-buy-execution.js';
 import { createExchangeInstance } from '../exchanges/exchange-factory.js';
 import { extractUsdtBalance } from '../exchanges/balance.js';
 import { telegramNotifier } from '../notifications/telegram.js';
+import { recordSignalSkipped } from '../notifications/inbox.js';
 
 export class DipBuyRouter {
   private inFlightEntries = new Set<string>();
@@ -200,11 +201,13 @@ export class DipBuyRouter {
     // 1. Guard checks: frozen, subscription status, account validation
     if (user.is_frozen || user.subscription_status === 'frozen' || user.subscription_status === 'expired') {
       console.log(`⛔ [DipBuyRouter] User ${user.email} is frozen/expired. Skipping.`);
+      await recordSignalSkipped({ userId: user.id, symbol: event.symbol, reason: 'frozen' });
       return;
     }
 
     if (!account.is_validated || !account.is_active || account.can_withdraw || !account.can_trade_futures) {
       console.log(`⛔ [DipBuyRouter] Account for ${user.email} is not valid/active for futures. Auto-disabling signal toggle.`);
+      await recordSignalSkipped({ userId: user.id, symbol: event.symbol, reason: 'invalid_keys' });
       await supabase
         .from('user_signal_settings')
         .update({ is_enabled: false })
@@ -272,6 +275,7 @@ export class DipBuyRouter {
           console.warn(
             `⛔ [DipBuyRouter] User ${user.email} already has an OPEN position of ${contracts} ${event.symbol} on the exchange. Opening blocked until closed.`
           );
+          await recordSignalSkipped({ userId: user.id, symbol: event.symbol, reason: 'position_open' });
           return;
         }
       }
@@ -289,6 +293,7 @@ export class DipBuyRouter {
 
     if (allocatedMargin < CONFIG.dipMinMarginUsd) {
       console.log(`⚠️ [DipBuyRouter] User ${user.email} free margin $${freeUsdt} * ${balancePct}% = $${allocatedMargin} < min $${CONFIG.dipMinMarginUsd}. Skipping.`);
+      await recordSignalSkipped({ userId: user.id, symbol: event.symbol, reason: 'low_margin' });
       return;
     }
 

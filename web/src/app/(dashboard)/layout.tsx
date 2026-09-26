@@ -17,6 +17,7 @@ import {
   Grid3x3,
   Star,
 } from 'lucide-react';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { toast } from '@/components/ui/sonner';
@@ -25,6 +26,7 @@ import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { playTradeOpenSound } from '@/lib/sound';
 import { hasProModules } from '@/lib/pro-access';
 import { SUPPORT_TELEGRAM_URL } from '@/lib/support';
+import { ModuleSetupGuide } from '@/components/guide/ModuleSetupGuide';
 
 export default function DashboardLayout({
   children,
@@ -32,6 +34,7 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const guideModule = guideModuleForPath(pathname);
   const router = useRouter();
   const { t } = useLanguage();
   const [user, setUser] = useState<any>(null);
@@ -96,7 +99,7 @@ export default function DashboardLayout({
 
   useEffect(() => {
     if (!profile) return;
-    const proSection = pathname === '/grid' || pathname.startsWith('/grid/') || pathname === '/history' || pathname.startsWith('/history/');
+    const proSection = pathname === '/grid' || pathname.startsWith('/grid/') || pathname === '/pair' || pathname.startsWith('/pair/');
     if (proSection && !hasProModules(profile)) {
       router.replace('/billing');
     }
@@ -198,7 +201,7 @@ export default function DashboardLayout({
   const navSections: Array<{
     label?: string;
     divided?: boolean;
-    items: Array<{ name: string; href: string; icon: typeof LayoutDashboard; pro?: boolean }>;
+    items: Array<{ name: string; href: string; icon: typeof LayoutDashboard; pro?: boolean; beta?: boolean }>;
   }> = [
     {
       items: [{ name: t('nav.dashboard'), href: '/dashboard', icon: LayoutDashboard }],
@@ -208,7 +211,7 @@ export default function DashboardLayout({
       items: [
         { name: t('nav.signals'), href: '/signals', icon: Radar },
         { name: t('nav.grid'), href: '/grid', icon: Grid3x3, pro: true },
-        { name: t('nav.pairTrading'), href: '/history', icon: History, pro: true },
+        { name: t('nav.pairTrading'), href: '/pair', icon: History, pro: true, beta: true },
       ],
     },
     {
@@ -237,16 +240,17 @@ export default function DashboardLayout({
 
   return (
     <div className="h-dvh bg-dark-950 flex flex-col md:flex-row text-slate-100 overflow-hidden">
-      <aside className="w-full md:w-64 md:h-full bg-dark-900 border-r border-dark-800 flex flex-col shrink-0">
-        <div className="p-5 border-b border-dark-800 flex items-center gap-3">
+      <aside className="relative z-40 w-full md:w-64 md:h-full bg-dark-900 border-r border-dark-800 flex flex-col shrink-0">
+        <div className="relative z-20 p-5 border-b border-dark-800 flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-honey-500/10 border border-honey-500/30 flex items-center justify-center text-honey-500 font-bold text-xl shadow-lg shadow-honey-500/20">
             🐝
           </div>
-          <div>
+          <div className="min-w-0 flex-1">
             <h1 className="font-extrabold tracking-tight text-white text-base">
               CRYPTO <span className="text-honey-400">BEE</span>
             </h1>
           </div>
+          <NotificationBell userId={user.id} />
         </div>
 
         <Link
@@ -297,21 +301,37 @@ export default function DashboardLayout({
                 const href = locked ? '/billing' : item.href;
                 const isActive =
                   !locked &&
-                  (item.href === '/history' || item.href === '/signals'
+                  (item.href === '/pair' || item.href === '/signals'
                     ? pathname === item.href
                     : pathname === item.href || pathname.startsWith(`${item.href}/`));
                 return (
                   <Link
                     key={item.href}
                     href={href}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                    className={`flex items-center px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                      item.beta ? 'gap-2' : 'gap-3'
+                    } ${
                       isActive
                         ? 'bg-honey-500 text-dark-950 font-bold shadow-md shadow-honey-500/20'
                         : 'text-slate-400 hover:text-white hover:bg-dark-850'
                     }`}
                   >
                     <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-dark-950' : 'text-slate-400'}`} />
-                    <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                    <span className="flex min-w-0 flex-1 items-center gap-1">
+                      <span className="truncate">{item.name}</span>
+                      {item.beta && (
+                        <span
+                          className={`inline-flex shrink-0 rounded-md px-1 py-0.5 text-[9px] font-bold uppercase ${
+                            isActive
+                              ? 'bg-dark-950 text-honey-400'
+                              : 'border border-honey-500/40 bg-honey-500/15 text-honey-300'
+                          }`}
+                        >
+                          <span className="md:hidden">{t('nav.betaHint')}</span>
+                          <span className="hidden md:inline">{t('nav.betaShort')}</span>
+                        </span>
+                      )}
+                    </span>
                     {item.pro && (
                       <span
                         title={t('nav.proHint')}
@@ -372,6 +392,8 @@ export default function DashboardLayout({
         {children}
       </main>
 
+      {guideModule && <ModuleSetupGuide module={guideModule} />}
+
       <ConfirmModal
         isOpen={isLogoutModalOpen}
         title={t('sidebar.logoutTitle')}
@@ -382,4 +404,11 @@ export default function DashboardLayout({
       />
     </div>
   );
+}
+
+function guideModuleForPath(pathname: string) {
+  if (pathname === '/signals') return 'signals' as const;
+  if (pathname === '/grid') return 'grid' as const;
+  if (pathname === '/pair') return 'pair' as const;
+  return null;
 }

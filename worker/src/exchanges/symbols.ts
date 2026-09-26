@@ -11,10 +11,8 @@ export interface StrategyPairConfig {
  * The live basket is managed dynamically by PairRegistry (see pair-registry.ts).
  */
 export const DEFAULT_STRATEGY_PAIRS: StrategyPairConfig[] = [
-  { pairSymbol: 'ZEC/AVAX', longCoin: 'ZEC', shortCoin: 'AVAX' },
-  { pairSymbol: 'ENA/SUI', longCoin: 'ENA', shortCoin: 'SUI' },
-  { pairSymbol: 'SOL/ADA', longCoin: 'SOL', shortCoin: 'ADA' },
-  { pairSymbol: 'BNB/ETH', longCoin: 'BNB', shortCoin: 'ETH' },
+  { pairSymbol: 'HYPE/DOGE', longCoin: 'HYPE', shortCoin: 'DOGE' },
+  { pairSymbol: 'NEAR/XPL', longCoin: 'NEAR', shortCoin: 'XPL' },
 ];
 
 export function getExchangeSymbol(coin: string, exchange: ExchangeType): string {

@@ -38,13 +38,21 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
+  if (pathname === '/history' || pathname.startsWith('/history/')) {
+    const url = request.nextUrl.clone();
+    url.pathname = pathname.replace(/^\/history/, '/pair');
+    return NextResponse.redirect(url);
+  }
+
   const isProtectedPath =
     pathname.startsWith('/dashboard') ||
     pathname.startsWith('/billing') ||
     pathname.startsWith('/signals') ||
+    pathname.startsWith('/pair') ||
     pathname.startsWith('/history') ||
     pathname.startsWith('/grid') ||
     pathname.startsWith('/settings') ||
+    pathname.startsWith('/notifications') ||
     pathname.startsWith('/admin');
 
   if (isProtectedPath && !user) {
@@ -58,7 +66,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
-  const isProSection = pathname.startsWith('/grid') || pathname.startsWith('/history');
+  const isProSection = pathname.startsWith('/grid') || pathname.startsWith('/pair');
   if (user && isProSection) {
     const { data: profile, error } = await supabase
       .from('users_profile')
@@ -79,11 +87,15 @@ export const config = {
     '/dashboard/:path*',
     '/billing/:path*',
     '/signals/:path*',
+    '/pair',
+    '/pair/:path*',
     '/history',
     '/history/:path*',
     '/grid',
     '/grid/:path*',
     '/settings/:path*',
+    '/notifications',
+    '/notifications/:path*',
     '/admin/:path*',
     '/login',
     '/register',

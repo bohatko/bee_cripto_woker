@@ -18,6 +18,7 @@ import {
   Activity,
   AlertTriangle,
   Star,
+  ExternalLink,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
@@ -38,6 +39,13 @@ interface ExchangeAccountItem {
   last_sync_at: string | null;
   last_error_msg: string | null;
 }
+
+const EXCHANGE_SIGNUP_URL = {
+  binance: 'https://www.binance.com/activity/referral-entry/CPA?ref=CPA_00B8ABIXMW',
+  okx: 'https://okx.com/join/96394396',
+  bybit:
+    'https://www.bybit.com/invite?ref=ZLKWED&medium=referral&utm_campaign=evergreen&share_to=post',
+} as const;
 
 interface TradingSettingsItem {
   id: string;
@@ -743,6 +751,23 @@ export default function ExchangeSettingsPage() {
                 <p className="text-xs text-slate-400 mt-1">
                   {t('exchange.linkDesc', { exchange: selectedExchange.toUpperCase() })}
                 </p>
+              </div>
+
+              <div className="mb-6 max-w-xl rounded-xl border border-honey-500/25 bg-honey-500/5 p-4">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-honey-400">
+                  {t('exchange.partnerOptional')}
+                </p>
+                <h3 className="mt-1 text-sm font-bold text-white">{t('exchange.partnerTitle')}</h3>
+                <p className="mt-1 text-xs leading-relaxed text-slate-400">{t('exchange.partnerDesc')}</p>
+                <a
+                  href={EXCHANGE_SIGNUP_URL[selectedExchange]}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-honey-500/40 bg-dark-950 px-3.5 py-2 text-xs font-bold text-honey-300 transition-colors hover:bg-honey-500/10 hover:text-honey-200"
+                >
+                  {t('exchange.partnerAction', { exchange: selectedExchange.toUpperCase() })}
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
               </div>
 
               {/* Form Inputs */}

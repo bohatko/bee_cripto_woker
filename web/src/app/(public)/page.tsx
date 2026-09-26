@@ -23,27 +23,14 @@ import { supabase } from '@/lib/supabase/client';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { LanguageSwitcher } from '@/lib/i18n/LanguageSwitcher';
 import { BeeHeroScene } from '@/components/landing/BeeHeroScene';
+import { PlanIntervalSwitch, YearlySavingsNote } from '@/components/pricing/PlanPricing';
+import { PLAN_FEATURE_KEYS } from '@/lib/plans';
 import { SUPPORT_TELEGRAM_URL } from '@/lib/support';
 
 type PairMarketRow = {
   pair_symbol: string;
   is_in_trend: boolean | null;
 };
-
-const LITE_FEATURES = [
-  'landing.liteFeature1',
-  'landing.liteFeature2',
-  'landing.liteFeature3',
-  'landing.liteFeature4',
-];
-
-const PRO_FEATURES = [
-  'landing.proFeature1',
-  'landing.proFeature2',
-  'landing.proFeature3',
-  'landing.proFeature4',
-  'landing.proFeature5',
-];
 
 const STEPS = [
   { title: 'landing.step1Title', desc: 'landing.step1Desc', icon: Boxes },
@@ -577,26 +564,7 @@ export default function LandingPage() {
           <SectionHeading title={t('landing.pricingTitle')} subtitle={t('landing.pricingSubtitle')} />
 
           <div className="mb-8 flex justify-center">
-            <div className="inline-flex rounded-xl border border-dark-700 bg-dark-900 p-1">
-              <button
-                type="button"
-                onClick={() => setYearly(false)}
-                className={`rounded-lg px-4 py-2 text-sm font-semibold ${
-                  yearly ? 'text-slate-400' : 'bg-honey-500 text-dark-950'
-                }`}
-              >
-                {t('landing.monthly')}
-              </button>
-              <button
-                type="button"
-                onClick={() => setYearly(true)}
-                className={`rounded-lg px-4 py-2 text-sm font-semibold ${
-                  yearly ? 'bg-honey-500 text-dark-950' : 'text-slate-400'
-                }`}
-              >
-                {t('landing.yearly')}
-              </button>
-            </div>
+            <PlanIntervalSwitch yearly={yearly} onYearlyChange={setYearly} />
           </div>
 
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -611,9 +579,14 @@ export default function LandingPage() {
                 </span>
                 <span className="text-slate-400">{yearly ? t('landing.perYear') : t('landing.perMonth')}</span>
               </div>
-              {yearly && <p className="mt-1 text-xs text-slate-500">{t('landing.billedYearly')}</p>}
+              {yearly && (
+                <>
+                  <YearlySavingsNote plan="lite" className="mt-2" />
+                  <p className="mt-1 text-xs text-slate-500">{t('landing.billedYearly')}</p>
+                </>
+              )}
               <ul className="mt-6 space-y-3 text-sm text-slate-300">
-                {LITE_FEATURES.map((key) => (
+                {PLAN_FEATURE_KEYS.lite.map((key) => (
                   <li key={key} className="flex items-start gap-3">
                     <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
                     <span>{t(key)}</span>
@@ -639,9 +612,14 @@ export default function LandingPage() {
                 </span>
                 <span className="text-slate-400">{yearly ? t('landing.perYear') : t('landing.perMonth')}</span>
               </div>
-              {yearly && <p className="mt-1 text-xs text-slate-500">{t('landing.billedYearly')}</p>}
+              {yearly && (
+                <>
+                  <YearlySavingsNote plan="pro" className="mt-2" />
+                  <p className="mt-1 text-xs text-slate-500">{t('landing.billedYearly')}</p>
+                </>
+              )}
               <ul className="mt-6 space-y-3 text-sm text-slate-300">
-                {PRO_FEATURES.map((key) => (
+                {PLAN_FEATURE_KEYS.pro.map((key) => (
                   <li key={key} className="flex items-start gap-3">
                     <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
                     <span>{t(key)}</span>

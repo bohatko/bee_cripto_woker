@@ -86,17 +86,18 @@ bee_cripto_woker/
 
 Стратегия — **Multi-Pair Market-Neutral Alpha Basket** (рыночно-нейтральный спред с $\beta = 0$):
 
-1. **Состав корзины (динамический, всегда 4 слота)**:
-   * Источник истины — таблица `strategy_pairs` (`is_active=true`), кэш в воркере: `PairRegistry` (`worker/src/exchanges/pair-registry.ts`).
-   * Fallback при пустой/недоступной БД: `DEFAULT_STRATEGY_PAIRS` = `ZEC/AVAX`, `ENA/SUI`, `SOL/ADA`, `BNB/ETH`.
-   * Ежедневный momentum-скринер (`worker/src/jobs/pair-selection.ts`) отбирает топ-4 пары по drift t-stat Ratio (не коинтеграция; MR-скринер дал −34.8% OOS).
+1. **Состав корзины (динамический, всегда 2 слота)**:
+ * Источник истины — таблица `strategy_pairs` (`is_active=true`), кэш в воркере: `PairRegistry` (`worker/src/exchanges/pair-registry.ts`).
+ * Один слот — лучшая новая пара скринера. Второй слот остаётся за парой, у которой уже есть открытая позиция (дашборд и live); если открытых сделок нет, слот занимает следующая лучшая пара без общих монет.
+ * Fallback при пустой/недоступной БД: `DEFAULT_STRATEGY_PAIRS` = `HYPE/DOGE`, `NEAR/XPL`.
+   * Ежедневный momentum-скринер (`worker/src/jobs/pair-selection.ts`) ранжирует кандидатов по drift t-stat Ratio и оставляет 2 пары (не коинтеграция; MR-скринер дал −34.8% OOS).
    * Авторотация: `engine_settings.auto_rotation_enabled` (в проде по умолчанию **false**, пока walk-forward гейт не пройден — см. `research/pair_selection/MOMENTUM_VALIDATION_RESULTS.md`).
    * Guardrails: гистерезис 1.25×, ≤2 замены за прогон, убранные пары с открытыми позициями **не закрываются** — сопровождаются до TP/SL/Trend-Flip.
 2. **Правило входа**:
    * Отношение цен $\text{Ratio} = \text{Price}_{\text{Long}} / \text{Price}_{\text{Short}}$.
    * Вход **ТОЛЬКО** когда $\text{Ratio} > \text{EMA}_{10}$ (на 4-часовом таймфрейме) и пара в **активной глобальной** корзине (`PairRegistry`). Per-user `trading_settings.active_pairs` больше не фильтрует входы.
 3. **Распределение капитала**:
-   * Депозит делится на 4 слота: **20% свободной маржи на пару** (макс. 80% депозита, 20% буфер).
+   * Депозит делится на 2 слота: **20% свободной маржи на пару** (макс. 40% депозита).
   * Рабочее эффективное плечо: **3.0x** (hard cap `MAX_LEVERAGE=3`).
    * Объем делится поровну между лонгом и шортом: $\text{Volume}_{\text{leg}} = (\text{Margin} \times 7) / 2$.
 4. **Условия выхода**:

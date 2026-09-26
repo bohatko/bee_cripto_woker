@@ -236,11 +236,19 @@ export default function UserHistoryPage() {
 
   return (
     <div className="p-4 sm:p-8 space-y-6">
+      <div className="rounded-2xl border border-honey-500/40 bg-honey-500/10 px-4 py-3 sm:px-5">
+        <p className="text-sm font-bold text-honey-300">{t('history.betaBannerTitle')}</p>
+        <p className="mt-1 text-sm text-honey-100/90">{t('history.betaBanner')}</p>
+      </div>
+
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
             {t('history.userTitle')}
+            <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-honey-500/15 text-honey-300 border border-honey-500/30">
+              {t('history.betaBadge')}
+            </span>
             <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
               {t('history.auditedLog')}
             </span>
@@ -306,7 +314,7 @@ export default function UserHistoryPage() {
       </div>
 
       <Link
-        href="/history/bot"
+        href="/pair/bot"
         className="inline-flex w-fit items-center gap-2 rounded-xl border border-dark-700 bg-dark-900 px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:border-honey-500/40 hover:text-honey-400"
       >
         <TrendingUp className="h-4 w-4" />

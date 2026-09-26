@@ -13,6 +13,16 @@ const nextConfig: NextConfig = {
         destination: '/settings/exchange',
         permanent: false,
       },
+      {
+        source: '/history',
+        destination: '/pair',
+        permanent: false,
+      },
+      {
+        source: '/history/:path*',
+        destination: '/pair/:path*',
+        permanent: false,
+      },
     ];
   },
 };

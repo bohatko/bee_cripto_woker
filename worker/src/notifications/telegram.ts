@@ -479,8 +479,9 @@ class TelegramNotifier {
     gridCount: number;
   }): Promise<void> {
     const message = [
-      `🐝 <b>ГРИД-БОТ ЗАПУЩЕН</b>`,
+      `🐝 <b>ИИ-БОТ ЗАПУЩЕН</b>`,
       `━━━━━━━━━━━━━━━━━━`,
+      `Параметры задала топовая нейросеть, последняя модель. Она ведёт бота на вашей бирже.`,
       `📊 <b>Монета:</b> <code>${escapeHtml(data.symbol)}/USDT</code>`,
       `🏦 <b>Биржа:</b> <code>${escapeHtml(data.exchange.toUpperCase())}</code>`,
       `💵 <b>Маржа:</b> <code>${data.marginUsdt.toFixed(2)} USDT</code>`,
@@ -508,7 +509,7 @@ class TelegramNotifier {
         ? ''
         : `${data.pnlUsdt >= 0 ? '🟢' : '🔴'} <b>PnL:</b> <code>${data.pnlUsdt >= 0 ? '+' : ''}${data.pnlUsdt.toFixed(2)} USDT</code>`;
     const message = [
-      `🏁 <b>ГРИД-БОТ ОСТАНОВЛЕН</b>`,
+      `🏁 <b>ИИ-БОТ ОСТАНОВЛЕН</b>`,
       `━━━━━━━━━━━━━━━━━━`,
       `📊 <b>Монета:</b> <code>${escapeHtml(data.symbol)}/USDT</code>`,
       `🏦 <b>Биржа:</b> <code>${escapeHtml(data.exchange.toUpperCase())}</code>`,

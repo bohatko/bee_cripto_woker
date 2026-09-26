@@ -244,7 +244,7 @@ export class GridSupervisor {
           });
           await telegramNotifier.sendToUser(
             bot.user_id,
-            'Grid bot is no longer controlled by Crypto Bee. It keeps running on the exchange. Renew Pro to resume control.'
+            'Нейросеть больше не управляет этим ботом на вашей бирже. Он продолжает работать, пока вы сами его не закроете. Продлите Pro, чтобы вернуть управление.'
           );
           console.log(`[Grid] Released control for ${profile?.email || bot.user_id}`);
           await logEvent({

@@ -37,7 +37,7 @@ function isExternallyFlatPositionError(message: string): boolean {
   );
 }
 
-/** Share of the pair-trading budget allocated to each basket slot (4 slots → 80% max). */
+/** Share of the pair-trading budget allocated to each basket slot (2 slots → 40% max, rest stays free). */
 export const PAIR_SLOT_FRACTION = 0.2;
 
 export class OrderRouter {
@@ -383,7 +383,7 @@ export class OrderRouter {
         ? Math.min(100, Math.max(5, pairsBalancePctRaw))
         : 100;
       const pairTradingBudgetUsd = freeUsdt * (pairsBalancePct / 100);
-      // 4 pairs in basket => 20% of the pair-trading budget per pair (20% free buffer)
+      // 2 pairs in basket => 20% of the pair-trading budget per pair (at most 40% deployed)
       const slotMargin = pairTradingBudgetUsd * PAIR_SLOT_FRACTION;
       if (!Number.isFinite(freeUsdt) || slotMargin < MIN_SLOT_MARGIN_USD) {
         await this.skipEntry(

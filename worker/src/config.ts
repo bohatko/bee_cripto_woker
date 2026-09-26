@@ -52,6 +52,7 @@ export const CONFIG = {
   pairSelectionEnabled: parseBool(process.env.PAIR_SELECTION_ENABLED, true),
   pairSelectionUtcHour: Number(process.env.PAIR_SELECTION_UTC_HOUR || 0),
   pairSelectionUtcMinute: Number(process.env.PAIR_SELECTION_UTC_MINUTE || 10),
+  basketSize: Math.max(1, Number(process.env.BASKET_SIZE || 2)),
   rotationMaxReplacements: Number(process.env.ROTATION_MAX_REPLACEMENTS || 2),
   rotationHysteresis: Number(process.env.ROTATION_HYSTERESIS || 1.5),
   universeSize: Number(process.env.UNIVERSE_SIZE || 60),

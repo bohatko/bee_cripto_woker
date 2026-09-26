@@ -107,17 +107,22 @@ export default function AdminDashboardPage() {
       .order('score', { ascending: false });
 
     if (pairs) setActivePairs(pairs);
+    await refreshPairRuns();
+    await loadPairsSettings();
+  }
 
-    // Load last 10 pair selection runs
-    const { data: runs } = await supabase
+  async function refreshPairRuns() {
+    const { data: runs, error } = await supabase
       .from('pair_selection_runs')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(10);
 
-    if (runs) setPairRuns(runs);
+    if (error || !runs) return;
+    setPairRuns(runs);
+  }
 
-    // Load engine settings (single row, id = 1)
+  async function loadPairsSettings() {
     const { data: settings } = await supabase
       .from('engine_settings')
       .select('*')
@@ -284,7 +289,7 @@ export default function AdminDashboardPage() {
         loadPairsData();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pair_selection_runs' }, () => {
-        loadPairsData();
+        void refreshPairRuns();
       })
       .subscribe();
 
@@ -292,6 +297,18 @@ export default function AdminDashboardPage() {
       supabase.removeChannel(channel);
     };
   }, [router]);
+
+  const hasLivePairRun = pairRuns.some(
+    (run) => run.status === 'pending' || run.status === 'running'
+  );
+
+  useEffect(() => {
+    if (!hasLivePairRun) return;
+    const timer = window.setInterval(() => {
+      void refreshPairRuns();
+    }, 2000);
+    return () => window.clearInterval(timer);
+  }, [hasLivePairRun]);
 
   const handleApproveInvoice = async (invoice: any) => {
     setSelectedInvoice(invoice);
@@ -424,39 +441,46 @@ export default function AdminDashboardPage() {
           nextEnabled ? t('admin.rotationEnabledToast') : t('admin.rotationDisabledToast')
         );
       } else if (pairsAction === 'runSelection') {
-        await supabase.from('pair_selection_runs').insert({
-          status: 'pending',
-          trigger_source: 'admin',
-          requested_by: adminUser.id,
-          progress_log: [
-            {
-              at: new Date().toISOString(),
-              stage: 'queued',
-              message: 'Admin queued a manual pair selection run. Waiting for the worker daemon to pick it up.',
-              detail: { requested_by: adminUser.id },
-            },
-          ],
-        });
+        const queuedAt = new Date().toISOString();
+        const { data: created, error: insertError } = await supabase
+          .from('pair_selection_runs')
+          .insert({
+            status: 'pending',
+            trigger_source: 'admin',
+            requested_by: adminUser.id,
+            progress_log: [
+              {
+                at: queuedAt,
+                stage: 'queued',
+                message: 'Admin queued a manual pair selection run. Waiting for the worker daemon to pick it up.',
+                detail: { requested_by: adminUser.id },
+              },
+            ],
+          })
+          .select('*')
+          .single();
 
-        await supabase.from('audit_logs').insert({
+        if (insertError || !created) {
+          throw insertError || new Error('Failed to queue pair selection');
+        }
+
+        setPairRuns((prev) => [created, ...prev.filter((run) => run.id !== created.id)].slice(0, 10));
+        setTraceRunId(created.id);
+        toast.success(t('admin.selectionTriggeredToast'));
+
+        const { error: auditError } = await supabase.from('audit_logs').insert({
           user_id: adminUser.id,
           action: 'pair_selection_triggered',
-          details: {},
+          details: { run_id: created.id },
         });
+        if (auditError) {
+          console.error('Failed to write pair selection audit log:', auditError.message);
+        }
 
-        toast.success(t('admin.selectionTriggeredToast'));
-        // Open the live trace drawer for the newest pending run after reload
-        const { data: newest } = await supabase
-          .from('pair_selection_runs')
-          .select('id')
-          .eq('status', 'pending')
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (newest?.id) setTraceRunId(newest.id);
+        void refreshPairRuns();
       }
 
-      loadPairsData();
+      if (pairsAction === 'toggleRotation') loadPairsData();
     } catch (err: any) {
       const errorText = err.message || 'Action failed';
       toast.error(errorText);
@@ -1352,6 +1376,14 @@ export default function AdminDashboardPage() {
                     {t('admin.runSelection')}
                   </div>
                   <p className="text-[11px] text-slate-500 mt-1.5">{t('admin.runSelectionHint')}</p>
+                  {isRunInProgress && (
+                    <p className="text-[10px] text-amber-300 mt-1 font-mono">
+                      {latestRun.status}
+                      {Array.isArray(latestRun.progress_log) && latestRun.progress_log.length > 0
+                        ? ` · ${latestRun.progress_log[latestRun.progress_log.length - 1]?.message ?? ''}`
+                        : ''}
+                    </p>
+                  )}
                 </div>
                 {isRunInProgress ? (
                   <button

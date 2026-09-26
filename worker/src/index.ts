@@ -68,7 +68,7 @@ async function main() {
   const guard = new PositionGuard(orderRouter, scanner, 5000);
   const healthCheck = new HealthCheckJob(CONFIG.healthPingIntervalMs);
   const billingCron = new BillingCronJob(CONFIG.billingCronIntervalMs);
-  const pairSelection = new PairSelectionJob(60_000);
+  const pairSelection = new PairSelectionJob(10_000);
   const gridSupervisor = new GridSupervisor(30_000);
 
   // Dip-Buy Signals Engines (loaded from signal_strategies)

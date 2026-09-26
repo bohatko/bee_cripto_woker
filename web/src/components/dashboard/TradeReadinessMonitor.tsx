@@ -389,8 +389,8 @@ export function TradeReadinessMonitor({
         </div>
       )}
 
-      {/* 4 Strategy Pairs Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+      {/* 2 strategy pair cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {evaluatedPairs.map((pair) => {
           const {
             meta,

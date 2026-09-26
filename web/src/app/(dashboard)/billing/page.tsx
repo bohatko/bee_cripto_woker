@@ -14,6 +14,7 @@ import {
   AlertTriangle,
   ExternalLink,
   Send,
+  CheckCircle2,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { resolveExternalUid } from '@/lib/externalUid';
@@ -21,7 +22,8 @@ import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { toast } from '@/components/ui/sonner';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { BillingSkeleton } from '@/components/skeletons/PageSkeletons';
-import { PLAN_PRICE_USD, isBillingInterval, isSubscriptionPlan, type BillingInterval, type SubscriptionPlan } from '@/lib/plans';
+import { PLAN_PRICE_USD, PLAN_FEATURE_KEYS, isBillingInterval, isSubscriptionPlan, type BillingInterval, type SubscriptionPlan } from '@/lib/plans';
+import { PlanIntervalSwitch, YearlyInvoiceNote, YearlySavingsNote } from '@/components/pricing/PlanPricing';
 import { supportTelegramUrl } from '@/lib/support';
 
 const APTOS_WALLET_ADDRESS =
@@ -133,42 +135,46 @@ export default function BillingPage() {
     setSubmitting(true);
     setIsSubmitModalOpen(false);
 
-    const updatePayload: Record<string, any> = {
-      tx_hash: txHash.trim(),
-      status: 'pending_review',
-      user_notes:
-        paymentMethod === 'okx'
-          ? `Paid via OKX internal transfer | Bee ID: ${externalUid || 'n/a'} | OKX UID: ${OKX_DEPOSIT_UID}`
-          : `Paid via USDT (Aptos) on OKX | Bee ID: ${externalUid || 'n/a'}`,
-      payment_wallet_address: displayWalletAddress,
-    };
+    try {
+      const response = await fetch('/api/billing/submit-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          invoiceId: activeInvoice.id,
+          txHash: txHash.trim(),
+          paymentMethod,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok && !payload.code) {
+        toast.error(payload.error || t('billing.submitError'));
+        return;
+      }
 
-    // Try updating with payment_network: 'APTOS'
-    let { error } = await supabase
-      .from('invoices')
-      .update({
-        ...updatePayload,
-        payment_network: 'APTOS',
-      })
-      .eq('id', activeInvoice.id);
+      if (payload.code === 'paid') {
+        toast.success(t('billing.verified'));
+      } else if (payload.code === 'amount_mismatch') {
+        toast.error(
+          t('billing.amountMismatch', {
+            chain: Number(payload.chainAmount).toFixed(2),
+            invoice: Number(payload.invoiceAmount).toFixed(2),
+          })
+        );
+      } else if (payload.code === 'pending_manual' || payload.code === 'no_plan') {
+        toast.success(t('billing.submitted'));
+      } else if (payload.code) {
+        toast.error(t(`billing.verify_${payload.code}`));
+      } else {
+        toast.error(payload.error || t('billing.submitError'));
+        return;
+      }
 
-    if (error && error.message?.includes('crypto_network')) {
-      // Fallback if postgres enum does not include APTOS yet
-      const fallback = await supabase
-        .from('invoices')
-        .update(updatePayload)
-        .eq('id', activeInvoice.id);
-      error = fallback.error;
-    }
-
-    setSubmitting(false);
-
-    if (error) {
-      toast.error(error.message);
-    } else {
-      toast.success(t('billing.submitted'));
       setTxHash('');
-      loadBilling();
+      await loadBilling();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : t('billing.submitError'));
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -265,48 +271,92 @@ export default function BillingPage() {
       </div>
 
       <section className="bg-dark-900 border border-dark-800 rounded-2xl p-6 shadow-xl space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
-          <div>
-            <h2 className="font-bold text-white">{t('billing.choosePlan')}</h2>
-            <p className="text-xs text-slate-400 mt-1">
-              {t('billing.currentPlan', { plan: t(entitledPlan === 'pro' ? 'billing.planPro' : 'billing.planLite') })}
-              {' · '}
-              {planAppliesNow ? t('billing.planAppliesNow') : t('billing.planAppliesNext')}
-            </p>
-          </div>
-          <p className="font-mono text-lg font-bold text-honey-400">
-            ${PLAN_PRICE_USD[planDraft][intervalDraft]} USDT
+        <div>
+          <h2 className="font-bold text-white">{t('billing.choosePlan')}</h2>
+          <p className="text-xs text-slate-400 mt-1">
+            {t('billing.currentPlan', { plan: t(entitledPlan === 'pro' ? 'billing.planPro' : 'billing.planLite') })}
+            {' · '}
+            {planAppliesNow ? t('billing.planAppliesNow') : t('billing.planAppliesNext')}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {(['lite', 'pro'] as const).map((plan) => (
-            <button
-              key={plan}
-              type="button"
-              onClick={() => setPlanDraft(plan)}
-              className={`px-4 py-2 rounded-xl text-sm font-bold border ${
-                planDraft === plan
-                  ? 'bg-honey-500 text-dark-950 border-honey-500'
-                  : 'bg-dark-950 text-slate-300 border-dark-700'
-              }`}
-            >
-              {t(plan === 'pro' ? 'billing.planPro' : 'billing.planLite')}
-            </button>
-          ))}
-          {(['month', 'year'] as const).map((interval) => (
-            <button
-              key={interval}
-              type="button"
-              onClick={() => setIntervalDraft(interval)}
-              className={`px-4 py-2 rounded-xl text-sm font-bold border ${
-                intervalDraft === interval
-                  ? 'bg-dark-800 text-white border-honey-500/50'
-                  : 'bg-dark-950 text-slate-400 border-dark-700'
-              }`}
-            >
-              {t(interval === 'year' ? 'billing.intervalYear' : 'billing.intervalMonth')}
-            </button>
-          ))}
+        <div className="flex justify-center">
+          <PlanIntervalSwitch
+            yearly={intervalDraft === 'year'}
+            onYearlyChange={(yearly) => setIntervalDraft(yearly ? 'year' : 'month')}
+            track="inset"
+          />
+        </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2" role="radiogroup">
+          {(['lite', 'pro'] as const).map((plan) => {
+            const selected = planDraft === plan;
+            const yearly = intervalDraft === 'year';
+            return (
+              <article
+                key={plan}
+                role="radio"
+                aria-checked={selected}
+                tabIndex={0}
+                onClick={() => setPlanDraft(plan)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    setPlanDraft(plan);
+                  }
+                }}
+                className={`relative flex cursor-pointer flex-col rounded-3xl border-2 bg-dark-950 p-6 text-left transition-colors ${
+                  selected
+                    ? 'border-honey-500 shadow-2xl'
+                    : 'border-dark-800 hover:border-dark-700'
+                }`}
+              >
+                {selected && (
+                  <span className="absolute right-5 top-5 flex h-6 w-6 items-center justify-center rounded-full bg-honey-500 text-dark-950">
+                    <Check className="h-3.5 w-3.5" />
+                  </span>
+                )}
+                <h3 className="text-2xl font-bold text-white">
+                  {t(plan === 'pro' ? 'landing.proName' : 'landing.liteName')}
+                </h3>
+                <div className="mt-4 flex items-baseline gap-2">
+                  <span className="font-mono text-4xl font-black text-honey-400 sm:text-5xl">
+                    {t(
+                      plan === 'pro'
+                        ? yearly
+                          ? 'landing.proPriceYear'
+                          : 'landing.proPriceMonth'
+                        : yearly
+                          ? 'landing.litePriceYear'
+                          : 'landing.litePriceMonth'
+                    )}
+                  </span>
+                  <span className="text-slate-400">
+                    {yearly ? t('landing.perYear') : t('landing.perMonth')}
+                  </span>
+                </div>
+                {yearly && (
+                  <>
+                    <YearlySavingsNote plan={plan} className="mt-2" />
+                    <p className="mt-1 text-xs text-slate-500">{t('landing.billedYearly')}</p>
+                  </>
+                )}
+                <ul className="mt-6 space-y-3 text-sm text-slate-300">
+                  {PLAN_FEATURE_KEYS[plan].map((key) => (
+                    <li key={key} className="flex items-start gap-3">
+                      <CheckCircle2
+                        className={`mt-0.5 h-4 w-4 shrink-0 ${
+                          plan === 'pro' ? 'text-emerald-400' : 'text-slate-400'
+                        }`}
+                      />
+                      <span>{t(key)}</span>
+                    </li>
+                  ))}
+                </ul>
+                {plan === 'pro' && (
+                  <p className="mt-4 text-xs leading-relaxed text-slate-500">{t('landing.insuranceNote')}</p>
+                )}
+              </article>
+            );
+          })}
         </div>
         <button
           type="button"
@@ -384,6 +434,12 @@ export default function BillingPage() {
                 ${Number(activeInvoice.total_amount_usd).toFixed(2)}{' '}
                 <span className="text-sm font-normal text-slate-500">USDT</span>
               </p>
+              <YearlyInvoiceNote
+                interval={activeInvoice.billing_interval}
+                plan={activeInvoice.subscription_plan}
+                amountUsd={Number(activeInvoice.total_amount_usd)}
+                className="mt-1 sm:justify-end"
+              />
             </div>
           </div>
 
@@ -661,6 +717,12 @@ export default function BillingPage() {
                       </td>
                       <td className="px-5 py-3.5 text-honey-400 font-bold">
                         ${Number(inv.total_amount_usd).toFixed(2)} USDT
+                        <YearlyInvoiceNote
+                          interval={inv.billing_interval}
+                          plan={inv.subscription_plan}
+                          amountUsd={Number(inv.total_amount_usd)}
+                          className="mt-1 font-normal"
+                        />
                       </td>
                       <td className="px-5 py-3.5 text-slate-300">
                         USDT (Aptos)

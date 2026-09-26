@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAuthenticatedUser } from '@/lib/supabase/server';
 import { validateExchangeViaWorker, WorkerConfigError } from '@/lib/worker-client';
 import { encryptPayload, encryptString } from '@/lib/encryption';
+import { recordUserNotification } from '@/lib/notifications/record';
 
 export async function POST(request: Request) {
   try {
@@ -77,6 +78,20 @@ export async function POST(request: Request) {
     );
 
     if (!validation.ok) {
+      const day = new Date().toISOString().slice(0, 10);
+      const rejectedForWithdraw = validation.canWithdraw === true;
+      await recordUserNotification({
+        userId: user.id,
+        category: 'exchange',
+        eventType: rejectedForWithdraw ? 'exchange.withdraw_blocked' : 'exchange.futures_denied',
+        severity: 'critical',
+        href: '/settings/exchange',
+        dedupeKey: `exchange.validate:${user.id}:${exchange}:${rejectedForWithdraw ? 'withdraw' : 'denied'}:${day}`,
+        payload: {
+          exchange: String(exchange).toUpperCase(),
+          message: rejectedForWithdraw ? '' : validation.error,
+        },
+      });
       return NextResponse.json(
         {
           error: validation.error,
