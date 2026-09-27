@@ -67,7 +67,7 @@ export default function GridPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [confirmCreate, setConfirmCreate] = useState(false);
   const [stopSlot, setStopSlot] = useState<Slot | null>(null);
-  const [restartSlot, setRestartSlot] = useState<Slot | null>(null);
+  const [editSlot, setEditSlot] = useState<Slot | null>(null);
   const [historySlot, setHistorySlot] = useState<Slot | null>(null);
   const [draftCoin, setDraftCoin] = useState('');
   const [draftExchange, setDraftExchange] = useState<ExchangeName | ''>('');
@@ -150,12 +150,27 @@ export default function GridPage() {
   const latestBot = (slot: Slot) =>
     bots.find((bot) => bot.template_id === slot.template_id && bot.exchange === slot.exchange);
 
+  const firstConnected = () => (['bybit', 'okx'] as ExchangeName[]).find((name) => connected[name]) || '';
+
   const openCreate = () => {
-    const firstConnected = (['bybit', 'okx'] as ExchangeName[]).find((name) => connected[name]) || '';
+    setEditSlot(null);
     setDraftCoin(templates[0]?.id || '');
-    setDraftExchange(firstConnected);
+    setDraftExchange(firstConnected());
     setDraftMargin('100');
     setCreateOpen(true);
+  };
+
+  const openRestart = (slot: Slot) => {
+    setEditSlot(slot);
+    setDraftCoin(templateById.has(slot.template_id) ? slot.template_id : templates[0]?.id || '');
+    setDraftExchange(connected[slot.exchange] ? slot.exchange : firstConnected());
+    setDraftMargin(String(Number(slot.margin_usdt)));
+    setCreateOpen(true);
+  };
+
+  const closeForm = () => {
+    setCreateOpen(false);
+    setEditSlot(null);
   };
 
   const createBot = async () => {
@@ -174,24 +189,33 @@ export default function GridPage() {
       setConfirmCreate(false);
       return;
     }
-    const { error } = await supabase.from('grid_user_settings').upsert(
-      {
-        user_id: userId,
-        template_id: draftCoin,
-        exchange: draftExchange,
-        margin_usdt: Number(draftMargin),
-        is_enabled: true,
-        last_error: null,
-      },
-      { onConflict: 'user_id,template_id,exchange' }
-    );
+    const sameSlot = editSlot && editSlot.template_id === draftCoin && editSlot.exchange === draftExchange;
+    const { error } = sameSlot
+      ? await supabase
+          .from('grid_user_settings')
+          .update({ margin_usdt: Number(draftMargin), is_enabled: true, last_error: null })
+          .eq('id', editSlot.id)
+      : await supabase.from('grid_user_settings').upsert(
+          {
+            user_id: userId,
+            template_id: draftCoin,
+            exchange: draftExchange,
+            margin_usdt: Number(draftMargin),
+            is_enabled: true,
+            last_error: null,
+          },
+          { onConflict: 'user_id,template_id,exchange' }
+        );
     if (error) {
       toast.error(error.message);
       return;
     }
+    if (editSlot && !sameSlot) {
+      await supabase.from('grid_user_settings').delete().eq('id', editSlot.id);
+    }
     toast.success(t('grid.saved'));
     setConfirmCreate(false);
-    setCreateOpen(false);
+    closeForm();
     await load();
   };
 
@@ -204,21 +228,6 @@ export default function GridPage() {
     }
     toast.success(t('grid.saved'));
     setStopSlot(null);
-    await load();
-  };
-
-  const restartBot = async () => {
-    if (!restartSlot) return;
-    const { error } = await supabase
-      .from('grid_user_settings')
-      .update({ is_enabled: true, last_error: null })
-      .eq('id', restartSlot.id);
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-    toast.success(t('grid.saved'));
-    setRestartSlot(null);
     await load();
   };
 
@@ -354,7 +363,7 @@ export default function GridPage() {
                     <button
                       type="button"
                       disabled={!pro}
-                      onClick={() => setRestartSlot(slot)}
+                      onClick={() => openRestart(slot)}
                       className="rounded-lg bg-honey-500 px-3 py-1.5 text-xs font-bold text-dark-950 disabled:opacity-40"
                     >
                       {t('grid.restart')}
@@ -369,11 +378,11 @@ export default function GridPage() {
 
       {createOpen && (
         <div className="fixed inset-0 z-40 flex items-center justify-center p-4">
-          <button type="button" className="absolute inset-0 bg-black/70" aria-label={t('common.cancel')} onClick={() => setCreateOpen(false)} />
+          <button type="button" className="absolute inset-0 bg-black/70" aria-label={t('common.cancel')} onClick={closeForm} />
           <div className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-dark-800 bg-dark-900 p-5">
             <div className="flex items-start justify-between gap-3">
-              <h2 className="text-lg font-bold text-white">{t('grid.create')}</h2>
-              <button type="button" onClick={() => setCreateOpen(false)} className="rounded-lg p-1 text-slate-400">
+              <h2 className="text-lg font-bold text-white">{editSlot ? t('grid.restart') : t('grid.create')}</h2>
+              <button type="button" onClick={closeForm} className="rounded-lg p-1 text-slate-400">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -442,7 +451,7 @@ export default function GridPage() {
               onClick={() => setConfirmCreate(true)}
               className="mt-5 w-full rounded-xl bg-honey-500 px-4 py-2 text-sm font-bold text-dark-950 disabled:opacity-40"
             >
-              {t('grid.create')}
+              {editSlot ? t('grid.restart') : t('grid.create')}
             </button>
           </div>
         </div>
@@ -484,9 +493,9 @@ export default function GridPage() {
 
       <ConfirmModal
         isOpen={confirmCreate}
-        title={t('grid.confirmCreateTitle')}
-        description={t('grid.confirmCreateDesc')}
-        confirmText={t('grid.create')}
+        title={editSlot ? t('grid.confirmRestartTitle') : t('grid.confirmCreateTitle')}
+        description={editSlot ? t('grid.confirmRestartDesc') : t('grid.confirmCreateDesc')}
+        confirmText={editSlot ? t('grid.restart') : t('grid.create')}
         onConfirm={() => void createBot()}
         onCancel={() => setConfirmCreate(false)}
       />
@@ -498,14 +507,6 @@ export default function GridPage() {
         typeLabel={`${t('panic.typeClose')} CLOSE ${t('panic.toConfirm')}`}
         onConfirm={() => void stopBot()}
         onCancel={() => setStopSlot(null)}
-      />
-      <ConfirmModal
-        isOpen={Boolean(restartSlot)}
-        title={t('grid.confirmRestartTitle')}
-        description={t('grid.confirmRestartDesc')}
-        confirmText={t('grid.restart')}
-        onConfirm={() => void restartBot()}
-        onCancel={() => setRestartSlot(null)}
       />
     </div>
   );

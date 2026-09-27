@@ -1157,7 +1157,7 @@ export const en = {
     restart: 'Start again',
     confirmRestartTitle: 'Start this bot again?',
     confirmRestartDesc:
-      'The neural network opens a new bot on your exchange with the same coin, exchange and margin, and keeps managing it. The closed bot is not resumed.',
+      'The neural network opens a new bot with the coin, exchange and margin you selected, and keeps managing it. The closed bot is not resumed.',
     saved: 'Parameters saved. The latest model applies them to bots opened after this save.',
     exchange: 'Exchange',
     pnl: 'PnL',

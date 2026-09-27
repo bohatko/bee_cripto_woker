@@ -70,6 +70,7 @@ interface BotRow {
   stopped_at?: string | null;
   pnl_usdt?: number | null;
   base_asset?: string;
+  snapshot?: Record<string, unknown> | null;
 }
 
 function entitled(profile: ProfileRow | undefined): boolean {
@@ -144,6 +145,23 @@ async function closeOnExchange(bot: BotRow, account: AccountRow, baseAsset: stri
     return;
   }
   await stopBybitGrid(creds, bot.exchange_bot_id);
+}
+
+/** Final exchange state after a close, so the stored snapshot does not keep saying "running". */
+async function closedSnapshot(bot: BotRow, account: AccountRow): Promise<{ raw: Record<string, unknown>; pnl: number | null }> {
+  const fallback = { ...(bot.snapshot || {}), status: 'stopped', stopped_by: 'user' };
+  if (!bot.exchange_bot_id) return { raw: fallback, pnl: bot.pnl_usdt ?? null };
+  try {
+    const creds = credsOf(account);
+    const snap =
+      bot.exchange === 'okx'
+        ? await readOkxGrid(creds, bot.exchange_bot_id)
+        : await readBybitGrid(creds, bot.exchange_bot_id);
+    if (snap.running) return { raw: fallback, pnl: snap.pnlUsdt ?? bot.pnl_usdt ?? null };
+    return { raw: { ...snap.raw, stopped_by: 'user' }, pnl: snap.pnlUsdt ?? bot.pnl_usdt ?? null };
+  } catch {
+    return { raw: fallback, pnl: bot.pnl_usdt ?? null };
+  }
 }
 
 export class GridSupervisor {
@@ -274,11 +292,15 @@ export class GridSupervisor {
         }
         try {
           await closeOnExchange(bot, account, botTemplate.base_asset);
+          const final = await closedSnapshot(bot, account);
+          bot.pnl_usdt = final.pnl;
           await markBot(bot.id, {
             run_status: 'stopped',
             stop_reason: 'user',
             stopped_at: new Date().toISOString(),
             last_error: null,
+            snapshot: final.raw,
+            pnl_usdt: final.pnl,
           });
           console.log(`[Grid] Stopped ${bot.exchange} bot ${bot.exchange_bot_id} for ${profile?.email || bot.user_id}`);
           await telegramNotifier.notifyGridStopped({
