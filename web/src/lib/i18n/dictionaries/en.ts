@@ -1285,6 +1285,8 @@ export const en = {
       signal_skipped_position_open_body: 'An open {symbol} position is already on the exchange.',
       signal_skipped_other_title: 'Signal skipped · {symbol}',
       signal_skipped_other_body: 'The signal was not executed.',
+      grid_coin_added_title: 'New coin · {symbol}',
+      grid_coin_added_body: '{symbol}/USDT is available for AI bots. Range {lower}–{upper}, {grids} grids, {leverage}x.',
       grid_started_title: 'AI bot started · {symbol}',
       grid_started_body: 'The neural network is running the bot on {exchange}. Margin {margin} USDT.',
       grid_stopped_title: 'AI bot stopped · {symbol}',

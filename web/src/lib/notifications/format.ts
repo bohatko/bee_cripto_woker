@@ -66,6 +66,11 @@ export function formatNotification(
     pnl: signed(field(payload, 'pnl')),
     pnlPct: signed(field(payload, 'pnlPct')),
     symbol: field(payload, 'symbol'),
+    lower: field(payload, 'lower'),
+    upper: field(payload, 'upper'),
+    grids: field(payload, 'grids'),
+    stop: field(payload, 'stop'),
+    takeProfit: field(payload, 'takeProfit'),
     dropPct: field(payload, 'dropPct'),
     strategy: field(payload, 'strategy'),
     exchange: field(payload, 'exchange'),
@@ -83,8 +88,13 @@ export function formatNotification(
     key = `signal_skipped_${field(payload, 'reason') || 'other'}`;
   }
 
+  const titleKey = `notifications.events.${key}_title`;
+  const bodyKey = `notifications.events.${key}_body`;
+  const title = t(titleKey, vars);
+  const body = t(bodyKey, vars);
+  const russian = t('notifications.title') === 'Уведомления';
   return {
-    title: t(`notifications.events.${key}_title`, vars),
-    body: t(`notifications.events.${key}_body`, vars),
+    title: title === titleKey ? field(payload, russian ? 'titleRu' : 'titleEn') || title : title,
+    body: body === bodyKey ? field(payload, russian ? 'bodyRu' : 'bodyEn') || body : body,
   };
 }

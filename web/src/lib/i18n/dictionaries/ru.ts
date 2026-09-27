@@ -1288,6 +1288,8 @@ export const ru = {
       signal_skipped_position_open_body: 'На бирже уже есть открытая позиция {symbol}.',
       signal_skipped_other_title: 'Сигнал пропущен · {symbol}',
       signal_skipped_other_body: 'Сигнал не был исполнен.',
+      grid_coin_added_title: 'Новая монета · {symbol}',
+      grid_coin_added_body: '{symbol}/USDT доступна в ИИ-ботах. Диапазон {lower}–{upper}, {grids} уровней, плечо {leverage}x.',
       grid_started_title: 'ИИ-бот запущен · {symbol}',
       grid_started_body: 'Нейросеть ведёт бота на {exchange}. Маржа {margin} USDT.',
       grid_stopped_title: 'ИИ-бот остановлен · {symbol}',
