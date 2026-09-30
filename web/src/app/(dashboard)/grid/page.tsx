@@ -32,10 +32,12 @@ type Slot = {
   margin_usdt: number;
   is_enabled: boolean;
   last_error: string | null;
+  updated_at: string | null;
 };
 type Bot = {
   id: string;
   template_id: string | null;
+  stopped_at: string | null;
   run_status: string;
   control_status: string;
   exchange: string;
@@ -93,7 +95,7 @@ export default function GridPage() {
         supabase.from('grid_user_settings').select('*').eq('user_id', auth.user.id).order('created_at', { ascending: true }),
         supabase
           .from('grid_bots')
-          .select('id, template_id, run_status, control_status, exchange, pnl_usdt, last_error, margin_usdt, created_at')
+          .select('id, template_id, stopped_at, run_status, control_status, exchange, pnl_usdt, last_error, margin_usdt, created_at')
           .eq('user_id', auth.user.id)
           .order('created_at', { ascending: false })
           .limit(40),
@@ -133,11 +135,34 @@ export default function GridPage() {
     setLoading(false);
   }, [router]);
 
+  const [now, setNow] = useState(() => Date.now());
+
+  const isPending = useCallback(
+    (slot: Slot) => {
+      if (!slot.is_enabled) return false;
+      const bot = bots.find((row) => row.template_id === slot.template_id && row.exchange === slot.exchange);
+      if (!bot) return true;
+      if (bot.run_status !== 'stopped') return false;
+      return Boolean(
+        bot.stopped_at && slot.updated_at && new Date(bot.stopped_at).getTime() < new Date(slot.updated_at).getTime()
+      );
+    },
+    [bots]
+  );
+
+  const anyPending = slots.some((slot) => !slot.last_error && isPending(slot));
+
   useEffect(() => {
     void load();
-    const timer = setInterval(() => void load(), 15000);
-    return () => clearInterval(timer);
   }, [load]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(Date.now());
+      void load();
+    }, anyPending ? 3000 : 15000);
+    return () => clearInterval(timer);
+  }, [load, anyPending]);
 
   const connected = useMemo(() => {
     const okx = accounts.some((row) => row.exchange === 'okx' && row.is_active && row.is_validated);
@@ -157,14 +182,6 @@ export default function GridPage() {
     setDraftCoin(templates[0]?.id || '');
     setDraftExchange(firstConnected());
     setDraftMargin('100');
-    setCreateOpen(true);
-  };
-
-  const openRestart = (slot: Slot) => {
-    setEditSlot(slot);
-    setDraftCoin(templateById.has(slot.template_id) ? slot.template_id : templates[0]?.id || '');
-    setDraftExchange(connected[slot.exchange] ? slot.exchange : firstConnected());
-    setDraftMargin(String(Number(slot.margin_usdt)));
     setCreateOpen(true);
   };
 
@@ -300,13 +317,23 @@ export default function GridPage() {
             const bot = latestBot(slot);
             const pnl = bot?.pnl_usdt == null ? null : Number(bot.pnl_usdt);
             const live = bot?.run_status === 'running' || bot?.run_status === 'starting';
+            const pending = !live && isPending(slot);
+            const elapsed = slot.updated_at ? Math.max(0, now - new Date(slot.updated_at).getTime()) / 1000 : 0;
             const status =
               bot?.control_status === 'released' && live
                 ? 'released'
                 : live
                   ? bot.run_status
-                  : !bot && slot.is_enabled
-                    ? 'waiting'
+                  : pending
+                    ? slot.last_error
+                      ? 'failed'
+                      : elapsed < 6
+                        ? 'preparing'
+                        : elapsed < 15
+                          ? 'connecting'
+                          : elapsed < 45
+                            ? 'awaiting'
+                            : 'waiting'
                     : 'stopped';
             return (
               <article key={slot.id} className="rounded-2xl border border-dark-800 bg-dark-900 p-4">
@@ -353,7 +380,7 @@ export default function GridPage() {
                 )}
 
                 <div className="mt-3">
-                  {live || (slot.is_enabled && !bot) ? (
+                  {live || pending ? (
                     <button
                       type="button"
                       disabled={!pro}
@@ -363,14 +390,7 @@ export default function GridPage() {
                       {t('grid.stop')}
                     </button>
                   ) : (
-                    <button
-                      type="button"
-                      disabled={!pro}
-                      onClick={() => openRestart(slot)}
-                      className="rounded-lg bg-honey-500 px-3 py-1.5 text-xs font-bold text-dark-950 disabled:opacity-40"
-                    >
-                      {t('grid.restart')}
-                    </button>
+                    <p className="text-xs text-slate-500">{t('grid.stoppedHint')}</p>
                   )}
                 </div>
               </article>
@@ -574,6 +594,10 @@ function CloseWordModal({
 
 function statusText(status: string, t: (key: string) => string): string {
   if (status === 'running' || status === 'starting') return t('grid.running');
+  if (status === 'preparing') return t('grid.stagePreparing');
+  if (status === 'connecting') return t('grid.stageConnecting');
+  if (status === 'awaiting') return t('grid.stageAwaiting');
+  if (status === 'failed') return t('grid.stageFailed');
   if (status === 'waiting') return t('grid.waiting');
   if (status === 'stopped') return t('grid.stopped');
   if (status === 'released') return t('grid.releasedShort');
@@ -584,8 +608,10 @@ function StatusPill({ status, label }: { status: string; label: string }) {
   const tone =
     status === 'running' || status === 'starting'
       ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
-      : status === 'waiting'
-        ? 'border-honey-500/40 bg-honey-500/10 text-honey-200'
+      : status === 'failed'
+        ? 'border-rose-500/40 bg-rose-500/10 text-rose-300'
+      : status === 'waiting' || status === 'preparing' || status === 'connecting' || status === 'awaiting'
+        ? 'animate-pulse border-honey-500/40 bg-honey-500/10 text-honey-200'
         : status === 'released'
           ? 'border-honey-500/40 bg-honey-500/10 text-honey-200'
           : 'border-dark-700 bg-dark-950 text-slate-400';
