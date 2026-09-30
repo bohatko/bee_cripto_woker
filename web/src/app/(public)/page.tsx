@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -24,7 +24,7 @@ import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { LanguageSwitcher } from '@/lib/i18n/LanguageSwitcher';
 import { BeeHeroScene } from '@/components/landing/BeeHeroScene';
 import { PlanIntervalSwitch, YearlySavingsNote } from '@/components/pricing/PlanPricing';
-import { PLAN_FEATURE_KEYS } from '@/lib/plans';
+import { PRO_FEATURE_KEYS } from '@/lib/plans';
 import { SUPPORT_TELEGRAM_URL } from '@/lib/support';
 
 type PairMarketRow = {
@@ -75,7 +75,8 @@ const CALC_MIN_BALANCE = 1200;
 const CALC_MAX_BALANCE = 500000;
 const CALC_SLIDER_STEPS = 1000;
 const CALC_SIX_MONTH_RETURN = 1.1;
-const CALC_MONTHLY_FEE = { lite: 70, pro: 200 } as const;
+const CALC_MONTHLY_FEE = 200;
+const CALC_PRO_PROFIT_MULTIPLIER = 3;
 const CALC_PRESETS = [1200, 5000, 20000, 100000, 500000];
 const CALC_HORIZONS = [
   { months: 1, label: 'landing.calcHorizon1' },
@@ -96,17 +97,15 @@ function ProfitCalculator() {
   const { t, dateLocale } = useLanguage();
   const [sliderPosition, setSliderPosition] = useState(() => balanceToSlider(20000));
   const [months, setMonths] = useState(60);
-  const [calcPlan, setCalcPlan] = useState<'lite' | 'pro'>('lite');
-
   const rawBalance =
     CALC_MIN_BALANCE *
     Math.pow(CALC_MAX_BALANCE / CALC_MIN_BALANCE, sliderPosition / CALC_SLIDER_STEPS);
   const balanceStep = rawBalance >= 100000 ? 1000 : rawBalance >= 10000 ? 100 : 50;
   const balance = Math.round(rawBalance / balanceStep) * balanceStep;
 
-  const liteGrossProfit = balance * (Math.pow(1 + CALC_SIX_MONTH_RETURN, months / 6) - 1);
-  const grossProfit = calcPlan === 'pro' ? liteGrossProfit * 3 : liteGrossProfit;
-  const fixedFee = CALC_MONTHLY_FEE[calcPlan] * months;
+  const baseGrossProfit = balance * (Math.pow(1 + CALC_SIX_MONTH_RETURN, months / 6) - 1);
+  const grossProfit = baseGrossProfit * CALC_PRO_PROFIT_MULTIPLIER;
+  const fixedFee = CALC_MONTHLY_FEE * months;
   const netProfit = Math.max(grossProfit - fixedFee, -balance);
   const finalBalance = balance + netProfit;
   const effectiveRate = balance > 0 ? (netProfit / balance) * 100 : 0;
@@ -157,24 +156,6 @@ function ProfitCalculator() {
         <p className="mt-3 text-xs text-slate-500">{t('landing.calcBalanceHint')}</p>
       </div>
 
-      <div className="mb-6 flex flex-wrap gap-2">
-        {(['lite', 'pro'] as const).map((plan) => (
-          <button
-            key={plan}
-            type="button"
-            onClick={() => setCalcPlan(plan)}
-            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-colors ${
-              calcPlan === plan
-                ? 'border-honey-500/50 bg-honey-500/10 text-honey-400'
-                : 'border-dark-800 bg-dark-950 text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            {t(plan === 'lite' ? 'landing.liteName' : 'landing.proName')} · ${CALC_MONTHLY_FEE[plan]}
-            {t('landing.perMonth')}
-          </button>
-        ))}
-      </div>
-
       <div className="mb-6">
         <span className="text-xs font-medium uppercase text-slate-400">
           {t('landing.calcHorizonLabel')}
@@ -213,7 +194,7 @@ function ProfitCalculator() {
         <div className="rounded-xl border border-dark-800 bg-dark-950 p-5">
           <span className="text-xs font-medium uppercase text-slate-400">
             {t('landing.calcFixedFee', {
-              plan: t(calcPlan === 'lite' ? 'landing.liteName' : 'landing.proName'),
+              plan: t('landing.proName'),
             })}
           </span>
           <p className="mt-1 font-mono text-xl font-bold text-slate-200">{formatUsd(fixedFee)}</p>
@@ -377,7 +358,7 @@ export default function LandingPage() {
                 href="/register"
                 className="group flex w-full items-center justify-center gap-2 rounded-xl bg-honey-500 px-8 py-3.5 text-base font-bold text-dark-950 shadow-xl shadow-honey-500/25 transition-all hover:bg-honey-400 sm:w-auto"
               >
-                {t('landing.startTrial')}
+                {t('landing.startFree')}
                 <ChevronRight className="h-5 w-5 transition-transform group-hover:translate-x-0.5" />
               </Link>
               <Link
@@ -567,43 +548,10 @@ export default function LandingPage() {
             <PlanIntervalSwitch yearly={yearly} onYearlyChange={setYearly} />
           </div>
 
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            <article className="flex flex-col rounded-3xl border border-dark-800 bg-dark-900 p-8 text-left">
-              <span className="w-fit rounded-full border border-dark-700 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-300">
-                {t('landing.trialIncluded')}
-              </span>
-              <h3 className="mt-4 text-2xl font-bold text-white">{t('landing.liteName')}</h3>
-              <div className="mt-4 flex items-baseline gap-2">
-                <span className="font-mono text-5xl font-black text-honey-400">
-                  {yearly ? t('landing.litePriceYear') : t('landing.litePriceMonth')}
-                </span>
-                <span className="text-slate-400">{yearly ? t('landing.perYear') : t('landing.perMonth')}</span>
-              </div>
-              {yearly && (
-                <>
-                  <YearlySavingsNote plan="lite" className="mt-2" />
-                  <p className="mt-1 text-xs text-slate-500">{t('landing.billedYearly')}</p>
-                </>
-              )}
-              <ul className="mt-6 space-y-3 text-sm text-slate-300">
-                {PLAN_FEATURE_KEYS.lite.map((key) => (
-                  <li key={key} className="flex items-start gap-3">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-                    <span>{t(key)}</span>
-                  </li>
-                ))}
-              </ul>
-              <Link
-                href="/register"
-                className="mt-8 block rounded-xl border border-honey-500/40 py-3 text-center text-sm font-bold text-honey-400 transition-colors hover:bg-honey-500/10"
-              >
-                {t('landing.getStarted')}
-              </Link>
-            </article>
-
+          <div className="mx-auto max-w-xl">
             <article className="flex flex-col rounded-3xl border-2 border-honey-500/40 bg-dark-900 p-8 text-left shadow-2xl">
               <span className="w-fit rounded-full bg-honey-500 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-dark-950">
-                {t('landing.trialIncluded')}
+                {t('landing.proBadge')}
               </span>
               <h3 className="mt-4 text-2xl font-bold text-white">{t('landing.proName')}</h3>
               <div className="mt-4 flex items-baseline gap-2">
@@ -619,7 +567,7 @@ export default function LandingPage() {
                 </>
               )}
               <ul className="mt-6 space-y-3 text-sm text-slate-300">
-                {PLAN_FEATURE_KEYS.pro.map((key) => (
+                {PRO_FEATURE_KEYS.map((key) => (
                   <li key={key} className="flex items-start gap-3">
                     <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
                     <span>{t(key)}</span>
@@ -634,6 +582,7 @@ export default function LandingPage() {
                 {t('landing.getStarted')}
               </Link>
             </article>
+            <p className="mt-6 text-center text-sm text-slate-400">{t('landing.freeBrowseNote')}</p>
           </div>
 
         </div>

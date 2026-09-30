@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -13,7 +13,6 @@ import {
   ShieldCheck,
   AlertTriangle,
   ExternalLink,
-  Send,
   CheckCircle2,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
@@ -22,9 +21,8 @@ import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { toast } from '@/components/ui/sonner';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { BillingSkeleton } from '@/components/skeletons/PageSkeletons';
-import { PLAN_PRICE_USD, PLAN_FEATURE_KEYS, isBillingInterval, isSubscriptionPlan, type BillingInterval, type SubscriptionPlan } from '@/lib/plans';
+import { PRO_FEATURE_KEYS, isBillingInterval, type BillingInterval } from '@/lib/plans';
 import { PlanIntervalSwitch, YearlyInvoiceNote, YearlySavingsNote } from '@/components/pricing/PlanPricing';
-import { supportTelegramUrl } from '@/lib/support';
 
 const APTOS_WALLET_ADDRESS =
   process.env.NEXT_PUBLIC_ADMIN_APTOS_WALLET ||
@@ -38,7 +36,6 @@ export default function BillingPage() {
   const router = useRouter();
   const { t, formatDate } = useLanguage();
   const [profile, setProfile] = useState<any>(null);
-  const [planDraft, setPlanDraft] = useState<SubscriptionPlan>('lite');
   const [intervalDraft, setIntervalDraft] = useState<BillingInterval>('month');
   const [savingPlan, setSavingPlan] = useState(false);
   const [userId, setUserId] = useState<string>('');
@@ -72,9 +69,7 @@ export default function BillingPage() {
 
       if (prof) {
         setProfile(prof);
-        const selectedPlan = prof.pending_subscription_plan || prof.subscription_plan;
         const selectedInterval = prof.pending_billing_interval || prof.billing_interval;
-        if (isSubscriptionPlan(selectedPlan)) setPlanDraft(selectedPlan);
         if (isBillingInterval(selectedInterval)) setIntervalDraft(selectedInterval);
       }
 
@@ -84,7 +79,13 @@ export default function BillingPage() {
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
-      if (invs) setInvoices(invs);
+      if (invs) {
+        setInvoices(invs);
+        const open = invs.find((i: any) => ['issued', 'pending_review'].includes(i.status));
+        if (prof?.subscription_status === 'none' && isBillingInterval(open?.billing_interval)) {
+          setIntervalDraft(open.billing_interval);
+        }
+      }
       setLoading(false);
     } catch {
       router.replace('/login');
@@ -182,12 +183,28 @@ export default function BillingPage() {
     return <BillingSkeleton />;
   }
 
+  const hasNoPlan = profile?.subscription_status === 'none';
+
   const savePlan = async () => {
     setSavingPlan(true);
-    const { error } = await supabase.rpc('select_subscription_plan', {
-      p_plan: planDraft,
-      p_interval: intervalDraft,
-    });
+    if (hasNoPlan) {
+      const response = await fetch('/api/billing/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ interval: intervalDraft }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      setSavingPlan(false);
+      if (!response.ok) {
+        toast.error(payload.error || t('billing.subscribeError'));
+        return;
+      }
+      toast.success(t('billing.invoiceCreated'));
+      await loadBilling();
+      return;
+    }
+
+    const { error } = await supabase.rpc('select_billing_interval', { p_interval: intervalDraft });
     setSavingPlan(false);
     if (error) {
       toast.error(error.message || t('billing.planSaveError'));
@@ -198,24 +215,9 @@ export default function BillingPage() {
   };
 
   const isFrozen = profile?.is_frozen || profile?.subscription_status === 'frozen';
-  const entitledPlan: SubscriptionPlan = isSubscriptionPlan(profile?.subscription_plan)
-    ? profile.subscription_plan
-    : 'lite';
-  const planAppliesNow = profile?.subscription_status === 'trial' && !isFrozen;
   const isPendingReview = activeInvoice?.status === 'pending_review';
-  const currentInterval: BillingInterval = isBillingInterval(profile?.billing_interval)
-    ? profile.billing_interval
-    : 'month';
-  const upgradeDifference = PLAN_PRICE_USD.pro[currentInterval] - PLAN_PRICE_USD.lite[currentInterval];
-  const showUpgradeNow = entitledPlan === 'lite' && !planAppliesNow;
-  const upgradeIntervalLabel = t(currentInterval === 'year' ? 'billing.intervalYear' : 'billing.intervalMonth');
-  const upgradeHref = supportTelegramUrl(
-    t('billing.upgradeMessage', {
-      interval: upgradeIntervalLabel,
-      beeId: externalUid || 'n/a',
-      amount: upgradeDifference,
-    })
-  );
+  const isPaidPro = profile?.subscription_status === 'active' && !isFrozen;
+  const yearlyDraft = intervalDraft === 'year';
 
   return (
     <div className="p-4 sm:p-8 max-w-5xl space-y-8">
@@ -239,20 +241,16 @@ export default function BillingPage() {
               className={`text-lg font-bold uppercase font-mono px-2.5 py-0.5 rounded-lg ${
                 isFrozen
                   ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
-                  : profile?.subscription_status === 'trial'
-                  ? 'bg-honey-500/15 text-honey-400 border border-honey-500/30'
                   : profile?.subscription_status === 'active'
                   ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
                   : 'bg-dark-800 text-slate-400'
               }`}
             >
-              {isFrozen ? 'PAUSED / FROZEN' : profile?.subscription_status || t('common.trial')}
+              {isFrozen ? 'PAUSED / FROZEN' : hasNoPlan ? t('common.noPlan') : profile?.subscription_status}
             </span>
             <span className="text-xs text-slate-400 font-mono">
-              {profile?.subscription_status === 'trial'
-                ? t('billing.trialUntil', {
-                    date: formatDate(profile?.trial_end_at || Date.now()),
-                  })
+              {hasNoPlan
+                ? t('billing.noPlanDesc')
                 : profile?.subscription_paid_until
                 ? t('billing.paidUntil', {
                     date: formatDate(profile.subscription_paid_until),
@@ -272,121 +270,61 @@ export default function BillingPage() {
 
       <section className="bg-dark-900 border border-dark-800 rounded-2xl p-6 shadow-xl space-y-4">
         <div>
-          <h2 className="font-bold text-white">{t('billing.choosePlan')}</h2>
+          <h2 className="font-bold text-white">{t('billing.proTitle')}</h2>
           <p className="text-xs text-slate-400 mt-1">
-            {t('billing.currentPlan', { plan: t(entitledPlan === 'pro' ? 'billing.planPro' : 'billing.planLite') })}
-            {' · '}
-            {planAppliesNow ? t('billing.planAppliesNow') : t('billing.planAppliesNext')}
+            {hasNoPlan
+              ? t('billing.proPitchNoPlan')
+              : isPaidPro
+              ? t('billing.proActiveHint')
+              : t('billing.proFrozenHint')}
           </p>
         </div>
         <div className="flex justify-center">
           <PlanIntervalSwitch
-            yearly={intervalDraft === 'year'}
+            yearly={yearlyDraft}
             onYearlyChange={(yearly) => setIntervalDraft(yearly ? 'year' : 'month')}
             track="inset"
           />
         </div>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2" role="radiogroup">
-          {(['lite', 'pro'] as const).map((plan) => {
-            const selected = planDraft === plan;
-            const yearly = intervalDraft === 'year';
-            return (
-              <article
-                key={plan}
-                role="radio"
-                aria-checked={selected}
-                tabIndex={0}
-                onClick={() => setPlanDraft(plan)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    setPlanDraft(plan);
-                  }
-                }}
-                className={`relative flex cursor-pointer flex-col rounded-3xl border-2 bg-dark-950 p-6 text-left transition-colors ${
-                  selected
-                    ? 'border-honey-500 shadow-2xl'
-                    : 'border-dark-800 hover:border-dark-700'
-                }`}
-              >
-                {selected && (
-                  <span className="absolute right-5 top-5 flex h-6 w-6 items-center justify-center rounded-full bg-honey-500 text-dark-950">
-                    <Check className="h-3.5 w-3.5" />
-                  </span>
-                )}
-                <h3 className="text-2xl font-bold text-white">
-                  {t(plan === 'pro' ? 'landing.proName' : 'landing.liteName')}
-                </h3>
-                <div className="mt-4 flex items-baseline gap-2">
-                  <span className="font-mono text-4xl font-black text-honey-400 sm:text-5xl">
-                    {t(
-                      plan === 'pro'
-                        ? yearly
-                          ? 'landing.proPriceYear'
-                          : 'landing.proPriceMonth'
-                        : yearly
-                          ? 'landing.litePriceYear'
-                          : 'landing.litePriceMonth'
-                    )}
-                  </span>
-                  <span className="text-slate-400">
-                    {yearly ? t('landing.perYear') : t('landing.perMonth')}
-                  </span>
-                </div>
-                {yearly && (
-                  <>
-                    <YearlySavingsNote plan={plan} className="mt-2" />
-                    <p className="mt-1 text-xs text-slate-500">{t('landing.billedYearly')}</p>
-                  </>
-                )}
-                <ul className="mt-6 space-y-3 text-sm text-slate-300">
-                  {PLAN_FEATURE_KEYS[plan].map((key) => (
-                    <li key={key} className="flex items-start gap-3">
-                      <CheckCircle2
-                        className={`mt-0.5 h-4 w-4 shrink-0 ${
-                          plan === 'pro' ? 'text-emerald-400' : 'text-slate-400'
-                        }`}
-                      />
-                      <span>{t(key)}</span>
-                    </li>
-                  ))}
-                </ul>
-                {plan === 'pro' && (
-                  <p className="mt-4 text-xs leading-relaxed text-slate-500">{t('landing.insuranceNote')}</p>
-                )}
-              </article>
-            );
-          })}
-        </div>
-        <button
-          type="button"
-          onClick={savePlan}
-          disabled={savingPlan}
-          className="px-4 py-2.5 rounded-xl text-sm font-bold bg-honey-500 hover:bg-honey-400 text-dark-950 disabled:opacity-50"
-        >
-          {savingPlan ? t('billing.submitting') : t('billing.choosePlan')}
-        </button>
-        {showUpgradeNow && (
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-honey-500/30 bg-honey-500/5 p-4">
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-bold text-white">{t('billing.upgradeTitle')}</p>
-              <p className="mt-1 text-xs text-slate-400">
-                {t('billing.upgradeDesc', {
-                  interval: upgradeIntervalLabel,
-                  amount: upgradeDifference,
-                })}
-              </p>
-            </div>
-            <a
-              href={upgradeHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-honey-500 px-4 py-2.5 text-sm font-bold text-dark-950 hover:bg-honey-400"
-            >
-              <Send className="h-4 w-4" />
-              {t('billing.upgradeCta')}
-            </a>
+        <article className="relative flex flex-col rounded-3xl border-2 border-honey-500 bg-dark-950 p-6 text-left shadow-2xl">
+          <h3 className="text-2xl font-bold text-white">{t('landing.proName')}</h3>
+          <div className="mt-4 flex items-baseline gap-2">
+            <span className="font-mono text-4xl font-black text-honey-400 sm:text-5xl">
+              {yearlyDraft ? t('landing.proPriceYear') : t('landing.proPriceMonth')}
+            </span>
+            <span className="text-slate-400">{yearlyDraft ? t('landing.perYear') : t('landing.perMonth')}</span>
           </div>
+          {yearlyDraft && (
+            <>
+              <YearlySavingsNote plan="pro" className="mt-2" />
+              <p className="mt-1 text-xs text-slate-500">{t('landing.billedYearly')}</p>
+            </>
+          )}
+          <ul className="mt-6 space-y-3 text-sm text-slate-300">
+            {PRO_FEATURE_KEYS.map((key) => (
+              <li key={key} className="flex items-start gap-3">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+                <span>{t(key)}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-4 text-xs leading-relaxed text-slate-500">{t('landing.insuranceNote')}</p>
+        </article>
+        {(hasNoPlan || isPaidPro) && (
+          <button
+            type="button"
+            onClick={savePlan}
+            disabled={savingPlan || isPendingReview}
+            className="px-4 py-2.5 rounded-xl text-sm font-bold bg-honey-500 hover:bg-honey-400 text-dark-950 disabled:opacity-50"
+          >
+            {savingPlan
+              ? t('billing.submitting')
+              : hasNoPlan
+              ? activeInvoice
+                ? t('billing.updateInvoice')
+                : t('billing.getPro')
+              : t('billing.saveNextInterval')}
+          </button>
         )}
       </section>
 

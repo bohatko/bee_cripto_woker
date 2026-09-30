@@ -21,6 +21,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
+import { hasProModules } from '@/lib/pro-access';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { toast } from '@/components/ui/sonner';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
@@ -70,8 +71,7 @@ export default function ExchangeSettingsPage() {
 
   const [accounts, setAccounts] = useState<ExchangeAccountItem[]>([]);
   const [tradingSettings, setTradingSettings] = useState<TradingSettingsItem | null>(null);
-  const [subscriptionPlan, setSubscriptionPlan] = useState<string | null>(null);
-  const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
+  const [proAccess, setProAccess] = useState(false);
 
   // Modals state
   const [accountToDelete, setAccountToDelete] = useState<ExchangeAccountItem | null>(null);
@@ -103,10 +103,9 @@ export default function ExchangeSettingsPage() {
       // 1. Fetch exchange accounts
       const [{ data: accData }, { data: profile }] = await Promise.all([
         supabase.from('exchange_accounts').select('*').eq('user_id', user.id).order('created_at', { ascending: true }),
-        supabase.from('users_profile').select('subscription_plan, subscription_status').eq('id', user.id).maybeSingle(),
+        supabase.from('users_profile').select('subscription_plan, subscription_status, is_frozen').eq('id', user.id).maybeSingle(),
       ]);
-      setSubscriptionPlan(profile?.subscription_plan ?? 'lite');
-      setSubscriptionStatus(profile?.subscription_status ?? null);
+      setProAccess(hasProModules(profile));
 
       const accList = (accData || []) as ExchangeAccountItem[];
       setAccounts(accList);
@@ -171,11 +170,7 @@ export default function ExchangeSettingsPage() {
       } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated. Please sign in again.');
 
-      const blocksExtraExchange =
-        accounts.length >= 1 &&
-        (subscriptionPlan !== 'pro' || subscriptionStatus === 'trial') &&
-        !accounts.some((account) => account.exchange === selectedExchange);
-      if (blocksExtraExchange) {
+      if (!proAccess) {
         toast.error(t('exchange.extraProDesc'));
         return;
       }
@@ -340,8 +335,7 @@ export default function ExchangeSettingsPage() {
   const isCurrentTabPrimary = Boolean(
     currentTabAccount && tradingSettings?.exchange_account_id === currentTabAccount.id
   );
-  const extraExchangeRequiresPro =
-    accounts.length >= 1 && (subscriptionPlan !== 'pro' || subscriptionStatus === 'trial');
+  const extraExchangeRequiresPro = !proAccess;
   const selectedExchangeLocked = extraExchangeRequiresPro && !currentTabAccount;
 
   if (pageLoading) {

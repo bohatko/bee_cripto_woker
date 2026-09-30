@@ -16,6 +16,7 @@ import {
   AlertOctagon,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
+import { hasProModules } from '@/lib/pro-access';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { isUnfilledSimulation, resolveRealizedPnl, getTotalFeesUsd, getGrossPnlUsd } from '@/lib/positions';
 import { EquityGrowthChart } from '@/components/charts/EquityGrowthChart';
@@ -113,14 +114,27 @@ export default function UserHistoryPage() {
   const handleToggleBot = async () => {
     if (!settings) return;
 
-    if (!hasValidatedAccount) {
-      setIsToggleModalOpen(false);
-      setIsMissingExchangeModalOpen(true);
-      toast.error(t('dashboard.toastConnectFirst'));
-      return;
-    }
-
     const nextState = !settings.is_bot_active;
+
+    if (nextState) {
+      const { data: profile } = await supabase
+        .from('users_profile')
+        .select('subscription_plan, subscription_status, is_frozen')
+        .eq('id', settings.user_id)
+        .maybeSingle();
+      if (!hasProModules(profile)) {
+        setIsToggleModalOpen(false);
+        toast.error(t('dashboard.proRequired'));
+        router.push('/billing');
+        return;
+      }
+      if (!hasValidatedAccount) {
+        setIsToggleModalOpen(false);
+        setIsMissingExchangeModalOpen(true);
+        toast.error(t('dashboard.toastConnectFirst'));
+        return;
+      }
+    }
 
     try {
       const { error } = await supabase

@@ -24,7 +24,6 @@ import { toast } from '@/components/ui/sonner';
 import { LanguageSwitcher } from '@/lib/i18n/LanguageSwitcher';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { playTradeOpenSound } from '@/lib/sound';
-import { hasProModules } from '@/lib/pro-access';
 import { SUPPORT_TELEGRAM_URL } from '@/lib/support';
 import { ModuleSetupGuide } from '@/components/guide/ModuleSetupGuide';
 
@@ -96,14 +95,6 @@ export default function DashboardLayout({
       subscription?.unsubscribe();
     };
   }, [router]);
-
-  useEffect(() => {
-    if (!profile) return;
-    const proSection = pathname === '/grid' || pathname.startsWith('/grid/') || pathname === '/pair' || pathname.startsWith('/pair/');
-    if (proSection && !hasProModules(profile)) {
-      router.replace('/billing');
-    }
-  }, [profile, pathname, router]);
 
   // Real-time listener for new trade executions with Sound & Sonner Toast
   useEffect(() => {
@@ -272,14 +263,16 @@ export default function DashboardLayout({
             <span className="text-slate-500">{t('common.status')}:</span>
             <span
               className={`px-1.5 py-0.5 rounded uppercase font-semibold ${
-                profile?.subscription_status === 'trial'
-                  ? 'bg-honey-500/15 text-honey-400'
+                profile?.subscription_status === 'none'
+                  ? 'bg-dark-800 text-slate-400'
                   : profile?.subscription_status === 'active'
                   ? 'bg-emerald-500/15 text-emerald-400'
                   : 'bg-rose-500/15 text-rose-400'
               }`}
             >
-              {profile?.subscription_status || t('common.trial')}
+              {profile?.subscription_status === 'none' || !profile?.subscription_status
+                ? t('common.noPlan')
+                : profile.subscription_status}
             </span>
           </div>
         </Link>
@@ -297,17 +290,14 @@ export default function DashboardLayout({
               )}
               {section.items.map((item) => {
                 const Icon = item.icon;
-                const locked = Boolean(item.pro && !hasProModules(profile));
-                const href = locked ? '/billing' : item.href;
                 const isActive =
-                  !locked &&
-                  (item.href === '/pair' || item.href === '/signals'
+                  item.href === '/pair' || item.href === '/signals'
                     ? pathname === item.href
-                    : pathname === item.href || pathname.startsWith(`${item.href}/`));
+                    : pathname === item.href || pathname.startsWith(`${item.href}/`);
                 return (
                   <Link
                     key={item.href}
-                    href={href}
+                    href={item.href}
                     className={`flex items-center px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
                       item.beta ? 'gap-2' : 'gap-3'
                     } ${
@@ -389,6 +379,17 @@ export default function DashboardLayout({
       </aside>
 
       <main className="flex-1 flex flex-col min-w-0 min-h-0 overflow-y-auto">
+        {profile?.subscription_status === 'none' && pathname !== '/billing' && (
+          <Link
+            href="/billing"
+            className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-honey-500/30 bg-honey-500/10 px-4 py-2.5 text-xs text-honey-100 hover:bg-honey-500/15 sm:px-8"
+          >
+            <Star className="h-3.5 w-3.5 shrink-0 fill-current text-honey-400" aria-hidden />
+            <span className="font-bold text-honey-300">{t('viewOnly.title')}</span>
+            <span className="text-slate-300">{t('viewOnly.desc')}</span>
+            <span className="font-bold text-honey-400 underline underline-offset-2">{t('viewOnly.cta')}</span>
+          </Link>
+        )}
         {children}
       </main>
 

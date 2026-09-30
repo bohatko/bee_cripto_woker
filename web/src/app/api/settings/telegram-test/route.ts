@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuthenticatedUser } from '@/lib/supabase/server';
 import { decryptString } from '@/lib/encryption';
+import { hasProModules } from '@/lib/pro-access';
 
 function parseChatIds(raw: string | null | undefined): string[] {
   return String(raw || '')
@@ -14,6 +15,18 @@ export async function POST(request: Request) {
     const { user, supabase } = await getAuthenticatedUser(request);
     if (!user || !supabase) {
       return NextResponse.json({ error: 'Unauthorized. Please sign in.' }, { status: 401 });
+    }
+
+    const { data: access } = await supabase
+      .from('users_profile')
+      .select('subscription_plan, subscription_status, is_frozen')
+      .eq('id', user.id)
+      .maybeSingle();
+    if (!hasProModules(access)) {
+      return NextResponse.json(
+        { error: 'Connecting Telegram requires an active Pro subscription.', code: 'pro_required' },
+        { status: 403 }
+      );
     }
 
     const body = await request.json().catch(() => ({}));

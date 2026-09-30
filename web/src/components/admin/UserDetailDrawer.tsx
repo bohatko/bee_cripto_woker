@@ -57,7 +57,6 @@ const statusTone = (status: string | null | undefined): string => {
     case 'closed':
       return 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30';
     case 'open':
-    case 'trial':
       return 'bg-honey-500/15 text-honey-400 border-honey-500/30';
     case 'pending_review':
       return 'bg-amber-500/20 text-amber-400 border-amber-500/40';
@@ -332,7 +331,7 @@ export function UserDetailDrawer({ isOpen, user, onClose }: UserDetailDrawerProp
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base font-bold text-white truncate">{displayName}</h2>
                 <Badge value={profile?.role || 'user'} />
-                <Badge value={profile?.subscription_status || 'trial'} />
+                <Badge value={profile?.subscription_status || 'none'} />
                 {profile?.is_frozen && (
                   <span className="inline-flex items-center gap-1 text-[10px] uppercase font-bold text-rose-400">
                     <Ban className="w-3 h-3" />
@@ -442,7 +441,7 @@ export function UserDetailDrawer({ isOpen, user, onClose }: UserDetailDrawerProp
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                       <Field
                         label={t('admin.userDetail.subStatus')}
-                        value={<Badge value={profile?.subscription_status || 'trial'} />}
+                        value={<Badge value={profile?.subscription_status || 'none'} />}
                       />
                       <Field
                         label={t('admin.userDetail.isFrozen')}
@@ -456,8 +455,6 @@ export function UserDetailDrawer({ isOpen, user, onClose }: UserDetailDrawerProp
                         label={t('admin.userDetail.hwm')}
                         value={usd(profile?.high_water_mark_equity)}
                       />
-                      <Field label={t('admin.userDetail.trialStart')} value={formatDateTime(profile?.trial_start_at)} />
-                      <Field label={t('admin.userDetail.trialEnd')} value={formatDateTime(profile?.trial_end_at)} />
                       <Field
                         label={t('admin.userDetail.paidUntil')}
                         value={

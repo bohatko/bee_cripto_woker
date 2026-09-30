@@ -166,7 +166,7 @@ export function createExchangeInstance(account: {
 
 ### 4.2. Исполнение входа в сделку (Entry Dispatcher)
 Когда `is_in_trend` становится `true`, а у пользователя слот свободен:
-1. Проверяется статус подписки: `subscription_status IN ('trial', 'active')` и `is_frozen = false`.
+1. Проверяется статус подписки: `subscription_plan = 'pro'`, `subscription_status = 'active'` и `is_frozen = false` (`canOpenNewTrades` в `worker/src/plans.ts`). Пользователи со статусом `none` не торгуют автоматически.
 2. Запрашивается баланс пользователя: `fetchBalance()`.
 3. Рассчитывается маржинальный слот (20% свободного баланса USDT).
 4. Рассчитывается объем ног с плечом 3x (`MAX_LEVERAGE=3`):

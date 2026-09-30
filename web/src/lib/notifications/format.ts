@@ -29,10 +29,8 @@ function signed(value: string): string {
   return `+${value}`;
 }
 
-function planLabel(plan: string): string {
-  if (plan === 'pro') return 'Pro';
-  if (plan === 'lite') return 'Lite';
-  return plan || 'Lite';
+function planLabel(_plan: string): string {
+  return 'Pro';
 }
 
 export function formatNotification(
@@ -54,10 +52,7 @@ export function formatNotification(
         : interval === 'month'
           ? t('notifications.intervalMonth')
           : interval,
-    period:
-      field(payload, 'period') === 'trial'
-        ? t('notifications.periodTrial')
-        : t('notifications.periodSubscription'),
+    period: t('notifications.periodSubscription'),
     endsAt: endsAt ? formatDateTime(endsAt) : '',
     dueAt: dueAt ? formatDateTime(dueAt) : '',
     pair: field(payload, 'pair'),

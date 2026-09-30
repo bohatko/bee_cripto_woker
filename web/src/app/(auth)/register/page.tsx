@@ -48,7 +48,7 @@ export default function RegisterPage() {
       setLoading(false);
     } else {
       toast.success(t('auth.registrationSuccess'));
-      router.push('/dashboard');
+      router.push('/choose-plan');
     }
   };
 
@@ -70,7 +70,7 @@ export default function RegisterPage() {
         <h2 className="text-2xl font-bold text-white tracking-tight">{t('auth.createAccountTitle')}</h2>
         <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-honey-500/10 border border-honey-500/20 text-xs font-mono text-honey-400">
           <CheckCircle2 className="w-3.5 h-3.5" />
-          <span>{t('auth.trialBadge')}</span>
+          <span>{t('auth.freeAccountBadge')}</span>
         </div>
       </div>
 
@@ -163,7 +163,7 @@ export default function RegisterPage() {
               disabled={loading}
               className="w-full mt-2 py-3 px-4 rounded-xl font-bold text-sm bg-honey-500 hover:bg-honey-400 text-dark-950 shadow-lg shadow-honey-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
-              {loading ? t('auth.settingUpTrial') : t('auth.createAccount')}
+              {loading ? t('auth.creatingAccount') : t('auth.createAccount')}
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>

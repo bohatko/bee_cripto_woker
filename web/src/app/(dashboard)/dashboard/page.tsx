@@ -434,14 +434,6 @@ export default function DashboardPage() {
   const handleToggleBot = async () => {
     if (!settings) return;
 
-    // Check if at least one exchange account is linked and validated
-    if (!hasValidatedAccount) {
-      setIsToggleModalOpen(false);
-      setIsMissingExchangeModalOpen(true);
-      toast.error(t('dashboard.toastConnectFirst'));
-      return;
-    }
-
     const nextState = !settings.is_bot_active;
 
     if (nextState) {
@@ -452,9 +444,17 @@ export default function DashboardPage() {
         .maybeSingle();
       if (!hasProModules(profile)) {
         setIsToggleModalOpen(false);
-        toast.error(t('dashboard.litePairLocked'));
+        toast.error(t('dashboard.proRequired'));
         return;
       }
+    }
+
+    // Check if at least one exchange account is linked and validated
+    if (nextState && !hasValidatedAccount) {
+      setIsToggleModalOpen(false);
+      setIsMissingExchangeModalOpen(true);
+      toast.error(t('dashboard.toastConnectFirst'));
+      return;
     }
 
     try {
@@ -863,7 +863,7 @@ export default function DashboardPage() {
       )}
 
       <div className="relative overflow-hidden rounded-2xl">
-        <div className={proModules ? undefined : 'pointer-events-none select-none blur-lg'} aria-hidden={proModules ? undefined : true}>
+        <div>
           <TradeReadinessMonitor
             marketData={marketData}
             activeBasket={activeBasket}
@@ -873,7 +873,10 @@ export default function DashboardPage() {
             freeMargin={totalFreeMargin}
             hasInsufficientMargin={hasInsufficientMargin}
             onStartBotClick={() => {
-              if (!settings?.is_bot_active && !hasValidatedAccount) {
+              if (!settings?.is_bot_active && !proModules) {
+                toast.error(t('dashboard.proRequired'));
+                router.push('/billing');
+              } else if (!settings?.is_bot_active && !hasValidatedAccount) {
                 setIsMissingExchangeModalOpen(true);
               } else {
                 setIsToggleModalOpen(true);
@@ -881,21 +884,11 @@ export default function DashboardPage() {
             }}
           />
         </div>
-        {!proModules && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-dark-950/35 p-4">
-            <Link
-              href="/billing"
-              className="rounded-xl bg-honey-500 px-5 py-2.5 text-sm font-bold text-dark-950 shadow-lg shadow-honey-500/30"
-            >
-              {t('dashboard.goToPro')}
-            </Link>
-          </div>
-        )}
       </div>
 
       {/* Active Basket Positions Table */}
       <div className="relative overflow-hidden rounded-2xl">
-        <div className={proModules ? undefined : 'pointer-events-none select-none blur-lg'} aria-hidden={proModules ? undefined : true}>
+        <div>
       <div className="bg-dark-900 border border-dark-800 rounded-2xl shadow-2xl overflow-hidden">
         <div className="p-5 border-b border-dark-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center gap-2.5">
@@ -1131,16 +1124,6 @@ export default function DashboardPage() {
         )}
       </div>
         </div>
-        {!proModules && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-dark-950/35 p-4">
-            <Link
-              href="/billing"
-              className="rounded-xl bg-honey-500 px-5 py-2.5 text-sm font-bold text-dark-950 shadow-lg shadow-honey-500/30"
-            >
-              {t('dashboard.goToPro')}
-            </Link>
-          </div>
-        )}
       </div>
 
       {/* Confirmation & Panic Modals */}

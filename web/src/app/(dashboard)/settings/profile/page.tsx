@@ -48,7 +48,7 @@ export default function ProfileSettingsPage() {
   const [botToken, setBotToken] = useState('');
   const [enabled, setEnabled] = useState(false);
   const [hasToken, setHasToken] = useState(false);
-  const [subscriptionStatus, setSubscriptionStatus] = useState('trial');
+  const [subscriptionStatus, setSubscriptionStatus] = useState('none');
   const [externalUid, setExternalUid] = useState('');
   const [uidCopied, setUidCopied] = useState(false);
 
@@ -92,7 +92,7 @@ export default function ProfileSettingsPage() {
       setChatId(data.telegram_chat_id || '');
       setEnabled(Boolean(data.telegram_enabled));
       setHasToken(Boolean(data.has_telegram_token));
-      setSubscriptionStatus(data.subscription_status || 'trial');
+      setSubscriptionStatus(data.subscription_status || 'none');
       setExternalUid(resolveExternalUid(user.id, data.external_uid));
       setBotToken('');
     } catch (err: any) {
@@ -114,13 +114,13 @@ export default function ProfileSettingsPage() {
     }
     setSaving(true);
     try {
-      const payload: Record<string, unknown> = {
-        full_name: fullName.trim(),
-        telegram_chat_id: chatId.trim(),
-        telegram_enabled: enabled,
-      };
-      if (botToken.trim()) {
-        payload.telegram_bot_token = botToken.trim();
+      const payload: Record<string, unknown> = { full_name: fullName.trim() };
+      if (subscriptionStatus === 'active') {
+        payload.telegram_chat_id = chatId.trim();
+        payload.telegram_enabled = enabled;
+        if (botToken.trim()) {
+          payload.telegram_bot_token = botToken.trim();
+        }
       }
 
       const res = await fetch('/api/settings/profile', {
@@ -199,6 +199,7 @@ export default function ProfileSettingsPage() {
   }
 
   const telegramReady = hasToken && Boolean(chatId.trim()) && enabled;
+  const telegramLocked = subscriptionStatus !== 'active';
 
   return (
     <div className="p-4 sm:p-8 max-w-5xl space-y-8">
@@ -229,14 +230,14 @@ export default function ProfileSettingsPage() {
             </span>
             <span
               className={`text-[10px] font-mono px-2 py-0.5 rounded border uppercase ${
-                subscriptionStatus === 'trial'
-                  ? 'text-honey-400 bg-honey-500/10 border-honey-500/20'
+                subscriptionStatus === 'none'
+                  ? 'text-slate-400 bg-dark-800 border-dark-700'
                   : subscriptionStatus === 'active'
                     ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
                     : 'text-rose-400 bg-rose-500/10 border-rose-500/20'
               }`}
             >
-              {subscriptionStatus || t('common.trial')}
+              {subscriptionStatus === 'none' ? t('common.noPlan') : subscriptionStatus}
             </span>
           </div>
 
@@ -381,6 +382,22 @@ export default function ProfileSettingsPage() {
               </button>
             )}
           </div>
+
+          {telegramLocked && (
+            <div className="mb-5 flex flex-col gap-3 rounded-xl border border-honey-500/30 bg-honey-500/5 p-4 sm:flex-row sm:items-center">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-white">{t('profile.telegramProTitle')}</p>
+                <p className="mt-1 text-xs text-slate-400">{t('profile.telegramProDesc')}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => router.push('/billing')}
+                className="rounded-xl bg-honey-500 px-4 py-2.5 text-sm font-bold text-dark-950 hover:bg-honey-400"
+              >
+                {t('profile.telegramProAction')}
+              </button>
+            </div>
+          )}
 
           <div className="bg-dark-950 border border-dark-800 rounded-xl p-3.5 flex items-center gap-3 mb-5">
             <ShieldCheck className="w-4 h-4 text-honey-400 shrink-0" />

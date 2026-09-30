@@ -1,7 +1,5 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
-import { hasProModules } from '@/lib/pro-access';
-
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
     request: {
@@ -46,6 +44,7 @@ export async function middleware(request: NextRequest) {
 
   const isProtectedPath =
     pathname.startsWith('/dashboard') ||
+    pathname.startsWith('/choose-plan') ||
     pathname.startsWith('/billing') ||
     pathname.startsWith('/signals') ||
     pathname.startsWith('/pair') ||
@@ -66,25 +65,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
-  const isProSection = pathname.startsWith('/grid') || pathname.startsWith('/pair');
-  if (user && isProSection) {
-    const { data: profile, error } = await supabase
-      .from('users_profile')
-      .select('subscription_plan, subscription_status, is_frozen')
-      .eq('id', user.id)
-      .maybeSingle();
-
-    if (!error && !hasProModules(profile)) {
-      return NextResponse.redirect(new URL('/billing', request.url));
-    }
-  }
-
   return response;
 }
 
 export const config = {
   matcher: [
     '/dashboard/:path*',
+    '/choose-plan',
     '/billing/:path*',
     '/signals/:path*',
     '/pair',

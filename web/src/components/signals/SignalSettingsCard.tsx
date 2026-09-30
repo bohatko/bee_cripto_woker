@@ -7,7 +7,9 @@ import {
   Bell,
   Percent,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
+import { hasProModules } from '@/lib/pro-access';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { PanicCloseModal } from '@/components/modals/PanicCloseModal';
 import { toast } from '@/components/ui/sonner';
@@ -40,6 +42,7 @@ export function SignalSettingsCard({
   embedded = false,
 }: SignalSettingsCardProps) {
   const { t } = useLanguage();
+  const router = useRouter();
   const [isEnabled, setIsEnabled] = useState(Boolean(initialSettings?.is_enabled));
   const [balancePct, setBalancePct] = useState<number>(Number(initialSettings?.balance_pct || 50));
   const [alertReadiness, setAlertReadiness] = useState(
@@ -65,7 +68,19 @@ export function SignalSettingsCard({
   const estimatedMargin = ((freeMargin * balancePct) / 100).toFixed(2);
   const estimatedNotional = (Number(estimatedMargin) * leverage).toFixed(2);
 
-  const handleToggleClick = () => {
+  const handleToggleClick = async () => {
+    if (!isEnabled) {
+      const { data: profile } = await supabase
+        .from('users_profile')
+        .select('subscription_plan, subscription_status, is_frozen')
+        .eq('id', userId)
+        .maybeSingle();
+      if (!hasProModules(profile)) {
+        toast.error(t('signals.proRequired'));
+        router.push('/billing');
+        return;
+      }
+    }
     if (!primaryAccount || !primaryAccount.is_validated) {
       toast.error('Connect and validate an exchange API key in Exchange Keys first.');
       return;

@@ -179,10 +179,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: profileError.message }, { status: 500 });
     }
 
-    if (plan === 'lite') {
-      await admin.from('trading_settings').update({ is_bot_active: false }).eq('user_id', user.id);
-    }
-
     return NextResponse.json({
       code: 'paid',
       chainAmount: chainUsd,

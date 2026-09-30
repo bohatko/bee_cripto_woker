@@ -364,22 +364,13 @@ export default function AdminDashboardPage() {
           pending_subscription_plan: null,
           pending_billing_interval: null,
         };
-        if (selectedInvoice.subscription_plan === 'lite' || selectedInvoice.subscription_plan === 'pro') {
-          profileUpdate.subscription_plan = selectedInvoice.subscription_plan;
-          profileUpdate.billing_interval = interval === 'year' ? 'year' : 'month';
-        }
+        profileUpdate.subscription_plan = 'pro';
+        profileUpdate.billing_interval = interval === 'year' ? 'year' : 'month';
 
         await supabase
           .from('users_profile')
           .update(profileUpdate)
           .eq('id', selectedInvoice.user_id);
-
-        if (selectedInvoice.subscription_plan === 'lite') {
-          await supabase
-            .from('trading_settings')
-            .update({ is_bot_active: false })
-            .eq('user_id', selectedInvoice.user_id);
-        }
 
         const successText = t('admin.approvedToast', { number: selectedInvoice.invoice_number });
         toast.success(successText);
@@ -796,8 +787,8 @@ export default function AdminDashboardPage() {
             </div>
             <p className="text-2xl font-black text-white font-mono mt-2">{users.length}</p>
             <span className="text-[11px] text-slate-500 font-mono">
-              {t('admin.onTrial', {
-                trial: users.filter((u) => u.subscription_status === 'trial').length,
+              {t('admin.planSummary', {
+                none: users.filter((u) => u.subscription_status === 'none').length,
                 active: users.filter((u) => u.subscription_status === 'active').length,
               })}
             </span>
@@ -959,8 +950,8 @@ export default function AdminDashboardPage() {
                         <td className="px-5 py-4">
                           <span
                             className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold ${
-                              u.subscription_status === 'trial'
-                                ? 'bg-honey-500/15 text-honey-400'
+                              u.subscription_status === 'none'
+                                ? 'bg-dark-800 text-slate-400'
                                 : u.subscription_status === 'active'
                                 ? 'bg-emerald-500/15 text-emerald-400'
                                 : 'bg-rose-500/15 text-rose-400'

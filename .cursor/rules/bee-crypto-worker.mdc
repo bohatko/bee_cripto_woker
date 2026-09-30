@@ -37,6 +37,7 @@ Always consult the documentation in `doc/` before modifying architectural, datab
 - NEVER store unencrypted keys or keys with withdrawal permissions enabled.
 - All critical actions (bot toggle, delete keys, logout) require confirmation modals (`ConfirmModal.tsx`).
 - Emergency liquidation requires typing `CLOSE` in `PanicCloseModal.tsx`.
+- Single plan **Pro** ($200/month or $2000/year); no Lite, no trial. `subscription_status='none'` = view-only: no exchanges, Telegram, pairs, grid or `/signals` auto-trading (enforced by DB triggers, API routes and worker `canOpenNewTrades`).
 - Overdue invoice policy: **Variant A (Safe Freeze)** — block new trades, continue managing open positions until TP/SL.
 
 ## Database & Tech Stack

@@ -11,7 +11,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- 2. Пользовательские типы (ENUMs)
 CREATE TYPE user_role AS ENUM ('user', 'admin');
-CREATE TYPE subscription_status AS ENUM ('trial', 'active', 'frozen', 'expired');
+CREATE TYPE subscription_status AS ENUM ('trial', 'active', 'frozen', 'expired', 'none'); -- 'none' = no plan (default); 'trial'/'expired' are legacy and unused
 CREATE TYPE exchange_type AS ENUM ('binance', 'okx', 'bybit');
 CREATE TYPE position_status AS ENUM ('open', 'closing', 'closed', 'cancelled', 'error');
 CREATE TYPE exit_reason_type AS ENUM ('tp', 'sl', 'trend_flip', 'panic_close', 'admin_close');
@@ -67,13 +67,11 @@ CREATE TABLE IF NOT EXISTS public.users_profile (
     email TEXT NOT NULL,
     full_name TEXT,
     role user_role DEFAULT 'user'::user_role NOT NULL,
-    subscription_status subscription_status DEFAULT 'trial'::subscription_status NOT NULL,
-    subscription_plan TEXT DEFAULT 'lite' NOT NULL CHECK (subscription_plan IN ('lite', 'pro')),
+    subscription_status subscription_status DEFAULT 'none'::subscription_status NOT NULL,
+    subscription_plan TEXT DEFAULT 'pro' NOT NULL CHECK (subscription_plan = 'pro'),
     billing_interval TEXT DEFAULT 'month' NOT NULL CHECK (billing_interval IN ('month', 'year')),
-    pending_subscription_plan TEXT CHECK (pending_subscription_plan IS NULL OR pending_subscription_plan IN ('lite', 'pro')),
+    pending_subscription_plan TEXT CHECK (pending_subscription_plan IS NULL OR pending_subscription_plan = 'pro'),
     pending_billing_interval TEXT CHECK (pending_billing_interval IS NULL OR pending_billing_interval IN ('month', 'year')),
-    trial_start_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    trial_end_at TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '7 days') NOT NULL,
     subscription_paid_until TIMESTAMPTZ,
     high_water_mark_equity NUMERIC(18, 4) DEFAULT 0.0000 NOT NULL,
     is_frozen BOOLEAN DEFAULT FALSE NOT NULL,
@@ -82,7 +80,7 @@ CREATE TABLE IF NOT EXISTS public.users_profile (
     external_uid TEXT NOT NULL UNIQUE
         CONSTRAINT users_profile_external_uid_format CHECK (external_uid ~ '^[0-9]{7}$'),
     -- Immutable partner code. A $50 bonus is credited once when the invitee pays
-    -- a subscription of at least Lite monthly (70 USDT). See referral_attributions.
+    -- Pro (monthly or yearly, at least 200 USDT). See referral_attributions.
     referral_code TEXT NOT NULL UNIQUE
         CONSTRAINT users_profile_referral_code_format CHECK (referral_code ~ '^[A-Z0-9]{10}$'),
     -- Per-user Telegram (bot token AES-256-GCM encrypted as iv:tag:ciphertext)
@@ -213,7 +211,7 @@ CREATE TABLE IF NOT EXISTS public.bot_positions (
 );
 
 -- ==============================================================================
--- ТАБЛИЦА 6: invoices (Биллинг: Lite 70/700 USDT, Pro 200/2000 USDT)
+-- ТАБЛИЦА 6: invoices (Биллинг: Pro 200/2000 USDT)
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.invoices (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -224,7 +222,7 @@ CREATE TABLE IF NOT EXISTS public.invoices (
     
     -- Расчет платежа
     base_fee_usd NUMERIC(10, 2) DEFAULT 70.00 NOT NULL,
-    subscription_plan TEXT CHECK (subscription_plan IS NULL OR subscription_plan IN ('lite', 'pro')),
+    subscription_plan TEXT CHECK (subscription_plan IS NULL OR subscription_plan = 'pro'),
     billing_interval TEXT CHECK (billing_interval IS NULL OR billing_interval IN ('month', 'year')),
     profit_fee_usd NUMERIC(10, 2) DEFAULT 0.00 NOT NULL,
     total_amount_usd NUMERIC(10, 2) NOT NULL,
@@ -556,7 +554,7 @@ BEGIN
         COALESCE(NEW.email, ''),
         COALESCE(NEW.raw_user_meta_data->>'full_name', 'Трейдер'),
         'user'::public.user_role,
-        'trial'::public.subscription_status
+        'none'::public.subscription_status
     )
     ON CONFLICT (id) DO UPDATE SET
         email = EXCLUDED.email,
