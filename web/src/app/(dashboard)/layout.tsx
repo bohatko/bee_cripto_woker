@@ -322,17 +322,6 @@ export default function DashboardLayout({
                         </span>
                       )}
                     </span>
-                    {item.pro && (
-                      <span
-                        title={t('nav.proHint')}
-                        className={`inline-flex shrink-0 items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
-                          isActive ? 'bg-dark-950/15 text-dark-950' : 'bg-honey-500/15 text-honey-300'
-                        }`}
-                      >
-                        <Star className="h-2.5 w-2.5 fill-current" aria-hidden />
-                        {t('nav.proBadge')}
-                      </span>
-                    )}
                   </Link>
                 );
               })}

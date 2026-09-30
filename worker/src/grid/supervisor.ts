@@ -436,7 +436,7 @@ export class GridSupervisor {
       const resolved = resolveAccount(setting, accountsByUser.get(setting.user_id) || [], primaryByUser.get(setting.user_id) || null);
       if ('error' in resolved) {
         if (setting.last_error !== resolved.error) {
-          await supabase.from('grid_user_settings').update({ last_error: resolved.error }).eq('id', setting.id);
+          await supabase.from('grid_user_settings').update({ last_error: resolved.error, is_enabled: false }).eq('id', setting.id);
         }
         console.log(`[Grid] ${profileById.get(setting.user_id)?.email || setting.user_id}: ${resolved.error}`);
         continue;
@@ -448,15 +448,15 @@ export class GridSupervisor {
       );
       const liveBot = latest && (latest.run_status === 'running' || latest.run_status === 'starting');
       if (!liveBot && setting.last_error) {
-        await supabase.from('grid_user_settings').delete().eq('id', setting.id);
+        await supabase.from('grid_user_settings').update({ is_enabled: false }).eq('id', setting.id);
         await logEvent({
           userId: setting.user_id,
           templateId: active.id,
           exchange: setting.exchange,
-          event: 'removed',
-          message: `Removed ${active.base_asset}/USDT on ${setting.exchange.toUpperCase()} after a failed start: ${setting.last_error}`,
+          event: 'draft',
+          message: `Saved ${active.base_asset}/USDT on ${setting.exchange.toUpperCase()} as a draft after a failed start: ${setting.last_error}`,
         });
-        console.log(`[Grid] Removed failed slot ${active.base_asset} ${setting.exchange} for ${setting.user_id}`);
+        console.log(`[Grid] Saved failed slot ${active.base_asset} ${setting.exchange} as draft for ${setting.user_id}`);
         continue;
       }
       if (liveBot) continue;
@@ -526,13 +526,16 @@ export class GridSupervisor {
             console.error(`[Grid] Failed to roll back ${exchangeBotId}: ${closeErr?.message || closeErr}`);
           }
         }
-        await supabase.from('grid_user_settings').delete().eq('id', setting.id);
+        await supabase
+          .from('grid_user_settings')
+          .update({ is_enabled: false, last_error: message })
+          .eq('id', setting.id);
         await logEvent({
           userId: setting.user_id,
           templateId: active.id,
           exchange: setting.exchange,
-          event: 'removed',
-          message: `Removed ${active.base_asset}/USDT on ${setting.exchange.toUpperCase()} because the exchange rejected it: ${message}`,
+          event: 'draft',
+          message: `Saved ${active.base_asset}/USDT on ${setting.exchange.toUpperCase()} as a draft because the exchange rejected it: ${message}`,
         });
         skipStart.add(setting.id);
       }

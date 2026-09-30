@@ -113,22 +113,7 @@ export default function GridPage() {
     setTemplates(coins);
     const botList = (botRows || []) as Bot[];
     const slotList = (slotRows || []) as Slot[];
-    const failedIds = slotList
-      .filter(
-        (slot) =>
-          slot.last_error &&
-          !botList.some(
-            (bot) =>
-              bot.template_id === slot.template_id &&
-              bot.exchange === slot.exchange &&
-              (bot.run_status === 'running' || bot.run_status === 'starting')
-          )
-      )
-      .map((slot) => slot.id);
-    if (failedIds.length > 0) {
-      await supabase.from('grid_user_settings').delete().in('id', failedIds);
-    }
-    setSlots(slotList.filter((slot) => !failedIds.includes(slot.id)));
+    setSlots(slotList);
     setBots(botList);
     setEvents((eventRows || []) as GridEvent[]);
     setDraftCoin((current) => current || coins[0]?.id || '');
@@ -252,6 +237,112 @@ export default function GridPage() {
     ? events.filter((row) => row.template_id === historySlot.template_id && row.exchange === historySlot.exchange)
     : [];
 
+  const [archiveOpen, setArchiveOpen] = useState(false);
+
+  const openDraft = (slot: Slot) => {
+    setEditSlot(slot);
+    setDraftCoin(templateById.has(slot.template_id) ? slot.template_id : templates[0]?.id || '');
+    setDraftExchange(connected[slot.exchange] ? slot.exchange : firstConnected());
+    setDraftMargin(String(Number(slot.margin_usdt)));
+    setCreateOpen(true);
+  };
+
+  const slotStatus = (slot: Slot): string => {
+    const bot = latestBot(slot);
+    const live = bot?.run_status === 'running' || bot?.run_status === 'starting';
+    if (live) return bot?.control_status === 'released' ? 'released' : bot!.run_status;
+    if (isPending(slot)) {
+      const elapsed = slot.updated_at ? Math.max(0, now - new Date(slot.updated_at).getTime()) / 1000 : 0;
+      if (elapsed < 6) return 'preparing';
+      if (elapsed < 15) return 'connecting';
+      if (elapsed < 45) return 'awaiting';
+      return 'waiting';
+    }
+    if (!slot.is_enabled && slot.last_error) return 'draft';
+    return 'stopped';
+  };
+
+  const activeSlots = slots.filter((slot) => slotStatus(slot) !== 'stopped');
+  const archivedSlots = slots.filter((slot) => slotStatus(slot) === 'stopped');
+
+  const renderSlot = (slot: Slot) => {
+    const coin = templateById.get(slot.template_id);
+    const bot = latestBot(slot);
+    const pnl = bot?.pnl_usdt == null ? null : Number(bot.pnl_usdt);
+    const status = slotStatus(slot);
+    const live = status === 'running' || status === 'starting' || status === 'released';
+    const pending = ['preparing', 'connecting', 'awaiting', 'waiting'].includes(status);
+    return (
+              <article key={slot.id} className="rounded-2xl border border-dark-800 bg-dark-900 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2 className="font-mono text-base font-bold text-white">{coin ? `${coin.base_asset}/USDT` : '—'}</h2>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <span className="rounded-md border border-dark-700 bg-dark-950 px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase text-honey-300">
+                        {slot.exchange}
+                      </span>
+                      <StatusPill status={status} label={statusText(status, t)} />
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className={`font-mono text-lg font-bold leading-none ${pnl != null && pnl < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                      {pnl == null ? '—' : `${pnl > 0 ? '+' : ''}${pnl.toFixed(2)}`}
+                      <span className="ml-1 text-[10px] font-medium text-slate-500">USDT</span>
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setHistorySlot(slot)}
+                      className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-bold text-honey-300"
+                    >
+                      <History className="h-3 w-3" />
+                      {t('grid.history')}
+                    </button>
+                  </div>
+                </div>
+
+                <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 font-mono text-xs">
+                  <Stat label={t('grid.margin')} value={`${Number(slot.margin_usdt)} USDT`} />
+                  <Stat label={t('grid.range')} value={coin ? `${px(coin.lower_price)} – ${px(coin.upper_price)}` : '—'} />
+                  <Stat label={t('grid.grids')} value={coin ? String(coin.grid_count) : '—'} />
+                  <Stat label={t('grid.leverage')} value={coin ? `${Number(coin.leverage)}x` : '—'} />
+                  <Stat label={t('grid.stopPrice')} value={coin ? px(coin.stop_price) : '—'} />
+                  <Stat label={t('grid.takeProfit')} value={coin ? px(coin.take_profit_price) : '—'} />
+                  <Stat label={t('grid.direction')} value={t('grid.neutral')} />
+                </dl>
+
+                {(slot.last_error || bot?.last_error) && (
+                  <p className="mt-3 text-xs text-rose-300">
+                    {t('grid.error')}: {slot.last_error || bot?.last_error}
+                  </p>
+                )}
+
+                <div className="mt-3">
+                  {live || pending ? (
+                    <button
+                      type="button"
+                      disabled={!pro}
+                      onClick={() => setStopSlot(slot)}
+                      className="rounded-lg border border-rose-500/40 px-3 py-1.5 text-xs font-bold text-rose-300 disabled:opacity-40"
+                    >
+                      {t('grid.stop')}
+                    </button>
+                  ) : status === 'draft' ? (
+                    <button
+                      type="button"
+                      disabled={!pro}
+                      onClick={() => openDraft(slot)}
+                      className="rounded-lg bg-honey-500 px-3 py-1.5 text-xs font-bold text-dark-950 disabled:opacity-40"
+                    >
+                      {t('grid.launchDraft')}
+                    </button>
+                  ) : (
+                    <p className="text-xs text-slate-500">{t('grid.stoppedHint')}</p>
+                  )}
+                </div>
+              </article>
+    );
+  };
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center text-slate-400">
@@ -306,97 +397,25 @@ export default function GridPage() {
         </div>
       )}
 
-      {slots.length === 0 ? (
+      {activeSlots.length === 0 ? (
         <section className="rounded-2xl border border-dashed border-dark-700 bg-dark-900/60 px-5 py-10 text-sm text-slate-400">
           {templates.length === 0 ? t('grid.noCoin') : t('grid.noCards')}
         </section>
       ) : (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {slots.map((slot) => {
-            const coin = templateById.get(slot.template_id);
-            const bot = latestBot(slot);
-            const pnl = bot?.pnl_usdt == null ? null : Number(bot.pnl_usdt);
-            const live = bot?.run_status === 'running' || bot?.run_status === 'starting';
-            const pending = !live && isPending(slot);
-            const elapsed = slot.updated_at ? Math.max(0, now - new Date(slot.updated_at).getTime()) / 1000 : 0;
-            const status =
-              bot?.control_status === 'released' && live
-                ? 'released'
-                : live
-                  ? bot.run_status
-                  : pending
-                    ? slot.last_error
-                      ? 'failed'
-                      : elapsed < 6
-                        ? 'preparing'
-                        : elapsed < 15
-                          ? 'connecting'
-                          : elapsed < 45
-                            ? 'awaiting'
-                            : 'waiting'
-                    : 'stopped';
-            return (
-              <article key={slot.id} className="rounded-2xl border border-dark-800 bg-dark-900 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h2 className="font-mono text-base font-bold text-white">{coin ? `${coin.base_asset}/USDT` : '—'}</h2>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                      <span className="rounded-md border border-dark-700 bg-dark-950 px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase text-honey-300">
-                        {slot.exchange}
-                      </span>
-                      <StatusPill status={status} label={statusText(status, t)} />
-                    </div>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className={`font-mono text-lg font-bold leading-none ${pnl != null && pnl < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
-                      {pnl == null ? '—' : `${pnl > 0 ? '+' : ''}${pnl.toFixed(2)}`}
-                      <span className="ml-1 text-[10px] font-medium text-slate-500">USDT</span>
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setHistorySlot(slot)}
-                      className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-bold text-honey-300"
-                    >
-                      <History className="h-3 w-3" />
-                      {t('grid.history')}
-                    </button>
-                  </div>
-                </div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">{activeSlots.map(renderSlot)}</div>
+      )}
 
-                <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 font-mono text-xs">
-                  <Stat label={t('grid.margin')} value={`${Number(slot.margin_usdt)} USDT`} />
-                  <Stat label={t('grid.range')} value={coin ? `${px(coin.lower_price)} – ${px(coin.upper_price)}` : '—'} />
-                  <Stat label={t('grid.grids')} value={coin ? String(coin.grid_count) : '—'} />
-                  <Stat label={t('grid.leverage')} value={coin ? `${Number(coin.leverage)}x` : '—'} />
-                  <Stat label={t('grid.stopPrice')} value={coin ? px(coin.stop_price) : '—'} />
-                  <Stat label={t('grid.takeProfit')} value={coin ? px(coin.take_profit_price) : '—'} />
-                  <Stat label={t('grid.direction')} value={t('grid.neutral')} />
-                </dl>
-
-                {(slot.last_error || bot?.last_error) && (
-                  <p className="mt-3 text-xs text-rose-300">
-                    {t('grid.error')}: {slot.last_error || bot?.last_error}
-                  </p>
-                )}
-
-                <div className="mt-3">
-                  {live || pending ? (
-                    <button
-                      type="button"
-                      disabled={!pro}
-                      onClick={() => setStopSlot(slot)}
-                      className="rounded-lg border border-rose-500/40 px-3 py-1.5 text-xs font-bold text-rose-300 disabled:opacity-40"
-                    >
-                      {t('grid.stop')}
-                    </button>
-                  ) : (
-                    <p className="text-xs text-slate-500">{t('grid.stoppedHint')}</p>
-                  )}
-                </div>
-              </article>
-            );
-          })}
-        </div>
+      {archivedSlots.length > 0 && (
+        <section className="space-y-3">
+          <button
+            type="button"
+            onClick={() => setArchiveOpen((value) => !value)}
+            className="text-sm font-bold text-slate-300"
+          >
+            {t('grid.archive')} ({archivedSlots.length}) {archiveOpen ? '▲' : '▼'}
+          </button>
+          {archiveOpen && <div className="grid grid-cols-1 gap-3 md:grid-cols-2">{archivedSlots.map(renderSlot)}</div>}
+        </section>
       )}
 
       {createOpen && (
@@ -404,11 +423,12 @@ export default function GridPage() {
           <button type="button" className="absolute inset-0 bg-black/70" aria-label={t('common.cancel')} onClick={closeForm} />
           <div className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-dark-800 bg-dark-900 p-5">
             <div className="flex items-start justify-between gap-3">
-              <h2 className="text-lg font-bold text-white">{editSlot ? t('grid.restart') : t('grid.create')}</h2>
+              <h2 className="text-lg font-bold text-white">{editSlot ? t('grid.launchDraft') : t('grid.create')}</h2>
               <button type="button" onClick={closeForm} className="rounded-lg p-1 text-slate-400">
                 <X className="h-4 w-4" />
               </button>
             </div>
+            {editSlot?.last_error && <p className="mt-3 text-xs text-rose-300">{editSlot.last_error}</p>}
             <div className="mt-4">
               <p className="text-sm text-slate-300">{t('grid.coin')}</p>
               {templates.length === 0 ? (
@@ -474,7 +494,7 @@ export default function GridPage() {
               onClick={() => setConfirmCreate(true)}
               className="mt-5 w-full rounded-xl bg-honey-500 px-4 py-2 text-sm font-bold text-dark-950 disabled:opacity-40"
             >
-              {editSlot ? t('grid.restart') : t('grid.create')}
+              {editSlot ? t('grid.launchDraft') : t('grid.create')}
             </button>
           </div>
         </div>
@@ -518,7 +538,7 @@ export default function GridPage() {
         isOpen={confirmCreate}
         title={editSlot ? t('grid.confirmRestartTitle') : t('grid.confirmCreateTitle')}
         description={editSlot ? t('grid.confirmRestartDesc') : t('grid.confirmCreateDesc')}
-        confirmText={editSlot ? t('grid.restart') : t('grid.create')}
+        confirmText={editSlot ? t('grid.launchDraft') : t('grid.create')}
         onConfirm={() => void createBot()}
         onCancel={() => setConfirmCreate(false)}
       />
@@ -597,7 +617,7 @@ function statusText(status: string, t: (key: string) => string): string {
   if (status === 'preparing') return t('grid.stagePreparing');
   if (status === 'connecting') return t('grid.stageConnecting');
   if (status === 'awaiting') return t('grid.stageAwaiting');
-  if (status === 'failed') return t('grid.stageFailed');
+  if (status === 'draft') return t('grid.draft');
   if (status === 'waiting') return t('grid.waiting');
   if (status === 'stopped') return t('grid.stopped');
   if (status === 'released') return t('grid.releasedShort');
@@ -608,7 +628,7 @@ function StatusPill({ status, label }: { status: string; label: string }) {
   const tone =
     status === 'running' || status === 'starting'
       ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
-      : status === 'failed'
+      : status === 'draft'
         ? 'border-rose-500/40 bg-rose-500/10 text-rose-300'
       : status === 'waiting' || status === 'preparing' || status === 'connecting' || status === 'awaiting'
         ? 'animate-pulse border-honey-500/40 bg-honey-500/10 text-honey-200'
