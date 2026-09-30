@@ -16,6 +16,8 @@ import {
   Radar,
   Grid3x3,
   Star,
+  Menu,
+  X,
 } from 'lucide-react';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { supabase } from '@/lib/supabase/client';
@@ -40,6 +42,11 @@ export default function DashboardLayout({
   const [profile, setProfile] = useState<any>(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     let isMounted = true;
@@ -231,7 +238,33 @@ export default function DashboardLayout({
 
   return (
     <div className="h-dvh bg-dark-950 flex flex-col md:flex-row text-slate-100 overflow-hidden">
-      <aside className="relative z-40 w-full md:w-64 md:h-full bg-dark-900 border-r border-dark-800 flex flex-col shrink-0">
+      <header className="md:hidden relative z-30 flex items-center gap-3 px-4 py-3 bg-dark-900 border-b border-dark-800 shrink-0">
+        <button
+          type="button"
+          onClick={() => setIsMobileMenuOpen(true)}
+          aria-label="Open menu"
+          className="p-2 -ml-2 rounded-lg text-slate-300 hover:bg-dark-850"
+        >
+          <Menu className="w-6 h-6" />
+        </button>
+        <div className="flex-1 font-extrabold tracking-tight text-white text-base">
+          🐝 CRYPTO <span className="text-honey-400">BEE</span>
+        </div>
+        <NotificationBell userId={user.id} />
+      </header>
+
+      {isMobileMenuOpen && (
+        <div
+          className="md:hidden fixed inset-0 z-40 bg-black/60"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] transform transition-transform duration-200 md:static md:z-40 md:w-64 md:max-w-none md:h-full md:translate-x-0 bg-dark-900 border-r border-dark-800 flex flex-col shrink-0 ${
+          isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
         <div className="relative z-20 p-5 border-b border-dark-800 flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-honey-500/10 border border-honey-500/30 flex items-center justify-center text-honey-500 font-bold text-xl shadow-lg shadow-honey-500/20">
             🐝
@@ -241,7 +274,17 @@ export default function DashboardLayout({
               CRYPTO <span className="text-honey-400">BEE</span>
             </h1>
           </div>
-          <NotificationBell userId={user.id} />
+          <div className="hidden md:block">
+            <NotificationBell userId={user.id} />
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsMobileMenuOpen(false)}
+            aria-label="Close menu"
+            className="md:hidden p-2 -mr-2 rounded-lg text-slate-400 hover:bg-dark-850"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         <Link
@@ -307,7 +350,7 @@ export default function DashboardLayout({
                     }`}
                   >
                     <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-dark-950' : 'text-slate-400'}`} />
-                    <span className="flex min-w-0 flex-1 items-center gap-1">
+                    <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
                       <span className="truncate">{item.name}</span>
                       {item.beta && (
                         <span
