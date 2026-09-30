@@ -74,7 +74,7 @@ export function useUserNotifications(
           });
           if (options.toastNew && !SILENT_TOAST_EVENTS.has(row.event_type)) {
             const copy = formatNotification(row, t, formatDateTime);
-            const toastOptions = { description: copy.body, duration: 8000 };
+            const toastOptions = { id: `notification-${row.id}`, description: copy.body, duration: 8000 };
             if (row.severity === 'critical') toast.error(copy.title, toastOptions);
             else if (row.severity === 'warning') toast.warning(copy.title, toastOptions);
             else if (row.severity === 'success') toast.success(copy.title, toastOptions);
