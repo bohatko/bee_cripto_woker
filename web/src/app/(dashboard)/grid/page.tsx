@@ -135,7 +135,18 @@ export default function GridPage() {
     [bots]
   );
 
-  const anyPending = slots.some((slot) => !slot.last_error && isPending(slot));
+  const isStopping = useCallback(
+    (slot: Slot) => {
+      if (slot.is_enabled) return false;
+      const bot = bots.find((row) => row.template_id === slot.template_id && row.exchange === slot.exchange);
+      return bot?.run_status === 'running' || bot?.run_status === 'starting'
+        ? bot.control_status !== 'released'
+        : false;
+    },
+    [bots]
+  );
+
+  const anyPending = slots.some((slot) => (!slot.last_error && isPending(slot)) || isStopping(slot));
 
   useEffect(() => {
     void load();
@@ -223,13 +234,16 @@ export default function GridPage() {
 
   const stopBot = async () => {
     if (!stopSlot) return;
-    const { error } = await supabase.from('grid_user_settings').update({ is_enabled: false }).eq('id', stopSlot.id);
+    const target = stopSlot;
+    setStopSlot(null);
+    setSlots((current) => current.map((row) => (row.id === target.id ? { ...row, is_enabled: false, updated_at: new Date().toISOString() } : row)));
+    const { error } = await supabase.from('grid_user_settings').update({ is_enabled: false }).eq('id', target.id);
     if (error) {
       toast.error(error.message);
+      await load();
       return;
     }
-    toast.success(t('grid.saved'));
-    setStopSlot(null);
+    toast.info(t('grid.stopSent'));
     await load();
   };
 
@@ -250,6 +264,10 @@ export default function GridPage() {
   const slotStatus = (slot: Slot): string => {
     const bot = latestBot(slot);
     const live = bot?.run_status === 'running' || bot?.run_status === 'starting';
+    if (live && isStopping(slot)) {
+      const elapsed = slot.updated_at ? Math.max(0, now - new Date(slot.updated_at).getTime()) / 1000 : 0;
+      return elapsed < 5 ? 'stopRequested' : 'stopping';
+    }
     if (live) return bot?.control_status === 'released' ? 'released' : bot!.run_status;
     if (isPending(slot)) {
       const elapsed = slot.updated_at ? Math.max(0, now - new Date(slot.updated_at).getTime()) / 1000 : 0;
@@ -317,7 +335,9 @@ export default function GridPage() {
                 )}
 
                 <div className="mt-3">
-                  {live || pending ? (
+                  {status === 'stopRequested' || status === 'stopping' ? (
+                    <p className="text-xs text-slate-400">{t('grid.stopWait')}</p>
+                  ) : live || pending ? (
                     <button
                       type="button"
                       disabled={!pro}
@@ -614,6 +634,8 @@ function CloseWordModal({
 
 function statusText(status: string, t: (key: string) => string): string {
   if (status === 'running' || status === 'starting') return t('grid.running');
+  if (status === 'stopRequested') return t('grid.stageStopRequested');
+  if (status === 'stopping') return t('grid.stageStopping');
   if (status === 'preparing') return t('grid.stagePreparing');
   if (status === 'connecting') return t('grid.stageConnecting');
   if (status === 'awaiting') return t('grid.stageAwaiting');
@@ -630,7 +652,7 @@ function StatusPill({ status, label }: { status: string; label: string }) {
       ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
       : status === 'draft'
         ? 'border-rose-500/40 bg-rose-500/10 text-rose-300'
-      : status === 'waiting' || status === 'preparing' || status === 'connecting' || status === 'awaiting'
+      : status === 'waiting' || status === 'stopRequested' || status === 'stopping' || status === 'preparing' || status === 'connecting' || status === 'awaiting'
         ? 'animate-pulse border-honey-500/40 bg-honey-500/10 text-honey-200'
         : status === 'released'
           ? 'border-honey-500/40 bg-honey-500/10 text-honey-200'
