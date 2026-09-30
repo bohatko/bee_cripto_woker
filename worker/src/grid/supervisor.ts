@@ -6,6 +6,7 @@ import { scanGridCandidates } from './screener.js';
 import { createOkxGrid, readOkxGrid, stopOkxGrid } from './okx-grid.js';
 import { createBybitGrid, readBybitGrid, stopBybitGrid } from './bybit-grid.js';
 import type { GridOrderParams } from './okx-grid.js';
+import { centerOnPrice, fetchLastPrice, formatPx } from './prices.js';
 
 const SCAN_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
@@ -472,7 +473,18 @@ export class GridSupervisor {
       let exchangeBotId: string | null = null;
       try {
         const creds = credsOf(resolved.account);
-        const params = orderParams(active, Number(setting.margin_usdt));
+        const price = await fetchLastPrice(resolved.account.exchange as 'okx' | 'bybit', active.base_asset);
+        const centered = centerOnPrice(orderParams(active, Number(setting.margin_usdt)), price);
+        const params = centered.params;
+        if (centered.shifted) {
+          await logEvent({
+            userId: setting.user_id,
+            templateId: active.id,
+            exchange: resolved.account.exchange,
+            event: 'adjusted',
+            message: `Price ${formatPx(price)} was off-center. Range moved from ${formatPx(Number(active.lower_price))}-${formatPx(Number(active.upper_price))} to ${formatPx(params.lowerPrice)}-${formatPx(params.upperPrice)}, stop ${formatPx(params.stopPrice)}, take profit ${formatPx(params.takeProfitPrice)}.`,
+          });
+        }
         exchangeBotId =
           resolved.account.exchange === 'okx'
             ? await createOkxGrid(creds, params)
