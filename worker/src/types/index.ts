@@ -1,5 +1,6 @@
 export type UserRole = 'user' | 'admin';
-export type SubscriptionStatus = 'trial' | 'active' | 'frozen' | 'expired';
+/** 'none' = no paid plan (view-only mode). */
+export type SubscriptionStatus = 'none' | 'active' | 'frozen' | 'expired';
 export type ExchangeType = 'binance' | 'okx' | 'bybit';
 export type PositionStatus = 'open' | 'closing' | 'closed' | 'cancelled' | 'error';
 export type ExitReasonType = 'tp' | 'sl' | 'trend_flip' | 'panic_close' | 'admin_close';
@@ -17,12 +18,10 @@ export interface UserProfile {
   /** Unique 7-digit payment reference shown to the user for OKX internal transfers. */
   external_uid: string;
   subscription_status: SubscriptionStatus;
-  subscription_plan?: 'lite' | 'pro';
+  subscription_plan?: 'pro';
   billing_interval?: 'month' | 'year';
-  pending_subscription_plan?: 'lite' | 'pro' | null;
+  pending_subscription_plan?: 'pro' | null;
   pending_billing_interval?: 'month' | 'year' | null;
-  trial_start_at: string;
-  trial_end_at: string;
   subscription_paid_until: string | null;
   billing_notice_24h_for?: string | null;
   billing_notice_12h_for?: string | null;

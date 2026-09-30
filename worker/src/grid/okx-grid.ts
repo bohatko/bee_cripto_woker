@@ -18,7 +18,8 @@ export interface GridOrderParams {
 
 export interface GridBotSnapshot {
   exchangeBotId: string;
-  running: boolean;
+  /** null when the exchange payload does not say whether the bot is still live. */
+  running: boolean | null;
   pnlUsdt: number | null;
   raw: Record<string, unknown>;
 }

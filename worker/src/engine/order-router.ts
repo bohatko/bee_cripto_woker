@@ -1,4 +1,5 @@
 import { supabase, CONFIG } from '../config.js';
+import { canOpenNewTrades } from '../plans.js';
 import {
   BotPosition,
   ExchangeAccount,
@@ -123,10 +124,8 @@ export class OrderRouter {
 
       const userPromise = (async () => {
         try {
-          if (!user || user.is_frozen) return;
-          if (!['trial', 'active'].includes(user.subscription_status)) return;
-          // Lite includes Dip-Buy only. Open pair legs stay with the position guard.
-          if (user.subscription_plan !== 'pro') return;
+          // New entries need paid Pro in good standing. Open positions are managed by the exit guards.
+          if (!canOpenNewTrades(user)) return;
 
           // Strict requirement: User MUST have an active & validated exchange account connected
           if (!account || !account.is_active || !account.is_validated) {

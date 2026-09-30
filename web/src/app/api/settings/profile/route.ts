@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuthenticatedUser } from '@/lib/supabase/server';
 import { encryptPayload } from '@/lib/encryption';
+import { hasProModules } from '@/lib/pro-access';
 
 export async function GET(request: Request) {
   try {
@@ -40,7 +41,7 @@ export async function GET(request: Request) {
       telegram_chat_id: data?.telegram_chat_id || '',
       telegram_enabled: Boolean(data?.telegram_enabled),
       has_telegram_token: Boolean(data?.telegram_bot_token_enc),
-      subscription_status: data?.subscription_status || 'trial',
+      subscription_status: data?.subscription_status || 'none',
       external_uid: data?.external_uid || '',
     });
   } catch (err: any) {
@@ -95,6 +96,24 @@ export async function PATCH(request: Request) {
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: 'No changes provided.' }, { status: 400 });
+    }
+
+    const connectsTelegram =
+      newToken !== '' ||
+      (chatId !== undefined && chatId !== '') ||
+      telegramEnabled === true;
+    if (connectsTelegram) {
+      const { data: access } = await supabase
+        .from('users_profile')
+        .select('subscription_plan, subscription_status, is_frozen')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (!hasProModules(access)) {
+        return NextResponse.json(
+          { error: 'Connecting Telegram requires an active Pro subscription.', code: 'pro_required' },
+          { status: 403 }
+        );
+      }
     }
 
     const { data, error } = await supabase

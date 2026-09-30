@@ -95,7 +95,7 @@ class TelegramNotifier {
 
     const { data, error } = await supabase
       .from('users_profile')
-      .select('telegram_enabled, telegram_bot_token_enc, telegram_chat_id')
+      .select('telegram_enabled, telegram_bot_token_enc, telegram_chat_id, subscription_status')
       .eq('id', userId)
       .maybeSingle();
 
@@ -105,7 +105,10 @@ class TelegramNotifier {
     }
 
     let credentials: TelegramCredentials | null = null;
+    // Telegram is a Pro feature. Overdue (frozen) Pro keeps alerts so open positions stay visible.
+    const hasPaidHistory = data?.subscription_status === 'active' || data?.subscription_status === 'frozen';
     if (
+      hasPaidHistory &&
       data?.telegram_enabled &&
       data.telegram_bot_token_enc &&
       data.telegram_chat_id
@@ -527,14 +530,12 @@ class TelegramNotifier {
   public async notifySubscriptionEnding(data: {
     userId: string;
     withinHours: 24 | 12;
-    period: 'trial' | 'subscription';
     plan: string;
     intervalLabel: string;
     amountUsd: number;
     endsAtIso: string;
   }): Promise<void> {
     const when = data.withinHours === 24 ? 'меньше суток' : 'меньше 12 часов';
-    const what = data.period === 'trial' ? 'Пробный период' : 'Оплаченная подписка';
     const ends = new Date(data.endsAtIso).toLocaleString('ru-RU', {
       timeZone: 'UTC',
       day: '2-digit',
@@ -546,7 +547,7 @@ class TelegramNotifier {
     const message = [
       `🐝 <b>НУЖНО ОПЛАТИТЬ ПОДПИСКУ</b>`,
       `━━━━━━━━━━━━━━━━━━`,
-      `${what} заканчивается через <b>${when}</b>.`,
+      `Оплаченная подписка заканчивается через <b>${when}</b>.`,
       `📦 <b>Тариф:</b> <code>${escapeHtml(data.plan)} · ${escapeHtml(data.intervalLabel)}</code>`,
       `💵 <b>Сумма:</b> <code>${data.amountUsd.toFixed(2)} USDT</code>`,
       `⏱ <b>Окончание:</b> <code>${ends} UTC</code>`,

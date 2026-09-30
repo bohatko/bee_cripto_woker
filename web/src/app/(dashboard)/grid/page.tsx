@@ -299,12 +299,15 @@ export default function GridPage() {
             const coin = templateById.get(slot.template_id);
             const bot = latestBot(slot);
             const pnl = bot?.pnl_usdt == null ? null : Number(bot.pnl_usdt);
+            const live = bot?.run_status === 'running' || bot?.run_status === 'starting';
             const status =
-              bot?.control_status === 'released'
+              bot?.control_status === 'released' && live
                 ? 'released'
-                : !bot && slot.is_enabled
-                  ? 'waiting'
-                  : bot?.run_status || (slot.is_enabled ? 'waiting' : 'stopped');
+                : live
+                  ? bot.run_status
+                  : !bot && slot.is_enabled
+                    ? 'waiting'
+                    : 'stopped';
             return (
               <article key={slot.id} className="rounded-2xl border border-dark-800 bg-dark-900 p-4">
                 <div className="flex items-start justify-between gap-3">
@@ -350,7 +353,7 @@ export default function GridPage() {
                 )}
 
                 <div className="mt-3">
-                  {slot.is_enabled ? (
+                  {live || (slot.is_enabled && !bot) ? (
                     <button
                       type="button"
                       disabled={!pro}

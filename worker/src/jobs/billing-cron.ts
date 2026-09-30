@@ -3,7 +3,6 @@ import { telegramNotifier } from '../notifications/telegram.js';
 import { UserProfile } from '../types/index.js';
 import {
   isBillingInterval,
-  isSubscriptionPlan,
   planPriceUsd,
   type BillingInterval,
   type SubscriptionPlan,
@@ -14,12 +13,8 @@ const HOUR_MS = 60 * 60 * 1000;
 type PaymentReminderRow = {
   id: string;
   email: string | null;
-  subscription_status: 'trial' | 'active';
-  subscription_plan: string | null;
   billing_interval: string | null;
-  pending_subscription_plan: string | null;
   pending_billing_interval: string | null;
-  trial_end_at: string | null;
   subscription_paid_until: string | null;
   billing_notice_24h_for: string | null;
   billing_notice_12h_for: string | null;
@@ -37,30 +32,8 @@ export class BillingCronJob {
     console.log('💳 [BILLING] Running billing audit cycle...');
     const now = new Date();
 
-    // 1. Check expired trials (subscription_status === 'trial' and trial_end_at <= now)
-    const { data: expiredTrialUsers } = await supabase
-      .from('users_profile')
-      .select('*, exchange_accounts(*)')
-      .eq('subscription_status', 'trial')
-      .lte('trial_end_at', now.toISOString());
-
-    if (expiredTrialUsers && expiredTrialUsers.length > 0) {
-      for (const u of expiredTrialUsers) {
-        // Prevent duplicate invoices if user already has an issued or pending_review invoice
-        const { data: openInvs } = await supabase
-          .from('invoices')
-          .select('id')
-          .eq('user_id', u.id)
-          .in('status', ['issued', 'pending_review'])
-          .limit(1);
-
-        if (!openInvs || openInvs.length === 0) {
-          await this.generatePlanInvoice(u);
-        }
-      }
-    }
-
-    // 2. Check expired active subscriptions (subscription_status === 'active' and subscription_paid_until <= now)
+    // 1. Renewal invoices for expired Pro subscriptions (subscription_status === 'active' and subscription_paid_until <= now).
+    // Users without a plan ('none') are never invoiced automatically: they subscribe from the billing page.
     const { data: expiredActiveUsers } = await supabase
       .from('users_profile')
       .select('*, exchange_accounts(*)')
@@ -85,16 +58,22 @@ export class BillingCronJob {
       }
     }
 
-    // 3. Check overdue invoices and apply Variant A safe freeze
+    // 2. Check overdue invoices and apply Variant A safe freeze
     // An invoice is overdue if status is 'issued' and due_date <= now
     const { data: overdueInvoices } = await supabase
       .from('invoices')
-      .select('id, user_id, invoice_number')
+      .select('id, user_id, invoice_number, users_profile(subscription_status)')
       .eq('status', 'issued')
       .lte('due_date', now.toISOString());
 
     if (overdueInvoices && overdueInvoices.length > 0) {
-      for (const inv of overdueInvoices) {
+      for (const inv of overdueInvoices as any[]) {
+        const owner = Array.isArray(inv.users_profile) ? inv.users_profile[0] : inv.users_profile;
+        if (owner?.subscription_status === 'none') {
+          // First-time subscription that was never paid: nothing to freeze, just void the invoice.
+          await supabase.from('invoices').update({ status: 'cancelled' }).eq('id', inv.id);
+          continue;
+        }
         console.warn(`❄️ [BILLING FREEZE] Invoice ${inv.invoice_number} overdue. Freezing user ${inv.user_id} (Variant A: no new entries)`);
         await supabase
           .from('users_profile')
@@ -124,31 +103,20 @@ export class BillingCronJob {
 
   private async sendPaymentReminders(now: Date) {
     const horizon = new Date(now.getTime() + 24 * HOUR_MS).toISOString();
-    const [{ data: activeRows, error: activeError }, { data: trialRows, error: trialError }] = await Promise.all([
-      supabase
-        .from('users_profile')
-        .select('id, email, subscription_status, subscription_plan, billing_interval, pending_subscription_plan, pending_billing_interval, trial_end_at, subscription_paid_until, billing_notice_24h_for, billing_notice_12h_for')
-        .eq('subscription_status', 'active')
-        .eq('is_frozen', false)
-        .not('subscription_paid_until', 'is', null)
-        .gt('subscription_paid_until', now.toISOString())
-        .lte('subscription_paid_until', horizon),
-      supabase
-        .from('users_profile')
-        .select('id, email, subscription_status, subscription_plan, billing_interval, pending_subscription_plan, pending_billing_interval, trial_end_at, subscription_paid_until, billing_notice_24h_for, billing_notice_12h_for')
-        .eq('subscription_status', 'trial')
-        .eq('is_frozen', false)
-        .not('trial_end_at', 'is', null)
-        .gt('trial_end_at', now.toISOString())
-        .lte('trial_end_at', horizon),
-    ]);
+    const { data: activeRows, error: activeError } = await supabase
+      .from('users_profile')
+      .select('id, email, billing_interval, pending_billing_interval, subscription_paid_until, billing_notice_24h_for, billing_notice_12h_for')
+      .eq('subscription_status', 'active')
+      .eq('is_frozen', false)
+      .not('subscription_paid_until', 'is', null)
+      .gt('subscription_paid_until', now.toISOString())
+      .lte('subscription_paid_until', horizon);
 
     if (activeError) console.error(`❌ [BILLING] Payment reminder query failed: ${activeError.message}`);
-    if (trialError) console.error(`❌ [BILLING] Trial reminder query failed: ${trialError.message}`);
 
-    const rows = [...((activeRows || []) as PaymentReminderRow[]), ...((trialRows || []) as PaymentReminderRow[])];
+    const rows = (activeRows || []) as PaymentReminderRow[];
     for (const user of rows) {
-      const endsAtIso = user.subscription_status === 'trial' ? user.trial_end_at : user.subscription_paid_until;
+      const endsAtIso = user.subscription_paid_until;
       if (!endsAtIso) continue;
       const remaining = new Date(endsAtIso).getTime() - now.getTime();
       if (remaining <= 0 || remaining > 24 * HOUR_MS) continue;
@@ -157,11 +125,7 @@ export class BillingCronJob {
       const sentFor = withinHours === 12 ? user.billing_notice_12h_for : user.billing_notice_24h_for;
       if (sentFor && new Date(sentFor).getTime() === new Date(endsAtIso).getTime()) continue;
 
-      const plan: SubscriptionPlan = isSubscriptionPlan(user.pending_subscription_plan)
-        ? user.pending_subscription_plan
-        : isSubscriptionPlan(user.subscription_plan)
-          ? user.subscription_plan
-          : 'lite';
+      const plan: SubscriptionPlan = 'pro';
       const interval: BillingInterval = isBillingInterval(user.pending_billing_interval)
         ? user.pending_billing_interval
         : isBillingInterval(user.billing_interval)
@@ -171,8 +135,7 @@ export class BillingCronJob {
       await telegramNotifier.notifySubscriptionEnding({
         userId: user.id,
         withinHours,
-        period: user.subscription_status === 'trial' ? 'trial' : 'subscription',
-        plan: plan === 'pro' ? 'Pro' : 'Lite',
+        plan: 'Pro',
         intervalLabel: interval === 'year' ? 'год' : 'месяц',
         amountUsd: planPriceUsd(plan, interval),
         endsAtIso,
@@ -193,11 +156,7 @@ export class BillingCronJob {
     const periodStart = new Date(Date.now() - 7 * 86400000);
     const dueDate = new Date(Date.now() + 48 * 3600000); // 48h Grace Period
 
-    const plan: SubscriptionPlan = isSubscriptionPlan(user.pending_subscription_plan)
-      ? user.pending_subscription_plan
-      : isSubscriptionPlan(user.subscription_plan)
-        ? user.subscription_plan
-        : 'lite';
+    const plan: SubscriptionPlan = 'pro';
     const interval: BillingInterval = isBillingInterval(user.pending_billing_interval)
       ? user.pending_billing_interval
       : isBillingInterval(user.billing_interval)
@@ -253,7 +212,7 @@ export class BillingCronJob {
           '🧾 <b>СЧЁТ ВЫСТАВЛЕН</b>',
           '━━━━━━━━━━━━━━━━━━',
           `Номер: <code>${invoiceNumber}</code>`,
-          `Тариф: <code>${plan === 'pro' ? 'Pro' : 'Lite'} · ${intervalLabel}</code>`,
+          `Тариф: <code>Pro · ${intervalLabel}</code>`,
           `Сумма: <code>${totalAmount.toFixed(2)} USDT</code>`,
           'Льготные 48 часов открытые позиции продолжают вестись. Новые входы после этого срока остановятся, пока счёт не оплачен.',
         ].join('\n')

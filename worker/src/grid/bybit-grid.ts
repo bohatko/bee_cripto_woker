@@ -153,27 +153,72 @@ export async function stopBybitGrid(creds: { apiKey: string; secret: string }, b
   }
 }
 
+/**
+ * Bybit futures-grid lifecycle.
+ * Live: Running, New, Initializing, Await activation.
+ * Stopped: Cancelling, Completed, Rejected, or a real close code/reason
+ * (manual cancel on the exchange often arrives before status leaves Running).
+ * Unspecified close fields are the default on a live bot and are ignored.
+ * Empty status is unknown so a bad payload cannot be treated as still running.
+ */
+export function bybitGridRunning(row: Record<string, unknown>): boolean | null {
+  const status = String(row.status || row.bot_status || row.state || '').trim().toLowerCase();
+  if (isBybitTerminalClose(String(row.bot_close_code || '')) || isBybitTerminalClose(String(row.close_reason || ''))) {
+    return false;
+  }
+  if (!status) return null;
+  if (
+    status.includes('running') ||
+    status.includes('initial') ||
+    status.includes('await') ||
+    status === 'new' ||
+    status.endsWith('_new')
+  ) {
+    return true;
+  }
+  if (
+    status.includes('cancel') ||
+    status.includes('complet') ||
+    status.includes('reject') ||
+    status.includes('fail') ||
+    status.includes('liquidat') ||
+    status.includes('stop') ||
+    status === '2'
+  ) {
+    return false;
+  }
+  return null;
+}
+
+function isBybitTerminalClose(value: string): boolean {
+  const code = value.trim().toLowerCase();
+  if (!code || code.includes('unspecified')) return false;
+  return (
+    code.includes('cancel') ||
+    code.includes('liquidat') ||
+    code.includes('delist') ||
+    code.includes('fail') ||
+    code.includes('stop') ||
+    code.includes('take') ||
+    code.includes('trailing') ||
+    code.includes('adl') ||
+    code.includes('banned') ||
+    code.includes('compliance') ||
+    code.includes('risk')
+  );
+}
+
 export async function readBybitGrid(
   creds: { apiKey: string; secret: string },
   botId: string
 ): Promise<GridBotSnapshot> {
   const result = await bybitRequest(creds, 'POST', '/v5/fgridbot/detail', {}, { bot_id: botId });
   const row = (result.detail || result.bot || result) as Record<string, unknown>;
-  const status = String(row.status || row.bot_status || row.state || '').toLowerCase();
-  const stopped =
-    status.includes('stop') ||
-    status.includes('clos') ||
-    status.includes('cancel') ||
-    status.includes('complet') ||
-    status.includes('fail') ||
-    status.includes('liquidat') ||
-    status === '2';
-  const running = !stopped;
   const pnlRaw = row.pnl ?? row.total_pnl ?? row.totalPnl ?? row.realized_pnl ?? row.profit;
   const pnl = Number(pnlRaw);
   return {
     exchangeBotId: botId,
-    running: running && !stopped,
+    running: bybitGridRunning(row),
     pnlUsdt: Number.isFinite(pnl) ? pnl : null,
     raw: row,
   };

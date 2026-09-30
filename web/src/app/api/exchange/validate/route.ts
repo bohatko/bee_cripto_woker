@@ -3,6 +3,7 @@ import { getAuthenticatedUser } from '@/lib/supabase/server';
 import { validateExchangeViaWorker, WorkerConfigError } from '@/lib/worker-client';
 import { encryptPayload, encryptString } from '@/lib/encryption';
 import { recordUserNotification } from '@/lib/notifications/record';
+import { hasProModules } from '@/lib/pro-access';
 
 export async function POST(request: Request) {
   try {
@@ -40,33 +41,15 @@ export async function POST(request: Request) {
 
     const { data: profile } = await supabase
       .from('users_profile')
-      .select('subscription_plan, subscription_status')
+      .select('subscription_plan, subscription_status, is_frozen')
       .eq('id', user.id)
       .maybeSingle();
 
-    const extraExchangeRequiresPro =
-      profile?.subscription_plan !== 'pro' || profile?.subscription_status === 'trial';
-
-    if (extraExchangeRequiresPro) {
-      const { data: existingAccounts, error: accountsError } = await supabase
-        .from('exchange_accounts')
-        .select('exchange')
-        .eq('user_id', user.id);
-
-      if (accountsError) {
-        return NextResponse.json(
-          { error: `Database error checking exchanges: ${accountsError.message}` },
-          { status: 500 }
-        );
-      }
-
-      const otherExchanges = (existingAccounts || []).filter((account) => account.exchange !== exchange);
-      if (otherExchanges.length >= 1) {
-        return NextResponse.json(
-          { error: 'Lite and trial include one exchange. Upgrade to Pro to connect Binance, OKX and Bybit.' },
-          { status: 403 }
-        );
-      }
+    if (!hasProModules(profile)) {
+      return NextResponse.json(
+        { error: 'Connecting an exchange requires an active Pro subscription.', code: 'pro_required' },
+        { status: 403 }
+      );
     }
 
     // Live CCXT calls must run on the worker (static egress IP), not on Vercel.

@@ -1,4 +1,5 @@
 import { CONFIG, supabase } from '../config.js';
+import { canOpenNewTrades } from '../plans.js';
 import {
   ExchangeAccount,
   SignalEvent,
@@ -198,9 +199,9 @@ export class DipBuyRouter {
     settings: UserSignalSettings,
     account: ExchangeAccount
   ): Promise<void> {
-    // 1. Guard checks: frozen, subscription status, account validation
-    if (user.is_frozen || user.subscription_status === 'frozen' || user.subscription_status === 'expired') {
-      console.log(`⛔ [DipBuyRouter] User ${user.email} is frozen/expired. Skipping.`);
+    // 1. Guard checks: paid Pro in good standing, account validation
+    if (!canOpenNewTrades(user)) {
+      console.log(`⛔ [DipBuyRouter] User ${user.email} has no active Pro subscription. Skipping.`);
       await recordSignalSkipped({ userId: user.id, symbol: event.symbol, reason: 'frozen' });
       return;
     }

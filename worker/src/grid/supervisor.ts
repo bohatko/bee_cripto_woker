@@ -1,6 +1,7 @@
 import { supabase } from '../config.js';
 import { decryptString } from '../security/encryption.js';
 import { telegramNotifier } from '../notifications/telegram.js';
+import { canOpenNewTrades } from '../plans.js';
 import { scanGridCandidates } from './screener.js';
 import { createOkxGrid, readOkxGrid, stopOkxGrid } from './okx-grid.js';
 import { createBybitGrid, readBybitGrid, stopBybitGrid } from './bybit-grid.js';
@@ -74,9 +75,7 @@ interface BotRow {
 }
 
 function entitled(profile: ProfileRow | undefined): boolean {
-  if (!profile || profile.is_frozen) return false;
-  if (profile.subscription_plan !== 'pro') return false;
-  return profile.subscription_status === 'trial' || profile.subscription_status === 'active';
+  return canOpenNewTrades(profile);
 }
 
 function credsOf(account: AccountRow): { apiKey: string; secret: string; passphrase: string } {
@@ -157,7 +156,7 @@ async function closedSnapshot(bot: BotRow, account: AccountRow): Promise<{ raw: 
       bot.exchange === 'okx'
         ? await readOkxGrid(creds, bot.exchange_bot_id)
         : await readBybitGrid(creds, bot.exchange_bot_id);
-    if (snap.running) return { raw: fallback, pnl: snap.pnlUsdt ?? bot.pnl_usdt ?? null };
+    if (snap.running !== false) return { raw: fallback, pnl: snap.pnlUsdt ?? bot.pnl_usdt ?? null };
     return { raw: { ...snap.raw, stopped_by: 'user' }, pnl: snap.pnlUsdt ?? bot.pnl_usdt ?? null };
   } catch {
     return { raw: fallback, pnl: bot.pnl_usdt ?? null };
@@ -342,15 +341,41 @@ export class GridSupervisor {
             bot.exchange === 'okx'
               ? await readOkxGrid(creds, bot.exchange_bot_id)
               : await readBybitGrid(creds, bot.exchange_bot_id);
+          if (snap.running === null) {
+            await markBot(bot.id, { last_error: 'Exchange did not return a grid bot status.', snapshot: snap.raw });
+            const signature = 'unknown-status';
+            const seen = statusSeen.get(bot.id);
+            if (!seen || seen.signature !== signature || Date.now() - seen.at > 10 * 60 * 1000) {
+              statusSeen.set(bot.id, { signature, at: Date.now() });
+              await logEvent({
+                userId: bot.user_id,
+                botId: bot.id,
+                templateId: bot.template_id,
+                exchange: bot.exchange,
+                event: 'error',
+                message: 'Status check skipped: the exchange payload had no lifecycle status.',
+              });
+            }
+            continue;
+          }
+          const stoppedAt = new Date().toISOString();
           await markBot(bot.id, {
             run_status: snap.running ? 'running' : 'stopped',
             pnl_usdt: snap.pnlUsdt,
             snapshot: snap.raw,
             last_error: null,
-            ...(snap.running ? {} : { stop_reason: 'exchange', stopped_at: new Date().toISOString() }),
+            ...(snap.running ? {} : { stop_reason: 'exchange', stopped_at: stoppedAt }),
           });
-          if (setting?.id && setting.last_error) {
-            await supabase.from('grid_user_settings').update({ last_error: null }).eq('id', setting.id);
+          if (!snap.running) {
+            bot.run_status = 'stopped';
+            bot.stopped_at = stoppedAt;
+          }
+          if (setting?.id && (setting.last_error || (!snap.running && setting.is_enabled))) {
+            await supabase
+              .from('grid_user_settings')
+              .update({ last_error: null, ...(snap.running ? {} : { is_enabled: false }) })
+              .eq('id', setting.id);
+            if (!snap.running) setting.is_enabled = false;
           }
           const pnlText = snap.pnlUsdt == null ? '—' : snap.pnlUsdt.toFixed(2);
           if (!snap.running) {
@@ -368,7 +393,7 @@ export class GridSupervisor {
               templateId: bot.template_id,
               exchange: bot.exchange,
               event: 'stopped',
-              message: `Exchange reported the bot stopped. PnL ${pnlText} USDT.`,
+              message: `Exchange reported the bot stopped. Slot turned off. PnL ${pnlText} USDT.`,
             });
           } else {
             const signature = `running:${pnlText}`;
