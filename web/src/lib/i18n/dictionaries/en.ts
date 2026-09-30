@@ -1,4 +1,4 @@
-export const en = {
+﻿export const en = {
   common: {
     noPlan: 'No plan',
     cancel: 'Cancel',
@@ -65,11 +65,11 @@ export const en = {
     registrationSuccess: 'Registration successful! Welcome aboard.',
     passwordHint: '•••••••• (Min 6 chars)',
     referralLabel: 'Partner code',
-    referralHint: 'Optional. A $50 bonus is credited to the partner only after you pay for Pro for at least one month.',
+    referralHint: 'Optional. The partner gets $50 for a monthly Pro payment or $300 for a yearly one.',
   },
   referrals: {
     title: 'Partners',
-    subtitle: 'Share your link. You receive $50 once, after the invited person pays Pro for at least one month. You can withdraw it after 30 days, from $100.',
+    subtitle: 'Share your link. You receive a one-time bonus: $50 when the invited person pays Pro for a month, or $300 for a year. You can withdraw it after 30 days, from $100.',
     available: 'Ready to withdraw',
     availableHint: '30 days have passed since the payment',
     onHold: 'Not yet',
@@ -97,7 +97,7 @@ export const en = {
     onHoldUntil: 'Ready on {date}',
     inBalance: 'Ready to withdraw',
     codeTitle: 'Your code',
-    codeHint: 'Registration alone is not enough. The $50 is credited after they pay Pro.',
+    codeHint: 'Registration alone is not enough. The bonus ($50 for a month, $300 for a year) is credited after they pay Pro.',
     copyCode: 'Copy code',
     copyLink: 'Copy link',
     codeCopied: 'Partner code copied.',
@@ -106,7 +106,7 @@ export const en = {
     listTitle: 'Invited accounts',
     empty: 'No one has registered with your code yet.',
     waiting: 'Waiting for payment',
-    rewarded: 'Paid · $50',
+    rewarded: 'Paid',
     colName: 'Name',
     colDate: 'Joined',
     colStatus: 'Status',

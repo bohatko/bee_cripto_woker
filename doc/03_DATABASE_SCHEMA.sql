@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS public.users_profile (
     -- user UUID, auto-filled on insert by trg_users_profile_external_uid.
     external_uid TEXT NOT NULL UNIQUE
         CONSTRAINT users_profile_external_uid_format CHECK (external_uid ~ '^[0-9]{7}$'),
-    -- Immutable partner code. A $50 bonus is credited once when the invitee pays
+    -- Immutable partner code. A bonus ($50 monthly / $300 yearly) is credited once when the invitee pays
     -- Pro (monthly or yearly, at least 200 USDT). See referral_attributions.
     referral_code TEXT NOT NULL UNIQUE
         CONSTRAINT users_profile_referral_code_format CHECK (referral_code ~ '^[A-Z0-9]{10}$'),
