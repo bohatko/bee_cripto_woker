@@ -1,5 +1,8 @@
 import type { GridOrderParams } from './okx-grid.js';
 
+/** Coins whose futures grid may only run on Bybit (CL = WTI crude oil perpetual). */
+export const BYBIT_ONLY_ASSETS: ReadonlySet<string> = new Set(['CL']);
+
 export function formatPx(price: number): string {
   const abs = Math.abs(price);
   const digits = abs >= 1000 ? 2 : abs >= 100 ? 3 : abs >= 1 ? 4 : abs >= 0.01 ? 5 : 6;

@@ -6,7 +6,7 @@ import { scanGridCandidates } from './screener.js';
 import { createOkxGrid, readOkxGrid, stopOkxGrid } from './okx-grid.js';
 import { createBybitGrid, readBybitGrid, stopBybitGrid } from './bybit-grid.js';
 import type { GridOrderParams } from './okx-grid.js';
-import { centerOnPrice, fetchLastPrice, formatPx } from './prices.js';
+import { BYBIT_ONLY_ASSETS, centerOnPrice, fetchLastPrice, formatPx } from './prices.js';
 
 const SCAN_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
@@ -443,6 +443,13 @@ export class GridSupervisor {
         continue;
       }
       if (Number(setting.margin_usdt) < 10) continue;
+      if (BYBIT_ONLY_ASSETS.has(active.base_asset) && resolved.account.exchange !== 'bybit') {
+        const error = `${active.base_asset}/USDT is available on Bybit only`;
+        if (setting.last_error !== error || setting.is_enabled) {
+          await supabase.from('grid_user_settings').update({ last_error: error, is_enabled: false }).eq('id', setting.id);
+        }
+        continue;
+      }
 
       const latest = knownBots.find(
         (bot) => bot.user_id === setting.user_id && bot.template_id === active.id && bot.exchange === setting.exchange

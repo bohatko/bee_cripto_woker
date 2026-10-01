@@ -12,6 +12,8 @@ import { hasProModules } from '@/lib/pro-access';
 
 type ExchangeName = 'okx' | 'bybit';
 
+const BYBIT_ONLY_ASSETS: ReadonlySet<string> = new Set(['CL']);
+
 type Account = { id: string; exchange: string; is_validated: boolean; is_active: boolean };
 type Template = {
   id: string;
@@ -167,6 +169,8 @@ export default function GridPage() {
   }, [accounts]);
 
   const templateById = useMemo(() => new Map(templates.map((item) => [item.id, item])), [templates]);
+
+  const draftBybitOnly = BYBIT_ONLY_ASSETS.has(templateById.get(draftCoin)?.base_asset ?? '');
 
   const latestBot = (slot: Slot) =>
     bots.find((bot) => bot.template_id === slot.template_id && bot.exchange === slot.exchange);
@@ -462,7 +466,12 @@ export default function GridPage() {
                         key={item.id}
                         type="button"
                         aria-pressed={selected}
-                        onClick={() => setDraftCoin(item.id)}
+                        onClick={() => {
+                          setDraftCoin(item.id);
+                          if (BYBIT_ONLY_ASSETS.has(item.base_asset)) {
+                            setDraftExchange(connected.bybit ? 'bybit' : '');
+                          }
+                        }}
                         className={`rounded-xl border px-3 py-2 text-left transition-colors ${
                           selected
                             ? 'border-honey-500 bg-honey-500/10'
@@ -486,7 +495,7 @@ export default function GridPage() {
                   <button
                     key={name}
                     type="button"
-                    disabled={!connected[name]}
+                    disabled={!connected[name] || (name === 'okx' && draftBybitOnly)}
                     onClick={() => setDraftExchange(name)}
                     className={`rounded-xl px-3 py-2 text-xs font-bold disabled:opacity-40 ${
                       draftExchange === name ? 'bg-honey-500 text-dark-950' : 'border border-dark-700 text-slate-300'
