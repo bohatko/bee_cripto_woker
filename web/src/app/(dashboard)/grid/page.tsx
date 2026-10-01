@@ -73,8 +73,9 @@ export default function GridPage() {
   const [stopSlot, setStopSlot] = useState<Slot | null>(null);
   const [editSlot, setEditSlot] = useState<Slot | null>(null);
   const [historySlot, setHistorySlot] = useState<Slot | null>(null);
+  const [deleteSlot, setDeleteSlot] = useState<Slot | null>(null);
   const [draftCoin, setDraftCoin] = useState('');
-  const [draftExchange, setDraftExchange] = useState<ExchangeName | ''>('');
+  const [draftExchangePref, setDraftExchange] = useState<ExchangeName | ''>('');
   const [draftMargin, setDraftMargin] = useState('100');
 
   const load = useCallback(async () => {
@@ -177,6 +178,14 @@ export default function GridPage() {
 
   const firstConnected = () => (['bybit', 'okx'] as ExchangeName[]).find((name) => connected[name]) || '';
 
+  const draftExchange: ExchangeName | '' = draftBybitOnly
+    ? connected.bybit
+      ? 'bybit'
+      : ''
+    : draftExchangePref && connected[draftExchangePref]
+      ? draftExchangePref
+      : firstConnected();
+
   const openCreate = () => {
     setEditSlot(null);
     setDraftCoin(templates[0]?.id || '');
@@ -248,6 +257,23 @@ export default function GridPage() {
       return;
     }
     toast.info(t('grid.stopSent'));
+    await load();
+  };
+
+  const deleteDraft = async () => {
+    if (!deleteSlot) return;
+    const target = deleteSlot;
+    setDeleteSlot(null);
+    const { error } = await supabase
+      .from('grid_user_settings')
+      .delete()
+      .eq('id', target.id)
+      .eq('is_enabled', false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(t('grid.draftDeleted'));
     await load();
   };
 
@@ -351,14 +377,23 @@ export default function GridPage() {
                       {t('grid.stop')}
                     </button>
                   ) : status === 'draft' ? (
-                    <button
-                      type="button"
-                      disabled={!pro}
-                      onClick={() => openDraft(slot)}
-                      className="rounded-lg bg-honey-500 px-3 py-1.5 text-xs font-bold text-dark-950 disabled:opacity-40"
-                    >
-                      {t('grid.launchDraft')}
-                    </button>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={!pro}
+                        onClick={() => openDraft(slot)}
+                        className="rounded-lg bg-honey-500 px-3 py-1.5 text-xs font-bold text-dark-950 disabled:opacity-40"
+                      >
+                        {t('grid.launchDraft')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteSlot(slot)}
+                        className="rounded-lg border border-rose-500/40 px-3 py-1.5 text-xs font-bold text-rose-300"
+                      >
+                        {t('grid.deleteDraft')}
+                      </button>
+                    </div>
                   ) : (
                     <p className="text-xs text-slate-500">{t('grid.stoppedHint')}</p>
                   )}
@@ -466,12 +501,7 @@ export default function GridPage() {
                         key={item.id}
                         type="button"
                         aria-pressed={selected}
-                        onClick={() => {
-                          setDraftCoin(item.id);
-                          if (BYBIT_ONLY_ASSETS.has(item.base_asset)) {
-                            setDraftExchange(connected.bybit ? 'bybit' : '');
-                          }
-                        }}
+                        onClick={() => setDraftCoin(item.id)}
                         className={`rounded-xl border px-3 py-2 text-left transition-colors ${
                           selected
                             ? 'border-honey-500 bg-honey-500/10'
@@ -488,24 +518,9 @@ export default function GridPage() {
                 </div>
               )}
             </div>
-            <div className="mt-4 text-sm text-slate-300">
-              {t('grid.exchange')}
-              <div className="mt-2 flex gap-2">
-                {(['okx', 'bybit'] as ExchangeName[]).map((name) => (
-                  <button
-                    key={name}
-                    type="button"
-                    disabled={!connected[name] || (name === 'okx' && draftBybitOnly)}
-                    onClick={() => setDraftExchange(name)}
-                    className={`rounded-xl px-3 py-2 text-xs font-bold disabled:opacity-40 ${
-                      draftExchange === name ? 'bg-honey-500 text-dark-950' : 'border border-dark-700 text-slate-300'
-                    }`}
-                  >
-                    {connected[name] ? name.toUpperCase() : `${name.toUpperCase()} · ${t('grid.notConnected')}`}
-                  </button>
-                ))}
-              </div>
-            </div>
+            {draftBybitOnly && !connected.bybit && (
+              <p className="mt-3 text-xs text-rose-300">BYBIT · {t('grid.notConnected')}</p>
+            )}
             <label className="mt-4 block text-sm text-slate-300">
               {t('grid.margin')}
               <input
@@ -570,6 +585,14 @@ export default function GridPage() {
         confirmText={editSlot ? t('grid.launchDraft') : t('grid.create')}
         onConfirm={() => void createBot()}
         onCancel={() => setConfirmCreate(false)}
+      />
+      <ConfirmModal
+        isOpen={Boolean(deleteSlot)}
+        title={t('grid.deleteDraftTitle')}
+        description={t('grid.deleteDraftDesc')}
+        confirmText={t('grid.deleteDraft')}
+        onConfirm={() => void deleteDraft()}
+        onCancel={() => setDeleteSlot(null)}
       />
       <CloseWordModal
         isOpen={Boolean(stopSlot)}
