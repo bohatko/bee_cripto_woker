@@ -6,7 +6,7 @@ import { scanGridCandidates } from './screener.js';
 import { createOkxGrid, readOkxGrid, stopOkxGrid } from './okx-grid.js';
 import { createBybitGrid, readBybitGrid, stopBybitGrid } from './bybit-grid.js';
 import type { GridOrderParams } from './okx-grid.js';
-import { BYBIT_ONLY_ASSETS, centerOnPrice, fetchLastPrice, formatPx } from './prices.js';
+import { BYBIT_ONLY_ASSETS, applyAtrStop, centerOnPrice, fetchDailyAtr, fetchLastPrice, formatPx } from './prices.js';
 
 const SCAN_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
@@ -44,6 +44,7 @@ interface TemplateRow {
   take_profit_price: number;
   direction: 'neutral' | 'long' | 'short';
   params_hash: string;
+  metrics?: { stopAtrMult?: number } | null;
 }
 
 interface SettingsRow {
@@ -482,7 +483,26 @@ export class GridSupervisor {
         const creds = credsOf(resolved.account);
         const price = await fetchLastPrice(resolved.account.exchange as 'okx' | 'bybit', active.base_asset);
         const centered = centerOnPrice(orderParams(active, Number(setting.margin_usdt)), price);
-        const params = centered.params;
+        let params = centered.params;
+        const stopAtrMult = Number(active.metrics?.stopAtrMult);
+        if (Number.isFinite(stopAtrMult) && stopAtrMult > 0 && resolved.account.exchange === 'bybit') {
+          try {
+            const atr = await fetchDailyAtr(active.base_asset);
+            const withAtr = applyAtrStop(params, atr, stopAtrMult);
+            if (withAtr !== params) {
+              await logEvent({
+                userId: setting.user_id,
+                templateId: active.id,
+                exchange: resolved.account.exchange,
+                event: 'adjusted',
+                message: `ATR stop: daily ATR ${formatPx(atr)} x ${stopAtrMult} below lower bound. Stop moved from ${formatPx(params.stopPrice)} to ${formatPx(withAtr.stopPrice)}.`,
+              });
+              params = withAtr;
+            }
+          } catch (atrError) {
+            console.error(`[Grid] ATR stop skipped for ${active.base_asset}: ${(atrError as Error).message}`);
+          }
+        }
         if (centered.shifted) {
           await logEvent({
             userId: setting.user_id,

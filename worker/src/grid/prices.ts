@@ -31,6 +31,39 @@ export async function fetchLastPrice(exchange: 'okx' | 'bybit', baseAsset: strin
   return price;
 }
 
+const ATR_DAYS = 14;
+
+/** Mean daily true range (price units) over the last completed daily candles on Bybit. */
+export async function fetchDailyAtr(baseAsset: string, days = ATR_DAYS): Promise<number> {
+  const url = `https://api.bybit.com/v5/market/kline?category=linear&symbol=${baseAsset}USDT&interval=D&limit=${days + 2}`;
+  const response = await fetch(url);
+  const json = (await response.json().catch(() => ({}))) as any;
+  const rows: string[][] = json?.result?.list;
+  if (!response.ok || !Array.isArray(rows) || rows.length < days + 1) {
+    throw new Error(`Could not read daily candles for ${baseAsset}USDT from Bybit`);
+  }
+  // Bybit returns newest first; index 0 is the still-forming candle.
+  const closed = rows
+    .slice(1, days + 2)
+    .reverse()
+    .map((r) => ({ high: Number(r[2]), low: Number(r[3]), close: Number(r[4]) }));
+  let sum = 0;
+  for (let i = 1; i < closed.length; i++) {
+    const prevClose = closed[i - 1].close;
+    sum += Math.max(closed[i].high, prevClose) - Math.min(closed[i].low, prevClose);
+  }
+  const atr = sum / (closed.length - 1);
+  if (!Number.isFinite(atr) || atr <= 0) throw new Error(`Invalid ATR for ${baseAsset}USDT`);
+  return atr;
+}
+
+/** Moves the stop to `lowerPrice - multiplier * ATR`; never above the lower bound. */
+export function applyAtrStop(params: GridOrderParams, atr: number, multiplier: number): GridOrderParams {
+  const stop = params.lowerPrice - multiplier * atr;
+  if (!(stop > 0) || stop >= params.lowerPrice) return params;
+  return { ...params, stopPrice: stop };
+}
+
 export interface CenterResult {
   params: GridOrderParams;
   price: number;
