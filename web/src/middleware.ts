@@ -65,6 +65,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
+  if (pathname === '/update-password' && !user) {
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('error', 'auth-code-error');
+    return NextResponse.redirect(loginUrl);
+  }
+
   return response;
 }
 
@@ -86,5 +92,6 @@ export const config = {
     '/admin/:path*',
     '/login',
     '/register',
+    '/update-password',
   ],
 };
